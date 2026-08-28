@@ -1,3 +1,4 @@
+import Link from 'next/link';
 import styles from './FinalCta.module.css';
 
 /**
@@ -11,9 +12,9 @@ export function FinalCta() {
         Give your next wedding a soundtrack the room actually chose.
       </h2>
       <div className={styles.ctaRow}>
-        <a href="#get-started" className={styles.primaryCta}>
+        <Link href="/register" className={styles.primaryCta}>
           Get Spinit free
-        </a>
+        </Link>
         <a href="#get-started" className={styles.secondaryCta}>
           Talk to us
         </a>

@@ -124,10 +124,14 @@
    340px would overflow the 327px content box left at a 375px viewport, so
    it becomes fluid up to that same 340px cap. `.hero` also gets
    `overflow-x: hidden`: the decorative circles are offset -40px/-50px past
-   `.phoneColumn`, and there is no page-level overflow-x: hidden anywhere
-   in this codebase (checked: not on body, not on any wrapper) despite the
-   design doc describing one as already in place, so without this the
-   circles would produce a real horizontal scrollbar, not a silent clip. */
+   `.phoneColumn`. `body` in globals.css has had its own `overflow-x: hidden`
+   since commit 721c5d7, which already stops the circles from producing an
+   actual scrollbar — but that rule only clips at the viewport edge, not at
+   `.hero`'s own box. Without this local rule the circles would still
+   visually render past `.hero`'s right/left edges into whatever sits
+   beside it in the page, instead of staying clipped to the hero section
+   itself, so the local `overflow-x: hidden` is still doing real work here
+   even though body's rule already prevents the scrollbar. */
 @media (max-width: 899px) {
   .hero {
     grid-template-columns: 1fr;

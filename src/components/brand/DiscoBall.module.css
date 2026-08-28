@@ -18,9 +18,13 @@
 
 /* Below 900px: hidden entirely, not cropped. At a 375px viewport its left
    edge computes to 187.5px + 160px = 347.5px on a 64px ball, mostly or
-   fully off-screen; there is no ancestor overflow-x: hidden to fall back
-   on (checked: none exists on body or elsewhere), so a partial sliver
-   would otherwise render as real clipped/overflowing content. */
+   fully off-screen. `body` in globals.css has had `overflow-x: hidden`
+   since commit 721c5d7, so a partial sliver would no longer produce an
+   actual horizontal scrollbar — but `display: none` is still correct here
+   over relying on that clip: a body-level clip would still let a chunk of
+   the ball render (and animate) off to the side of the visible layout,
+   which is not the intended below-900px treatment for a desktop-only
+   decorative element. */
 @media (max-width: 899px) {
   .wrapper {
     display: none;

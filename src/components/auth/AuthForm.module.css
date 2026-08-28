@@ -19,6 +19,12 @@
   margin-bottom: 24px;
 }
 
+/* design/artboards/Spinit DJ Login.dc.html line 78: the login form's field
+   group has margin-bottom: 8px, distinct from register's 24px (line 102). */
+.fieldsLogin {
+  margin-bottom: 8px;
+}
+
 .phoneField {
   display: flex;
   flex-direction: column;

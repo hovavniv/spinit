@@ -1,3 +1,4 @@
+import Link from 'next/link';
 import styles from './Hero.module.css';
 import { HeroPhoneDemo } from './HeroPhoneDemo';
 
@@ -21,9 +22,9 @@ export function Hero() {
           taste before the big day, and hands you a ranked queue that explains every pick.
         </p>
         <div className={styles.ctaRow}>
-          <a id="get-started" href="#get-started" className={styles.primaryCta}>
+          <Link href="/register" className={styles.primaryCta}>
             Get Spinit free
-          </a>
+          </Link>
           <a href="#how-it-works" className={styles.secondaryCta}>
             See how it works →
           </a>

@@ -1,3 +1,4 @@
+import Link from 'next/link';
 import { Logo } from '@/components/brand/Logo';
 import styles from './SiteNav.module.css';
 
@@ -16,9 +17,9 @@ export function SiteNav() {
         <a href="#recap" className={styles.link}>
           Recap
         </a>
-        <a href="#get-started" className={styles.cta}>
+        <Link href="/register" className={styles.cta}>
           Get Spinit
-        </a>
+        </Link>
       </nav>
     </header>
   );

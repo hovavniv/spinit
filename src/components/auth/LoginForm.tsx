@@ -55,7 +55,7 @@ export function LoginForm({ onSwitchToRegister }: LoginFormProps) {
       )}
 
       <form onSubmit={handleSubmit} noValidate>
-        <div className={styles.fields}>
+        <div className={`${styles.fields} ${styles.fieldsLogin}`}>
           <Field
             label="Email"
             name="email"

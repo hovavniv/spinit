@@ -33,7 +33,7 @@ export function AuthScreen({ defaultMode }: AuthScreenProps) {
   }
 
   return (
-    <div className={styles.screen}>
+    <main className={styles.screen}>
       <BrandPanel />
 
       <div className={styles.formSide}>
@@ -66,6 +66,6 @@ export function AuthScreen({ defaultMode }: AuthScreenProps) {
           )}
         </div>
       </div>
-    </div>
+    </main>
   );
 }
