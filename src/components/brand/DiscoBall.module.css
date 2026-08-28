@@ -16,6 +16,17 @@
   pointer-events: none;
 }
 
+/* Below 900px: hidden entirely, not cropped. At a 375px viewport its left
+   edge computes to 187.5px + 160px = 347.5px on a 64px ball, mostly or
+   fully off-screen; there is no ancestor overflow-x: hidden to fall back
+   on (checked: none exists on body or elsewhere), so a partial sliver
+   would otherwise render as real clipped/overflowing content. */
+@media (max-width: 899px) {
+  .wrapper {
+    display: none;
+  }
+}
+
 .cord {
   width: 2px;
   height: 88px;

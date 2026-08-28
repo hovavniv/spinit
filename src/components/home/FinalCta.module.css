@@ -41,3 +41,21 @@
   font-weight: 600;
   font-size: 16px;
 }
+
+/* Not called out by name in the plan's task-8 file list, but design-doc
+   section 8 row 6 explicitly lists "CTA 90px" among the vertical paddings
+   that stay fixed while the shared 48px horizontal figure moves to 24px —
+   so this section is in scope for that row. Horizontal padding only
+   (90px vertical restated unchanged). `.ctaRow`'s two buttons
+   ("Get Spinit free" + "Talk to us") do not fit one line at 375px (see
+   report), so it also gets `flex-wrap: wrap`, which was not in the table
+   but is needed to avoid real overflow. */
+@media (max-width: 899px) {
+  .section {
+    padding: 90px 24px;
+  }
+
+  .ctaRow {
+    flex-wrap: wrap;
+  }
+}

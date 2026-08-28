@@ -47,3 +47,15 @@
   background: var(--accent);
   color: white;
 }
+
+/* Below 900px: the login/register split collapses to one column, the
+   BrandPanel (already width-flexible) becomes the slim header strip via
+   its own module's media query. `.formSide`'s 48px padding is not in
+   design-doc section 8's row-6 list (that list is homepage sections only)
+   and `.formCard` is fluid (width: 100%, max-width: 380px), so it is left
+   unchanged here. */
+@media (max-width: 899px) {
+  .screen {
+    grid-template-columns: 1fr;
+  }
+}

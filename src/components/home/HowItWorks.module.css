@@ -34,6 +34,18 @@
   gap: 28px;
 }
 
+/* Below 900px: one column of cards, horizontal padding only (48px ->
+   24px); the 80px vertical is restated unchanged. */
+@media (max-width: 899px) {
+  .section {
+    padding: 80px 24px;
+  }
+
+  .grid {
+    grid-template-columns: 1fr;
+  }
+}
+
 .card {
   background: white;
   border: 1px solid var(--border);

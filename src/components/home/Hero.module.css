@@ -117,3 +117,39 @@
   display: flex;
   flex-direction: column;
 }
+
+/* Below 900px: single column, phone demo falls below the copy (source
+   order already puts it there). Horizontal padding only (48px -> 24px);
+   88px/60px vertical is restated, not changed. `.phoneFrame`'s fixed
+   340px would overflow the 327px content box left at a 375px viewport, so
+   it becomes fluid up to that same 340px cap. `.hero` also gets
+   `overflow-x: hidden`: the decorative circles are offset -40px/-50px past
+   `.phoneColumn`, and there is no page-level overflow-x: hidden anywhere
+   in this codebase (checked: not on body, not on any wrapper) despite the
+   design doc describing one as already in place, so without this the
+   circles would produce a real horizontal scrollbar, not a silent clip. */
+@media (max-width: 899px) {
+  .hero {
+    grid-template-columns: 1fr;
+    padding: 88px 24px 60px;
+    overflow-x: hidden;
+  }
+
+  .headline {
+    font-size: 34px;
+  }
+
+  .ctaRow {
+    flex-wrap: wrap;
+  }
+
+  .phoneColumn {
+    justify-self: stretch;
+  }
+
+  .phoneFrame {
+    width: 100%;
+    max-width: 340px;
+    margin: 0 auto;
+  }
+}

@@ -98,3 +98,12 @@
   font-size: 12px;
   color: var(--text-subtle);
 }
+
+/* Below 900px: one column, card falls below the copy; horizontal padding
+   only (48px -> 24px), 60px/100px vertical restated unchanged. */
+@media (max-width: 899px) {
+  .section {
+    grid-template-columns: 1fr;
+    padding: 60px 24px 100px;
+  }
+}

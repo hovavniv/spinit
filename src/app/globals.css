@@ -55,6 +55,11 @@ body {
   background: var(--bg);
   color: var(--ink-dark);
   font-family: var(--font-inter), sans-serif;
+  /* An element pushed past the right edge below 900px (see the responsive
+     rules in each section's CSS module) is clipped here rather than
+     producing a horizontal scrollbar. Section 8 of the design spec is
+     written assuming this rule exists. */
+  overflow-x: hidden;
 }
 
 ::selection {

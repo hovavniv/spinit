@@ -34,3 +34,20 @@
   font-weight: 600;
   font-size: 14px;
 }
+
+/* Below 900px: hide the two text links (logo + "Get Spinit" pill remain),
+   drop the sticky nav's horizontal padding to 24px. The links stay in the
+   DOM and their #how-it-works / #recap targets stay reachable by scrolling,
+   so `display: none` (rather than a visually-hidden-but-focusable pattern)
+   is the right call: once hidden they are pure navigation shortcuts with no
+   unique content, and leaving them focusable would add invisible tab stops
+   with no visible destination to land on. */
+@media (max-width: 899px) {
+  .nav {
+    padding: 16px 24px;
+  }
+
+  .link {
+    display: none;
+  }
+}
