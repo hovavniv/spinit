@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;600;700;800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+  <style>
+    body{margin:0;background:oklch(0.97 0.014 75);}
+    *{box-sizing:border-box;}
+    ::selection{background:oklch(0.64 0.19 350 / 0.22);}
+    a{color:oklch(0.55 0.17 265);text-decoration:none;}
+    a:hover{color:oklch(0.64 0.19 350);}
+    input::placeholder{color:oklch(0.62 0.02 50);}
+    input:focus{outline:none;border-color:{{ accent }};}
+    @keyframes spinitRecordSpin{from{transform:rotate(0deg);}to{transform:rotate(360deg);}}
+  </style>
+</helmet>
+
+<div style="font-family:'Inter',sans-serif;color:oklch(0.22 0.02 50);background:oklch(0.97 0.014 75);width:100%;min-height:100vh;display:grid;grid-template-columns:1fr 1fr;">
+
+  <!-- LEFT: BRAND PANEL -->
+  <div style="position:relative;background:oklch(0.22 0.02 50);padding:56px;display:flex;flex-direction:column;justify-content:space-between;overflow:hidden;">
+    <div style="position:absolute;width:260px;height:260px;border-radius:50%;background:oklch(0.3 0.03 350 / 0.35);top:-80px;right:-90px;"></div>
+    <div style="position:absolute;width:200px;height:200px;border-radius:50%;background:oklch(0.28 0.03 265 / 0.35);bottom:-60px;left:-70px;"></div>
+
+    <div style="position:relative;z-index:1;display:flex;align-items:center;gap:10px;">
+      <div style="width:20px;height:20px;border-radius:50%;position:relative;flex-shrink:0;background:radial-gradient(circle at 35% 32%, oklch(0.4 0.01 50), oklch(0.13 0.01 50) 65%);box-shadow:0 1px 3px rgba(0,0,0,0.35);animation:spinitRecordSpin 6s linear infinite;">
+        <div style="position:absolute;inset:3.5px;border-radius:50%;border:1px solid oklch(0.35 0.01 50 / 0.7);"></div>
+        <div style="position:absolute;inset:7px;border-radius:50%;border:1px solid oklch(0.35 0.01 50 / 0.5);"></div>
+        <div style="position:absolute;top:50%;left:50%;width:8px;height:8px;background:{{ accent }};border-radius:50%;transform:translate(-50%,-50%);"></div>
+        <div style="position:absolute;top:50%;left:50%;width:2.5px;height:2.5px;background:oklch(0.97 0.014 75);border-radius:50%;transform:translate(-50%,-50%);"></div>
+      </div>
+      <span style="font-family:'Sora',sans-serif;font-weight:800;font-size:22px;letter-spacing:-0.02em;color:white;">Spinit</span>
+    </div>
+
+    <div style="position:relative;z-index:1;max-width:420px;">
+      <h1 style="font-family:'Sora',sans-serif;color:white;font-size:38px;line-height:1.15;font-weight:800;letter-spacing:-0.02em;margin:0 0 20px;">Run tonight's queue like a pro.</h1>
+      <p style="font-size:15.5px;line-height:1.65;color:oklch(0.8 0.01 50);margin:0 0 32px;">Sign in to see live requests, ranked by demand and the couple's rules — or create an account to set up your first event.</p>
+
+      <div style="display:flex;flex-direction:column;gap:16px;">
+        <div style="display:flex;align-items:center;gap:12px;">
+          <div style="width:26px;height:26px;border-radius:8px;background:oklch(0.3 0.03 350 / 0.5);flex-shrink:0;"></div>
+          <span style="font-size:14px;color:oklch(0.9 0.005 50);">A ranked queue that explains every pick</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:12px;">
+          <div style="width:26px;height:26px;border-radius:8px;background:oklch(0.3 0.03 350 / 0.5);flex-shrink:0;"></div>
+          <span style="font-size:14px;color:oklch(0.9 0.005 50);">Guest requests, no app download needed</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:12px;">
+          <div style="width:26px;height:26px;border-radius:8px;background:oklch(0.3 0.03 350 / 0.5);flex-shrink:0;"></div>
+          <span style="font-size:14px;color:oklch(0.9 0.005 50);">A full recap the couple keeps forever</span>
+        </div>
+      </div>
+    </div>
+
+    <div style="position:relative;z-index:1;font-size:13px;color:oklch(0.6 0.01 50);">© 2026 Spinit</div>
+  </div>
+
+  <!-- RIGHT: FORM -->
+  <div style="display:flex;align-items:center;justify-content:center;padding:48px;">
+    <div style="width:100%;max-width:380px;">
+
+      <div style="display:flex;gap:8px;padding:5px;background:white;border:1px solid oklch(0.9 0.012 60);border-radius:999px;margin-bottom:36px;">
+        <button onClick="{{ setLogin }}" style="flex:1;padding:10px 0;border-radius:999px;border:none;font-family:'Inter',sans-serif;font-weight:600;font-size:14px;cursor:pointer;background:{{ loginTabBg }};color:{{ loginTabColor }};">Log in</button>
+        <button onClick="{{ setRegister }}" style="flex:1;padding:10px 0;border-radius:999px;border:none;font-family:'Inter',sans-serif;font-weight:600;font-size:14px;cursor:pointer;background:{{ registerTabBg }};color:{{ registerTabColor }};">Register</button>
+      </div>
+
+      <sc-if value="{{ isLogin }}" hint-placeholder-val="{{ true }}">
+        <h2 style="font-family:'Sora',sans-serif;font-size:26px;font-weight:800;letter-spacing:-0.01em;margin:0 0 6px;">Welcome back</h2>
+        <p style="font-size:14.5px;color:oklch(0.45 0.02 50);margin:0 0 28px;">Log in to jump into tonight's queue.</p>
+
+        <div style="display:flex;flex-direction:column;gap:16px;margin-bottom:8px;">
+          <label style="display:flex;flex-direction:column;gap:6px;">
+            <span style="font-size:13px;font-weight:600;color:oklch(0.35 0.02 50);">Email</span>
+            <input type="email" placeholder="you@djcrew.com" style="padding:13px 14px;border-radius:12px;border:1.5px solid oklch(0.88 0.012 60);font-family:'Inter',sans-serif;font-size:14.5px;background:white;color:oklch(0.22 0.02 50);"/>
+          </label>
+          <label style="display:flex;flex-direction:column;gap:6px;">
+            <span style="font-size:13px;font-weight:600;color:oklch(0.35 0.02 50);">Password</span>
+            <input type="password" placeholder="••••••••" style="padding:13px 14px;border-radius:12px;border:1.5px solid oklch(0.88 0.012 60);font-family:'Inter',sans-serif;font-size:14.5px;background:white;color:oklch(0.22 0.02 50);"/>
+          </label>
+        </div>
+
+        <div style="text-align:right;margin-bottom:24px;">
+          <a href="#" style="font-size:13.5px;font-weight:600;">Forgot password?</a>
+        </div>
+
+        <button style="width:100%;background:{{ accent }};color:white;border:none;padding:14px 0;border-radius:999px;font-family:'Inter',sans-serif;font-weight:700;font-size:15px;cursor:pointer;margin-bottom:24px;">Log in</button>
+
+        <p style="text-align:center;font-size:14px;color:oklch(0.45 0.02 50);margin:0;">New here? <a onClick="{{ setRegister }}" href="#" style="font-weight:600;">Create an account</a></p>
+      </sc-if>
+
+      <sc-if value="{{ isRegister }}" hint-placeholder-val="{{ false }}">
+        <h2 style="font-family:'Sora',sans-serif;font-size:26px;font-weight:800;letter-spacing:-0.01em;margin:0 0 6px;">Set up your account</h2>
+        <p style="font-size:14.5px;color:oklch(0.45 0.02 50);margin:0 0 28px;">Takes about two minutes. You'll connect your first couple's streaming profile next.</p>
+
+        <div style="display:flex;flex-direction:column;gap:16px;margin-bottom:24px;">
+          <label style="display:flex;flex-direction:column;gap:6px;">
+            <span style="font-size:13px;font-weight:600;color:oklch(0.35 0.02 50);">Your name</span>
+            <input type="text" placeholder="Jordan Ellis" style="padding:13px 14px;border-radius:12px;border:1.5px solid oklch(0.88 0.012 60);font-family:'Inter',sans-serif;font-size:14.5px;background:white;color:oklch(0.22 0.02 50);"/>
+          </label>
+          <label style="display:flex;flex-direction:column;gap:6px;">
+            <span style="font-size:13px;font-weight:600;color:oklch(0.35 0.02 50);">DJ business name</span>
+            <input type="text" placeholder="Ellis Sound Co." style="padding:13px 14px;border-radius:12px;border:1.5px solid oklch(0.88 0.012 60);font-family:'Inter',sans-serif;font-size:14.5px;background:white;color:oklch(0.22 0.02 50);"/>
+          </label>
+          <label style="display:flex;flex-direction:column;gap:6px;">
+            <span style="font-size:13px;font-weight:600;color:oklch(0.35 0.02 50);">Email</span>
+            <input type="email" placeholder="you@djcrew.com" style="padding:13px 14px;border-radius:12px;border:1.5px solid oklch(0.88 0.012 60);font-family:'Inter',sans-serif;font-size:14.5px;background:white;color:oklch(0.22 0.02 50);"/>
+          </label>
+          <label style="display:flex;flex-direction:column;gap:6px;">
+            <span style="font-size:13px;font-weight:600;color:oklch(0.35 0.02 50);">Confirm email</span>
+            <input type="email" placeholder="you@djcrew.com" style="padding:13px 14px;border-radius:12px;border:1.5px solid oklch(0.88 0.012 60);font-family:'Inter',sans-serif;font-size:14.5px;background:white;color:oklch(0.22 0.02 50);"/>
+          </label>
+          <label style="display:flex;flex-direction:column;gap:6px;">
+            <span style="font-size:13px;font-weight:600;color:oklch(0.35 0.02 50);">Phone number</span>
+            <div style="display:flex;gap:8px;">
+              <select style="padding:13px 10px;border-radius:12px;border:1.5px solid oklch(0.88 0.012 60);font-family:'Inter',sans-serif;font-size:14.5px;background:white;color:oklch(0.22 0.02 50);flex:0 0 100px;">
+                <option>🇺🇸 +1</option>
+                <option>🇬🇧 +44</option>
+                <option>🇨🇦 +1</option>
+                <option>🇦🇺 +61</option>
+                <option>🇮🇱 +972</option>
+                <option>🇮🇪 +353</option>
+                <option>🇩🇪 +49</option>
+                <option>🇫🇷 +33</option>
+              </select>
+              <input type="tel" placeholder="(555) 123-4567" style="flex:1;min-width:0;padding:13px 14px;border-radius:12px;border:1.5px solid oklch(0.88 0.012 60);font-family:'Inter',sans-serif;font-size:14.5px;background:white;color:oklch(0.22 0.02 50);"/>
+            </div>
+          </label>
+          <label style="display:flex;flex-direction:column;gap:6px;">
+            <span style="font-size:13px;font-weight:600;color:oklch(0.35 0.02 50);">Password</span>
+            <input type="password" placeholder="At least 8 characters" style="padding:13px 14px;border-radius:12px;border:1.5px solid oklch(0.88 0.012 60);font-family:'Inter',sans-serif;font-size:14.5px;background:white;color:oklch(0.22 0.02 50);"/>
+          </label>
+          <label style="display:flex;flex-direction:column;gap:6px;">
+            <span style="font-size:13px;font-weight:600;color:oklch(0.35 0.02 50);">Confirm password</span>
+            <input type="password" placeholder="At least 8 characters" style="padding:13px 14px;border-radius:12px;border:1.5px solid oklch(0.88 0.012 60);font-family:'Inter',sans-serif;font-size:14.5px;background:white;color:oklch(0.22 0.02 50);"/>
+          </label>
+        </div>
+
+        <button style="width:100%;background:{{ accent }};color:white;border:none;padding:14px 0;border-radius:999px;font-family:'Inter',sans-serif;font-weight:700;font-size:15px;cursor:pointer;margin-bottom:24px;">Create account</button>
+
+        <p style="text-align:center;font-size:14px;color:oklch(0.45 0.02 50);margin:0;">Already have an account? <a onClick="{{ setLogin }}" href="#" style="font-weight:600;">Log in</a></p>
+      </sc-if>
+
+    </div>
+  </div>
+
+</div>
+
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{
+  &quot;accentColor&quot;: {&quot;editor&quot;:&quot;color&quot;,&quot;default&quot;:&quot;oklch(0.64 0.19 350)&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;options&quot;:[&quot;oklch(0.64 0.19 350)&quot;,&quot;oklch(0.55 0.17 265)&quot;,&quot;oklch(0.62 0.13 190)&quot;],&quot;section&quot;:&quot;Theme&quot;},
+  &quot;defaultMode&quot;: {&quot;editor&quot;:&quot;enum&quot;,&quot;default&quot;:&quot;login&quot;,&quot;options&quot;:[&quot;login&quot;,&quot;register&quot;],&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Behavior&quot;}
+}">
+class Component extends DCLogic {
+  state = { mode: undefined };
+
+  renderVals() {
+    const accent = this.props.accentColor || 'oklch(0.64 0.19 350)';
+    const mode = this.state.mode !== undefined ? this.state.mode : (this.props.defaultMode === 'register' ? 'register' : 'login');
+    const isLogin = mode === 'login';
+    const isRegister = mode === 'register';
+
+    return {
+      accent,
+      isLogin,
+      isRegister,
+      loginTabBg: isLogin ? accent : 'transparent',
+      loginTabColor: isLogin ? 'white' : 'oklch(0.45 0.02 50)',
+      registerTabBg: isRegister ? accent : 'transparent',
+      registerTabColor: isRegister ? 'white' : 'oklch(0.45 0.02 50)',
+      setLogin: () => this.setState({ mode: 'login' }),
+      setRegister: () => this.setState({ mode: 'register' })
+    };
+  }
+}
+
+</script>
+</body>
+</html>
