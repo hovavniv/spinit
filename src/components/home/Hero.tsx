@@ -1,12 +1,14 @@
 import styles from './Hero.module.css';
+import { HeroPhoneDemo } from './HeroPhoneDemo';
 
 /**
  * The headline, copy, CTAs, and the phone frame chrome. Anchor:
  * design/artboards/Spinit Homepage.dc.html, the <!-- HERO --> block.
  *
- * The phone frame's interactive interior (the guest/DJ demo) is Task 6's
- * `HeroPhoneDemo` — this component only renders the frame chrome around it
- * with a static placeholder.
+ * The phone frame's interactive interior (the guest/DJ demo) is
+ * `HeroPhoneDemo`, a client component rendered directly here — Hero itself
+ * stays a server component since Next's server/client boundary handles a
+ * direct import of a client child fine.
  */
 export function Hero() {
   return (
@@ -35,8 +37,7 @@ export function Hero() {
         <div className={styles.phoneFrame}>
           <div className={styles.phoneNotch} />
           <div className={styles.phoneScreen}>
-            {/* HeroPhoneDemo (Task 6) slots in here. */}
-            <div />
+            <HeroPhoneDemo />
           </div>
         </div>
       </div>
