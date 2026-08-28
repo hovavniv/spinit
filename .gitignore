@@ -1,0 +1,11 @@
+# Claude Code — local agent config and notes, not part of the submission
+.claude/
+.claude/**
+CLAUDE.md
+.mcp.json
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
