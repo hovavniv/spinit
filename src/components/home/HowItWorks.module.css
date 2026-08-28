@@ -1,0 +1,162 @@
+/* Measurements copied verbatim from the <!-- HOW IT WORKS --> block of
+   design/artboards/Spinit Homepage.dc.html. */
+
+.section {
+  max-width: 1240px;
+  margin: 0 auto;
+  padding: 80px 48px;
+}
+
+.intro {
+  max-width: 600px;
+  margin: 0 auto 56px;
+  text-align: center;
+}
+
+.heading {
+  font-family: var(--font-sora), sans-serif;
+  font-size: 38px;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  margin: 0 0 14px;
+}
+
+.subheading {
+  font-size: 17px;
+  color: var(--text-muted);
+  line-height: 1.6;
+  margin: 0;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 28px;
+}
+
+.card {
+  background: white;
+  border: 1px solid var(--border);
+  border-radius: 24px;
+  padding: 32px;
+}
+
+.kicker {
+  font-family: var(--font-sora), sans-serif;
+  font-size: 13px;
+  font-weight: 700;
+  margin-bottom: 14px;
+}
+
+.kickerDj {
+  color: var(--accent-deep);
+}
+
+.kickerCouple {
+  color: var(--role-couple);
+}
+
+.kickerGuests {
+  color: var(--role-guest);
+}
+
+.cardTitle {
+  font-family: var(--font-sora), sans-serif;
+  font-size: 21px;
+  font-weight: 700;
+  margin: 0 0 12px;
+}
+
+.cardCopy {
+  font-size: 14.5px;
+  line-height: 1.65;
+  color: var(--text-muted);
+  margin: 0 0 22px;
+}
+
+/* DJ card example row */
+.djExample {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: var(--bg);
+  border-radius: 14px;
+  padding: 10px 14px;
+}
+
+.djExampleChip {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: var(--accent-deep);
+  color: white;
+  font-size: 11px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.djExampleTitle {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.djExampleMeta {
+  font-size: 12px;
+  color: var(--text-subtle);
+}
+
+/* Couple card pills */
+.couplePills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.pillFilled {
+  background: var(--accent-tint);
+  color: var(--accent-deep);
+  font-size: 12.5px;
+  font-weight: 600;
+  padding: 6px 14px;
+  border-radius: var(--radius-pill);
+}
+
+.pillOutline {
+  border: 1.5px solid oklch(0.85 0.012 60);
+  color: var(--text-muted);
+  font-size: 12.5px;
+  font-weight: 600;
+  padding: 5px 13px;
+  border-radius: var(--radius-pill);
+}
+
+/* Guests card pills */
+.guestPills {
+  display: flex;
+  gap: 8px;
+}
+
+.pillVotes {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  background: var(--bg);
+  font-size: 12.5px;
+  font-weight: 600;
+  padding: 6px 14px;
+  border-radius: var(--radius-pill);
+}
+
+.pillVotesHeart {
+  color: var(--accent-deep);
+}
+
+.pillUsed {
+  background: var(--bg);
+  font-size: 12.5px;
+  font-weight: 600;
+  padding: 6px 14px;
+  border-radius: var(--radius-pill);
+}

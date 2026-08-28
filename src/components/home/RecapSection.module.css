@@ -1,0 +1,100 @@
+/* Measurements copied verbatim from the <!-- RECAP --> block of
+   design/artboards/Spinit Homepage.dc.html. */
+
+.section {
+  max-width: 1240px;
+  margin: 0 auto;
+  padding: 60px 48px 100px;
+  display: grid;
+  grid-template-columns: 1fr 440px;
+  gap: 64px;
+  align-items: center;
+}
+
+.heading {
+  font-family: var(--font-sora), sans-serif;
+  font-size: 38px;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  margin: 0 0 14px;
+}
+
+.copy {
+  font-size: 17px;
+  line-height: 1.65;
+  color: var(--text-muted);
+  max-width: 460px;
+  margin: 0;
+}
+
+.card {
+  background: white;
+  border-radius: 20px;
+  box-shadow: 0 30px 60px -30px rgba(30, 20, 10, 0.25);
+  padding: 30px 26px;
+  position: relative;
+}
+
+.perforationTop {
+  position: absolute;
+  top: 0;
+  left: 24px;
+  right: 24px;
+  height: 1px;
+  background: repeating-linear-gradient(90deg, oklch(0.85 0.012 60) 0 8px, transparent 8px 16px);
+}
+
+.perforationBottom {
+  position: absolute;
+  bottom: 0;
+  left: 24px;
+  right: 24px;
+  height: 1px;
+  background: repeating-linear-gradient(90deg, oklch(0.85 0.012 60) 0 8px, transparent 8px 16px);
+}
+
+.cardTitle {
+  font-family: var(--font-sora), sans-serif;
+  font-weight: 700;
+  font-size: 15px;
+  margin-bottom: 2px;
+}
+
+.cardMeta {
+  font-size: 12px;
+  color: var(--text-subtle);
+  margin-bottom: 20px;
+}
+
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+}
+
+.rowTitle {
+  font-weight: 600;
+  font-size: 14.5px;
+}
+
+.rowArtist {
+  font-size: 13px;
+  color: var(--text-subtle);
+}
+
+.rowNoteAccent {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--accent-deep);
+}
+
+.rowNote {
+  font-size: 12px;
+  color: var(--text-subtle);
+}
