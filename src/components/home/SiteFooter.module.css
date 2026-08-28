@@ -1,0 +1,54 @@
+/* Measurements copied verbatim from the <!-- FOOTER --> block of
+   design/artboards/Spinit Homepage.dc.html. */
+
+.footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 32px 48px;
+  border-top: 1px solid var(--border);
+}
+
+.brand {
+  font-family: var(--font-sora), sans-serif;
+  font-weight: 800;
+  font-size: 16px;
+}
+
+.tagline {
+  font-size: 13px;
+  color: var(--text-subtle);
+}
+
+.links {
+  display: flex;
+  gap: 28px;
+}
+
+.link {
+  font-size: 13.5px;
+  color: var(--text-muted);
+}
+
+.copyright {
+  font-size: 13px;
+  color: oklch(0.55 0.02 50);
+}
+
+/* Not called out by name in the plan's task-8 file list, but design-doc
+   section 8 row 6 explicitly lists "footer 32px" among the vertical
+   paddings that stay fixed while the shared 48px horizontal figure moves
+   to 24px — so this section is in scope for that row. Horizontal padding
+   only (32px vertical restated unchanged). The three-item flex row
+   (brand+tagline, links, copyright) genuinely overflows at 375px in its
+   base `flex-direction: row; justify-content: space-between` (see
+   report), so it also stacks to a column below 900px — not in the table,
+   but needed to avoid real overflow/clipping. */
+@media (max-width: 899px) {
+  .footer {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 16px;
+    padding: 32px 24px;
+  }
+}

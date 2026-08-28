@@ -1,0 +1,53 @@
+/* Measurements copied verbatim from the <!-- NAV --> block of
+   design/artboards/Spinit Homepage.dc.html. */
+
+.nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 22px 48px;
+  position: sticky;
+  top: 0;
+  background: oklch(0.97 0.014 75 / 0.9);
+  backdrop-filter: blur(6px);
+  z-index: 20;
+  border-bottom: 1px solid var(--border);
+}
+
+.links {
+  display: flex;
+  align-items: center;
+  gap: 36px;
+}
+
+.link {
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--ink-dark);
+}
+
+.cta {
+  background: var(--accent);
+  color: white;
+  padding: 10px 22px;
+  border-radius: var(--radius-pill);
+  font-weight: 600;
+  font-size: 14px;
+}
+
+/* Below 900px: hide the two text links (logo + "Get Spinit" pill remain),
+   drop the sticky nav's horizontal padding to 24px. The links stay in the
+   DOM and their #how-it-works / #recap targets stay reachable by scrolling,
+   so `display: none` (rather than a visually-hidden-but-focusable pattern)
+   is the right call: once hidden they are pure navigation shortcuts with no
+   unique content, and leaving them focusable would add invisible tab stops
+   with no visible destination to land on. */
+@media (max-width: 899px) {
+  .nav {
+    padding: 16px 24px;
+  }
+
+  .link {
+    display: none;
+  }
+}

@@ -1,0 +1,147 @@
+/* ---------------------------------------------------------------------------
+   Design tokens.
+
+   Every value here is copied from the Claude Design artboards in
+   design/artboards/. A colour lives in this file only if more than one
+   component uses it. Colours that repeat but stay inside a single component
+   (the record mark's ring and gradient colours, for example) live in that
+   component's own module, so this list does not advertise them as system-wide.
+   --------------------------------------------------------------------------- */
+
+:root {
+  /* surfaces */
+  --bg: oklch(0.97 0.014 75); /* warm page background */
+  --surface: white; /* cards, inputs */
+  --ink-dark: oklch(0.22 0.02 50); /* body text, and the dark panels */
+
+  /* text */
+  --text-muted: oklch(0.45 0.02 50);
+  --text-subtle: oklch(0.5 0.02 50);
+  --text-label: oklch(0.35 0.02 50);
+  --text-placeholder: oklch(0.62 0.02 50);
+
+  /* lines */
+  --border: oklch(0.9 0.012 60);
+  --border-input: oklch(0.88 0.012 60);
+
+  /* accents.
+     --accent and --accent-deep are both pink at hue 350 and differ in
+     lightness. --accent is for large filled surfaces and glyphs: buttons,
+     the active pill tab, the rank-1 badge, the vote heart, the record mark's
+     centre dot, a focused input's border. --accent-deep is for places where
+     the brighter pink would be too light to read or too loud at small size:
+     text on white and on pale pink, the small heart glyph, and the 20px
+     numbered chip, where it is a background carrying white text. */
+  --accent: oklch(0.64 0.19 350);
+  --accent-deep: oklch(0.5 0.19 350);
+  --accent-tint: oklch(0.95 0.045 350);
+  --link: oklch(0.55 0.17 265);
+  --role-couple: oklch(0.5 0.17 265);
+  --role-guest: oklch(0.5 0.13 190);
+
+  --radius-pill: 999px;
+}
+
+/* --------------------------------------------------------------------------
+   Base rules, copied from the <helmet> blocks of both artboards.
+   -------------------------------------------------------------------------- */
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink-dark);
+  font-family: var(--font-inter), sans-serif;
+  /* An element pushed past the right edge below 900px (see the responsive
+     rules in each section's CSS module) is clipped here rather than
+     producing a horizontal scrollbar. Section 8 of the design spec is
+     written assuming this rule exists. */
+  overflow-x: hidden;
+}
+
+::selection {
+  background: oklch(0.64 0.19 350 / 0.22);
+}
+
+a {
+  color: var(--link);
+  text-decoration: none;
+}
+
+a:hover {
+  color: var(--accent);
+}
+
+input::placeholder {
+  color: var(--text-placeholder);
+}
+
+input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+/* --------------------------------------------------------------------------
+   Animations, copied from the artboards.
+   -------------------------------------------------------------------------- */
+
+@keyframes spinitRecordSpin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes discoSwing {
+  0%,
+  100% {
+    transform: rotate(-6deg);
+  }
+  50% {
+    transform: rotate(6deg);
+  }
+}
+
+@keyframes sparkleTwinkle {
+  0%,
+  100% {
+    opacity: 0.15;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+/* Bare keyframe names referenced from a CSS Module's `animation-name` get
+   locally scoped by Turbopack's CSS Modules implementation even though no
+   matching @keyframes rule exists in that module — so a module can never
+   point at one of the three shared keyframes above by name directly. These
+   custom properties are the indirection that lets it: `var()` substitutes a
+   raw token, which is not subject to that scoping. */
+:root {
+  --spinit-anim-spinitRecordSpin: spinitRecordSpin;
+  --spinit-anim-discoSwing: discoSwing;
+  --spinit-anim-sparkleTwinkle: sparkleTwinkle;
+}
+
+/* Some people get motion sickness or migraines from continuous animation, and
+   set "reduce motion" in their operating system to say so. This honours it.
+   It is written as a blanket rule rather than as `animation: none` on the three
+   animated classes, because CSS Modules rewrite class names at build time and a
+   global stylesheet cannot reliably name them. Animations run once, instantly,
+   and land on their final frame rather than disappearing. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

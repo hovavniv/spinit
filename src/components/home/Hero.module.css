@@ -1,0 +1,159 @@
+/* Measurements copied verbatim from the <!-- HERO --> block of
+   design/artboards/Spinit Homepage.dc.html. */
+
+.hero {
+  max-width: 1240px;
+  margin: 0 auto;
+  padding: 88px 48px 60px;
+  display: grid;
+  grid-template-columns: 1fr 400px;
+  gap: 64px;
+  align-items: center;
+}
+
+.badge {
+  display: inline-block;
+  background: var(--accent-tint);
+  color: var(--accent-deep);
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  padding: 6px 14px;
+  border-radius: var(--radius-pill);
+  margin-bottom: 24px;
+}
+
+.headline {
+  font-family: var(--font-sora), sans-serif;
+  font-size: 56px;
+  line-height: 1.05;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  margin: 0 0 24px;
+}
+
+.copy {
+  font-size: 18px;
+  line-height: 1.6;
+  color: var(--text-muted);
+  max-width: 480px;
+  margin: 0 0 36px;
+}
+
+.ctaRow {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+}
+
+.primaryCta {
+  background: var(--accent);
+  color: white;
+  padding: 14px 28px;
+  border-radius: var(--radius-pill);
+  font-weight: 600;
+  font-size: 16px;
+}
+
+.secondaryCta {
+  font-weight: 600;
+  font-size: 16px;
+  color: var(--ink-dark);
+}
+
+/* Phone side */
+
+.phoneColumn {
+  position: relative;
+  justify-self: center;
+}
+
+.decorCircleBlue {
+  position: absolute;
+  width: 180px;
+  height: 180px;
+  border-radius: 50%;
+  background: oklch(0.93 0.04 265);
+  top: -40px;
+  right: -50px;
+  z-index: 0;
+}
+
+.decorCirclePink {
+  position: absolute;
+  width: 120px;
+  height: 120px;
+  border-radius: 50%;
+  background: var(--accent-tint);
+  bottom: -30px;
+  left: -40px;
+  z-index: 0;
+}
+
+.phoneFrame {
+  position: relative;
+  z-index: 1;
+  width: 340px;
+  background: var(--ink-dark);
+  border-radius: 46px;
+  padding: 14px;
+  box-shadow: 0 40px 70px -30px rgba(30, 20, 10, 0.4);
+}
+
+.phoneNotch {
+  width: 90px;
+  height: 20px;
+  background: var(--ink-dark);
+  border-radius: 12px;
+  margin: 0 auto 8px;
+}
+
+.phoneScreen {
+  background: white;
+  border-radius: 32px;
+  padding: 22px 18px;
+  min-height: 500px;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Below 900px: single column, phone demo falls below the copy (source
+   order already puts it there). Horizontal padding only (48px -> 24px);
+   88px/60px vertical is restated, not changed. `.phoneFrame`'s fixed
+   340px would overflow the 327px content box left at a 375px viewport, so
+   it becomes fluid up to that same 340px cap. `.hero` also gets
+   `overflow-x: hidden`: the decorative circles are offset -40px/-50px past
+   `.phoneColumn`. `body` in globals.css has had its own `overflow-x: hidden`
+   since commit 721c5d7, which already stops the circles from producing an
+   actual scrollbar — but that rule only clips at the viewport edge, not at
+   `.hero`'s own box. Without this local rule the circles would still
+   visually render past `.hero`'s right/left edges into whatever sits
+   beside it in the page, instead of staying clipped to the hero section
+   itself, so the local `overflow-x: hidden` is still doing real work here
+   even though body's rule already prevents the scrollbar. */
+@media (max-width: 899px) {
+  .hero {
+    grid-template-columns: 1fr;
+    padding: 88px 24px 60px;
+    overflow-x: hidden;
+  }
+
+  .headline {
+    font-size: 34px;
+  }
+
+  .ctaRow {
+    flex-wrap: wrap;
+  }
+
+  .phoneColumn {
+    justify-self: stretch;
+  }
+
+  .phoneFrame {
+    width: 100%;
+    max-width: 340px;
+    margin: 0 auto;
+  }
+}

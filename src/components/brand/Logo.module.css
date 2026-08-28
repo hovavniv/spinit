@@ -1,0 +1,24 @@
+.logo {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.wordmark {
+  font-family: var(--font-sora), sans-serif;
+  font-weight: 800;
+  font-size: 22px;
+  letter-spacing: -0.02em;
+}
+
+/* On the light nav the wordmark takes the page's ink colour by inheritance
+   (design/artboards/Spinit Homepage.dc.html, <!-- NAV -->: no explicit color
+   on the <span>). On the dark brand panel it is set explicitly to white
+   (Spinit DJ Login.dc.html, <!-- LEFT: BRAND PANEL -->). */
+.dark {
+  color: var(--ink-dark);
+}
+
+.light {
+  color: white;
+}

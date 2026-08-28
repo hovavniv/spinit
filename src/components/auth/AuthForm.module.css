@@ -1,0 +1,138 @@
+.heading {
+  font-family: var(--font-sora), sans-serif;
+  font-size: 26px;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  margin: 0 0 6px;
+}
+
+.subheading {
+  font-size: 14.5px;
+  color: var(--text-muted);
+  margin: 0 0 28px;
+}
+
+.fields {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+/* design/artboards/Spinit DJ Login.dc.html line 78: the login form's field
+   group has margin-bottom: 8px, distinct from register's 24px (line 102). */
+.fieldsLogin {
+  margin-bottom: 8px;
+}
+
+.phoneField {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.phoneLabel {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-label);
+}
+
+.phoneRow {
+  display: flex;
+  gap: 8px;
+}
+
+.phoneInput {
+  width: 100%;
+  padding: 13px 14px;
+  border-radius: 12px;
+  border: 1.5px solid var(--border-input);
+  font-family: var(--font-inter), sans-serif;
+  font-size: 14.5px;
+  background: var(--surface);
+  color: var(--ink-dark);
+}
+
+.phoneInput:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.phoneInputInvalid {
+  border-color: var(--accent-deep);
+}
+
+.phoneError {
+  font-size: 12.5px;
+  color: var(--accent-deep);
+}
+
+.dialCode {
+  padding: 13px 10px;
+  border-radius: 12px;
+  border: 1.5px solid var(--border-input);
+  font-family: var(--font-inter), sans-serif;
+  font-size: 14.5px;
+  background: var(--surface);
+  color: var(--ink-dark);
+  flex: 0 0 100px;
+}
+
+.phoneInputWrap {
+  flex: 1;
+  min-width: 0;
+}
+
+.forgotRow {
+  text-align: right;
+  margin-bottom: 24px;
+}
+
+.forgotLink {
+  font-size: 13.5px;
+  font-weight: 600;
+}
+
+.submit {
+  width: 100%;
+  background: var(--accent);
+  color: white;
+  border: none;
+  padding: 14px 0;
+  border-radius: var(--radius-pill);
+  font-family: var(--font-inter), sans-serif;
+  font-weight: 700;
+  font-size: 15px;
+  cursor: pointer;
+  margin-bottom: 24px;
+}
+
+.footPrompt {
+  text-align: center;
+  font-size: 14px;
+  color: var(--text-muted);
+  margin: 0;
+}
+
+.inlineSwitch {
+  background: none;
+  border: none;
+  padding: 0;
+  font: inherit;
+  font-weight: 600;
+  color: var(--link);
+  cursor: pointer;
+}
+
+.inlineSwitch:hover {
+  color: var(--accent);
+}
+
+.notice {
+  font-size: 13.5px;
+  color: var(--text-muted);
+  background: var(--accent-tint);
+  border-radius: 12px;
+  padding: 12px 14px;
+  margin: 0 0 20px;
+}

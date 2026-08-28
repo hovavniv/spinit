@@ -1,0 +1,87 @@
+import { render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import { describe, expect, it, vi } from 'vitest';
+import { AuthScreen } from './AuthScreen';
+
+// AuthScreen calls router.replace() on a mode switch to keep the address bar in
+// sync. It does not need a real router to do that — this stubs next/navigation's
+// useRouter so the component can call replace() without a Next.js app context.
+vi.mock('next/navigation', () => ({
+  useRouter: () => ({ replace: vi.fn() }),
+}));
+
+describe('AuthScreen', () => {
+  it('shows the login fields and not the register-only fields when defaultMode is login', () => {
+    render(<AuthScreen defaultMode="login" />);
+
+    expect(screen.getByLabelText('Email')).toBeInTheDocument();
+    expect(screen.getByLabelText('Password')).toBeInTheDocument();
+    expect(screen.queryByLabelText('Your name')).not.toBeInTheDocument();
+  });
+
+  it('reveals the register-only fields when the Register tab is clicked', async () => {
+    const user = userEvent.setup();
+    render(<AuthScreen defaultMode="login" />);
+
+    await user.click(screen.getByRole('tab', { name: 'Register' }));
+
+    expect(screen.getByLabelText('Your name')).toBeInTheDocument();
+    expect(screen.getByLabelText('DJ business name')).toBeInTheDocument();
+    expect(screen.getByLabelText('Confirm password')).toBeInTheDocument();
+  });
+
+  it('switches to register mode via the inline "Create an account" control at the foot of the login form', async () => {
+    const user = userEvent.setup();
+    render(<AuthScreen defaultMode="login" />);
+
+    await user.click(screen.getByRole('button', { name: 'Create an account' }));
+
+    expect(screen.getByLabelText('Your name')).toBeInTheDocument();
+    expect(screen.getByLabelText('DJ business name')).toBeInTheDocument();
+    expect(screen.getByLabelText('Confirm password')).toBeInTheDocument();
+  });
+
+  it('switches back to login mode via the inline "Log in" control at the foot of the register form', async () => {
+    const user = userEvent.setup();
+    render(<AuthScreen defaultMode="register" />);
+
+    // "Log in" also names the pill tab (role="tab"), so this must be scoped to
+    // plain buttons to reach the inline foot-link uniquely.
+    await user.click(screen.getByRole('button', { name: 'Log in' }));
+
+    expect(screen.getByLabelText('Email')).toBeInTheDocument();
+    expect(screen.getByLabelText('Password')).toBeInTheDocument();
+    expect(screen.queryByLabelText('Your name')).not.toBeInTheDocument();
+  });
+
+  it('shows the password mismatch error on submit and keeps the entered values', async () => {
+    const user = userEvent.setup();
+    render(<AuthScreen defaultMode="register" />);
+
+    await user.type(screen.getByLabelText('Your name'), 'Jordan Ellis');
+    await user.type(screen.getByLabelText('DJ business name'), 'Ellis Sound Co.');
+    await user.type(screen.getByLabelText('Email'), 'jordan@djcrew.com');
+    await user.type(screen.getByLabelText('Confirm email'), 'jordan@djcrew.com');
+    await user.type(screen.getByLabelText('Phone number'), '5551234567');
+    await user.type(screen.getByLabelText('Password'), 'password123');
+    await user.type(screen.getByLabelText('Confirm password'), 'password456');
+
+    await user.click(screen.getByRole('button', { name: 'Create account' }));
+
+    expect(await screen.findByText('Passwords do not match.')).toBeInTheDocument();
+    expect(screen.getByLabelText('Your name')).toHaveValue('Jordan Ellis');
+    expect(screen.getByLabelText('Email')).toHaveValue('jordan@djcrew.com');
+    expect(screen.getByLabelText('Password')).toHaveValue('password123');
+    expect(screen.getByLabelText('Confirm password')).toHaveValue('password456');
+  });
+
+  it('shows the required-email error when the login form is submitted with an empty email', async () => {
+    const user = userEvent.setup();
+    render(<AuthScreen defaultMode="login" />);
+
+    await user.type(screen.getByLabelText('Password'), 'password123');
+    await user.click(screen.getByRole('button', { name: 'Log in' }));
+
+    expect(await screen.findByText('Email is required.')).toBeInTheDocument();
+  });
+});

@@ -1,0 +1,68 @@
+.screen {
+  font-family: var(--font-inter), sans-serif;
+  color: var(--ink-dark);
+  background: var(--bg);
+  width: 100%;
+  min-height: 100vh;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+}
+
+.formSide {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 48px;
+}
+
+.formCard {
+  width: 100%;
+  max-width: 380px;
+}
+
+.tabList {
+  display: flex;
+  gap: 8px;
+  padding: 5px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  margin-bottom: 36px;
+}
+
+.tab {
+  flex: 1;
+  padding: 10px 0;
+  border-radius: var(--radius-pill);
+  border: none;
+  font-family: var(--font-inter), sans-serif;
+  font-weight: 600;
+  font-size: 14px;
+  cursor: pointer;
+  background: transparent;
+  color: var(--text-muted);
+}
+
+.tabActive {
+  background: var(--accent);
+  color: white;
+}
+
+/* Below 900px: the login/register split collapses to one column, the
+   BrandPanel (already width-flexible) becomes the slim header strip via
+   its own module's media query. `.formSide`'s 48px padding is not in
+   design-doc section 8's row-6 list (that list is homepage sections only)
+   and `.formCard` is fluid (width: 100%, max-width: 380px), so it is left
+   unchanged here. */
+@media (max-width: 899px) {
+  .screen {
+    grid-template-columns: 1fr;
+    /* Grid's default align-content stretches auto rows to fill min-height,
+       which was splitting the 100vh evenly between BrandPanel and
+       formSide and pushing BrandPanel's headline to the bottom of half a
+       viewport instead of sitting right under the logo. Rows should only
+       be as tall as their content once stacked. */
+    min-height: auto;
+    align-content: start;
+  }
+}

@@ -1,0 +1,161 @@
+/* Measurements copied verbatim from the phone-interior block of
+   design/artboards/Spinit Homepage.dc.html (the sc-if guest/DJ view). */
+
+.tabRow {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 20px;
+}
+
+.tab {
+  flex: 1;
+  padding: 9px 0;
+  border-radius: var(--radius-pill);
+  border: none;
+  font-family: var(--font-inter), sans-serif;
+  font-weight: 600;
+  font-size: 13px;
+  cursor: pointer;
+  background: transparent;
+  color: var(--text-muted);
+}
+
+.tabActive {
+  background: var(--accent);
+  color: white;
+}
+
+.title {
+  font-weight: 700;
+  font-size: 15px;
+  margin-bottom: 2px;
+}
+
+.subtitle {
+  font-size: 12px;
+  color: var(--text-subtle);
+  margin-bottom: 16px;
+}
+
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.songRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 12px;
+  border-radius: 16px;
+  background: var(--bg);
+  transition: transform 0.2s ease;
+  transform: scale(1);
+}
+
+.songRowPulsed {
+  transform: scale(1.05);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .songRow {
+    transition: none;
+  }
+}
+
+.songTitle {
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.songArtist {
+  font-size: 12px;
+  color: var(--text-subtle);
+}
+
+.voteButton {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-family: var(--font-inter), sans-serif;
+}
+
+.voteHeart {
+  color: var(--accent);
+  font-size: 16px;
+}
+
+.voteCount {
+  font-weight: 700;
+  font-size: 14px;
+}
+
+.requestRow {
+  padding: 10px 12px;
+  border-radius: 16px;
+  background: var(--bg);
+  cursor: pointer;
+  border: none;
+  text-align: left;
+  width: 100%;
+  font-family: var(--font-inter), sans-serif;
+  color: var(--ink-dark);
+}
+
+.requestRowHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.requestRowLeft {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.rankBadge {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--border);
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.rankBadgeTop {
+  background: var(--accent);
+  color: white;
+}
+
+.requestTitle {
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.requestCount {
+  font-size: 12px;
+  color: var(--text-subtle);
+}
+
+.caret {
+  font-size: 11px;
+  color: var(--text-subtle);
+}
+
+.why {
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--text-muted);
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+}
