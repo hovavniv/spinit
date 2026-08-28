@@ -57,5 +57,12 @@
 @media (max-width: 899px) {
   .screen {
     grid-template-columns: 1fr;
+    /* Grid's default align-content stretches auto rows to fill min-height,
+       which was splitting the 100vh evenly between BrandPanel and
+       formSide and pushing BrandPanel's headline to the bottom of half a
+       viewport instead of sitting right under the logo. Rows should only
+       be as tall as their content once stacked. */
+    min-height: auto;
+    align-content: start;
   }
 }

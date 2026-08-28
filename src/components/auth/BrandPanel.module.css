@@ -98,6 +98,8 @@
 @media (max-width: 899px) {
   .panel {
     padding: 24px;
+    justify-content: flex-start;
+    gap: 16px;
   }
 
   .heading {
