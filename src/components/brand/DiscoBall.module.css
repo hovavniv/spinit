@@ -1,0 +1,73 @@
+/* Measurements copied verbatim from the "DISCO BALL, hanging from the
+   ceiling" block of design/artboards/Spinit Homepage.dc.html. This element
+   does not appear in the login artboard. */
+
+.wrapper {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  transform: translateX(160px);
+  transform-origin: top center;
+  animation-name: var(--spinit-anim-discoSwing);
+  animation-duration: 4.5s;
+  animation-timing-function: ease-in-out;
+  animation-iteration-count: infinite;
+  z-index: 15;
+  pointer-events: none;
+}
+
+.cord {
+  width: 2px;
+  height: 88px;
+  margin: 0 auto;
+  background: repeating-linear-gradient(to bottom, oklch(0.55 0.01 50) 0 4px, transparent 4px 8px);
+}
+
+.ball {
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  position: relative;
+  background:
+    radial-gradient(
+      circle at 32% 28%,
+      oklch(0.98 0 0),
+      oklch(0.85 0 0) 35%,
+      oklch(0.65 0 0) 65%,
+      oklch(0.5 0 0) 100%
+    ),
+    repeating-linear-gradient(50deg, transparent 0 5px, oklch(0 0 0 / 0.14) 5px 6px),
+    repeating-linear-gradient(-50deg, transparent 0 5px, oklch(0 0 0 / 0.14) 5px 6px);
+  box-shadow: 0 18px 30px -12px rgba(30, 20, 10, 0.35);
+}
+
+.sparkleOne {
+  position: absolute;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: white;
+  top: 14px;
+  left: 40px;
+  box-shadow: 0 0 6px 2px rgba(255, 255, 255, 0.8);
+  animation-name: var(--spinit-anim-sparkleTwinkle);
+  animation-duration: 2.2s;
+  animation-timing-function: ease-in-out;
+  animation-iteration-count: infinite;
+}
+
+.sparkleTwo {
+  position: absolute;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: white;
+  top: 38px;
+  left: 14px;
+  box-shadow: 0 0 5px 2px rgba(255, 255, 255, 0.7);
+  animation-name: var(--spinit-anim-sparkleTwinkle);
+  animation-duration: 2.8s;
+  animation-timing-function: ease-in-out;
+  animation-iteration-count: infinite;
+  animation-delay: 0.6s;
+}
