@@ -3,13 +3,19 @@
 import { useState } from 'react';
 import type { FormEvent } from 'react';
 import { Field } from './Field';
-import { validateLogin } from '@/lib/validation';
-import type { LoginErrors, LoginValues } from '@/lib/validation';
+import { loginSchema } from '@/lib/validation';
 import styles from './AuthForm.module.css';
 
 interface LoginFormProps {
   onSwitchToRegister: () => void;
 }
+
+interface LoginValues {
+  email: string;
+  password: string;
+}
+
+type LoginErrors = Partial<Record<keyof LoginValues, string>>;
 
 const fieldOrder: (keyof LoginValues)[] = ['email', 'password'];
 
@@ -30,7 +36,16 @@ export function LoginForm({ onSwitchToRegister }: LoginFormProps) {
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const nextErrors = validateLogin(values);
+    const result = loginSchema.safeParse(values);
+    const nextErrors: LoginErrors = {};
+    if (!result.success) {
+      for (const issue of result.error.issues) {
+        const name = issue.path[0] as keyof LoginValues | undefined;
+        if (name && !nextErrors[name]) {
+          nextErrors[name] = issue.message;
+        }
+      }
+    }
     setErrors(nextErrors);
 
     const firstInvalid = fieldOrder.find((name) => nextErrors[name]);

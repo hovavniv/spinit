@@ -3,9 +3,20 @@
 import { useState } from 'react';
 import type { FormEvent } from 'react';
 import { Field } from './Field';
-import { validateRegister } from '@/lib/validation';
-import type { RegisterErrors, RegisterValues } from '@/lib/validation';
+import { registerSchema } from '@/lib/validation';
 import styles from './AuthForm.module.css';
+
+interface RegisterValues {
+  name: string;
+  businessName: string;
+  email: string;
+  confirmEmail: string;
+  phone: string;
+  password: string;
+  confirmPassword: string;
+}
+
+type RegisterErrors = Partial<Record<keyof RegisterValues, string>>;
 
 interface RegisterFormProps {
   onSwitchToLogin: () => void;
@@ -55,7 +66,16 @@ export function RegisterForm({ onSwitchToLogin }: RegisterFormProps) {
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const nextErrors = validateRegister(values);
+    const result = registerSchema.safeParse(values);
+    const nextErrors: RegisterErrors = {};
+    if (!result.success) {
+      for (const issue of result.error.issues) {
+        const name = issue.path[0] as keyof RegisterValues | undefined;
+        if (name && !nextErrors[name]) {
+          nextErrors[name] = issue.message;
+        }
+      }
+    }
     setErrors(nextErrors);
 
     const firstInvalid = fieldOrder.find((name) => nextErrors[name]);
