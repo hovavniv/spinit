@@ -67,8 +67,21 @@ describe.skipIf(!hasSupabaseConfig || !hasTestUsers)(
       // not the @supabase/ssr cookie-based clients from src/lib/supabase —
       // those are wired to Next's cookie machinery and are the wrong tool for
       // a scripted Node test. One client per user; sessions must not mix.
-      clientA = createClient(SUPABASE_URL!, SUPABASE_ANON_KEY!);
-      clientB = createClient(SUPABASE_URL!, SUPABASE_ANON_KEY!);
+      //
+      // This test suite runs under vitest's jsdom environment, so
+      // `window.localStorage` exists — and @supabase/supabase-js's default
+      // storage key is derived only from the project ref, not per client
+      // instance. Two clients with the default config silently share one
+      // storage slot, so signing in as B overwrites A's session and every
+      // later "clientA" call actually runs as B. `persistSession: false`
+      // keeps each client's session in memory only, so they can never
+      // collide, which is what a scripted test that never reloads needs.
+      clientA = createClient(SUPABASE_URL!, SUPABASE_ANON_KEY!, {
+        auth: { persistSession: false },
+      });
+      clientB = createClient(SUPABASE_URL!, SUPABASE_ANON_KEY!, {
+        auth: { persistSession: false },
+      });
 
       const signInA = await clientA.auth.signInWithPassword({
         email: TEST_USER_A_EMAIL!,
