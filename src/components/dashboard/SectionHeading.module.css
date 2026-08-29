@@ -1,0 +1,22 @@
+/* Measurements read from design/artboards/Spinit DJ Dashboard.dc.html, the
+   section-header row shared by the "upcoming-events" and "past-events"
+   blocks. */
+
+.heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-bottom: 20px;
+}
+
+.title {
+  font-family: var(--font-sora), sans-serif;
+  font-size: 21px;
+  font-weight: 700;
+  margin: 0;
+}
+
+.viewAll {
+  font-weight: 600;
+  font-size: 14px;
+}

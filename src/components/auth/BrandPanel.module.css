@@ -13,7 +13,7 @@
   width: 260px;
   height: 260px;
   border-radius: 50%;
-  background: oklch(0.3 0.03 350 / 0.35);
+  background: var(--panel-blob-pink);
   top: -80px;
   right: -90px;
 }
@@ -23,7 +23,7 @@
   width: 200px;
   height: 200px;
   border-radius: 50%;
-  background: oklch(0.28 0.03 265 / 0.35);
+  background: var(--panel-blob-indigo);
   bottom: -60px;
   left: -70px;
 }
@@ -75,7 +75,7 @@
   width: 26px;
   height: 26px;
   border-radius: 8px;
-  background: oklch(0.3 0.03 350 / 0.5);
+  background: var(--panel-raised);
   flex-shrink: 0;
 }
 
@@ -88,7 +88,7 @@
   position: relative;
   z-index: 1;
   font-size: 13px;
-  color: oklch(0.6 0.01 50);
+  color: var(--panel-text-dim);
 }
 
 /* Below 900px: the dark panel becomes a slim header strip carrying just
