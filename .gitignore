@@ -11,7 +11,16 @@ Thumbs.db
 .vscode/
 
 # Working specs and plans — local agent working context, not part of the submission
-docs/
+#
+# `docs/` (a bare directory pattern) excludes the directory itself, and git
+# never descends into an excluded directory to evaluate further rules — so no
+# negation of a path underneath it can ever re-include anything (this was
+# tried and confirmed not to work: `git check-ignore` kept reporting files
+# under docs/submission/ as ignored by the `docs/` line even with
+# `!docs/submission/` and `!docs/submission/**` both present). `docs/*`
+# instead excludes only docs' direct children, which git does still descend
+# into, so the negation below actually takes effect.
+docs/*
 !docs/submission/
 
 # --- Next.js ---
