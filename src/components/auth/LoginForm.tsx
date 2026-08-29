@@ -1,13 +1,22 @@
 'use client';
 
-import { useState } from 'react';
-import type { FormEvent } from 'react';
+import { useActionState, useState } from 'react';
 import { Field } from './Field';
 import { loginSchema } from '@/lib/validation';
+import type { ActionResult } from '@/lib/auth/errors';
 import styles from './AuthForm.module.css';
 
 interface LoginFormProps {
   onSwitchToRegister: () => void;
+  /**
+   * `signInWithPassword` from `lib/auth/actions`, passed down from
+   * `app/login/page.tsx` via `AuthScreen`. This component never imports
+   * `lib/auth/actions` itself — that module pulls in `next/headers` and
+   * `import 'server-only'`, neither importable from jsdom (design 6, design
+   * 10.3) — so the action is always received as a prop, which is also what
+   * keeps this component testable with a plain `vi.fn()`.
+   */
+  action: (prevState: ActionResult, formData: FormData) => Promise<ActionResult>;
 }
 
 interface LoginValues {
@@ -19,23 +28,36 @@ type LoginErrors = Partial<Record<keyof LoginValues, string>>;
 
 const fieldOrder: (keyof LoginValues)[] = ['email', 'password'];
 
+// Never `{ ok: true }` — that value is reserved for a real successful submit,
+// so a render can tell "just mounted" apart from "the action just succeeded".
+const initialState: ActionResult = { ok: false, formErrors: {} };
+
 /**
  * The login field set from design/artboards/Spinit DJ Login.dc.html,
- * <!-- RIGHT: FORM -->, isLogin branch. Validated through lib/validation.ts.
- * Does not submit anywhere — a valid submit shows the "not wired up yet"
- * notice from design doc section 7.
+ * <!-- RIGHT: FORM -->, isLogin branch. Client-validated with `loginSchema`
+ * for immediate feedback, then submitted to the real server action via
+ * `useActionState` (design 4.2, design 4.1's form-conversion note).
  */
-export function LoginForm({ onSwitchToRegister }: LoginFormProps) {
+export function LoginForm({ onSwitchToRegister, action }: LoginFormProps) {
   const [values, setValues] = useState<LoginValues>({ email: '', password: '' });
-  const [errors, setErrors] = useState<LoginErrors>({});
-  const [submitted, setSubmitted] = useState(false);
+  const [clientErrors, setClientErrors] = useState<LoginErrors>({});
+  const [state, formAction, pending] = useActionState(action, initialState);
+
+  const serverFieldErrors = !state.ok && 'formErrors' in state ? state.formErrors : {};
+  const errors: LoginErrors = { ...serverFieldErrors, ...clientErrors };
+  const generalMessage = !state.ok && 'message' in state ? state.message : undefined;
 
   function handleChange(name: keyof LoginValues, value: string) {
     setValues((current) => ({ ...current, [name]: value }));
   }
 
-  function handleSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
+  /**
+   * Passed straight to `<form action>`. Runs the client-side pre-check first
+   * — invalid input never reaches the server action at all — and only calls
+   * `formAction` (which invokes the real server action) once `loginSchema`
+   * is satisfied.
+   */
+  function submitAction(formData: FormData) {
     const result = loginSchema.safeParse(values);
     const nextErrors: LoginErrors = {};
     if (!result.success) {
@@ -46,16 +68,15 @@ export function LoginForm({ onSwitchToRegister }: LoginFormProps) {
         }
       }
     }
-    setErrors(nextErrors);
+    setClientErrors(nextErrors);
 
     const firstInvalid = fieldOrder.find((name) => nextErrors[name]);
     if (firstInvalid) {
       document.getElementById(firstInvalid)?.focus();
-      setSubmitted(false);
       return;
     }
 
-    setSubmitted(true);
+    formAction(formData);
   }
 
   return (
@@ -63,13 +84,13 @@ export function LoginForm({ onSwitchToRegister }: LoginFormProps) {
       <h2 className={styles.heading}>Welcome back</h2>
       <p className={styles.subheading}>Log in to jump into tonight&apos;s queue.</p>
 
-      {submitted && (
-        <p className={styles.notice} role="status">
-          Login isn&apos;t wired up yet — this is a preview of the form.
+      {generalMessage && (
+        <p className={styles.notice} role="alert">
+          {generalMessage}
         </p>
       )}
 
-      <form onSubmit={handleSubmit} noValidate>
+      <form action={submitAction} noValidate>
         <div className={`${styles.fields} ${styles.fieldsLogin}`}>
           <Field
             label="Email"
@@ -97,7 +118,7 @@ export function LoginForm({ onSwitchToRegister }: LoginFormProps) {
           </a>
         </div>
 
-        <button type="submit" className={styles.submit}>
+        <button type="submit" className={styles.submit} disabled={pending}>
           Log in
         </button>
       </form>

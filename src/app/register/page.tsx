@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import { AuthScreen } from '@/components/auth/AuthScreen';
+import { signInWithPassword, signUpWithPassword } from '@/lib/auth/actions';
 
 export const metadata: Metadata = {
   title: 'Register — Spinit',
@@ -7,5 +8,7 @@ export const metadata: Metadata = {
 };
 
 export default function RegisterPage() {
-  return <AuthScreen defaultMode="register" />;
+  return (
+    <AuthScreen defaultMode="register" loginAction={signInWithPassword} registerAction={signUpWithPassword} />
+  );
 }
