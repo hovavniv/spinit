@@ -39,6 +39,13 @@
   --role-couple: oklch(0.5 0.17 265);
   --role-guest: oklch(0.5 0.13 190);
 
+  /* dark-panel palette, shared by the login brand panel and the dashboard
+     sidebar */
+  --panel-blob-pink: oklch(0.3 0.03 350 / 0.35);
+  --panel-blob-indigo: oklch(0.28 0.03 265 / 0.35);
+  --panel-raised: oklch(0.3 0.03 350 / 0.5);
+  --panel-text-dim: oklch(0.6 0.01 50);
+
   --radius-pill: 999px;
 }
 
