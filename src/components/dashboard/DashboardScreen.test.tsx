@@ -1,4 +1,5 @@
 import { render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import { DashboardScreen } from './DashboardScreen';
 import { demoData } from '@/lib/dashboard/demoData';
@@ -109,6 +110,42 @@ describe('DashboardScreen', () => {
       expect(
         screen.queryByText('No past events yet. Once an event wraps, its recap shows up here.'),
       ).not.toBeInTheDocument();
+    });
+  });
+
+  describe('sign out', () => {
+    it('offers a sign-out control when the DJ has events', () => {
+      render(<DashboardScreen data={demoData} signOutAction={vi.fn()} />);
+      expect(screen.getByRole('button', { name: 'Sign out' })).toBeInTheDocument();
+    });
+
+    it('offers a sign-out control when the DJ has none', () => {
+      render(
+        <DashboardScreen
+          data={{
+            dj: { name: 'Jordan Ellis', company: 'Ellis Sound Co.' },
+            now: '2026-08-27T20:00',
+            liveEvent: null,
+            upcoming: [],
+            past: [],
+          }}
+          signOutAction={vi.fn()}
+        />,
+      );
+      expect(screen.getByRole('button', { name: 'Sign out' })).toBeInTheDocument();
+    });
+
+    it('submits the action it was given, not one of its own', async () => {
+      const signOutAction = vi.fn();
+      const user = userEvent.setup();
+      render(<DashboardScreen data={demoData} signOutAction={signOutAction} />);
+      await user.click(screen.getByRole('button', { name: 'Sign out' }));
+      expect(signOutAction).toHaveBeenCalled();
+    });
+
+    it('renders no sign-out control when no action is supplied', () => {
+      render(<DashboardScreen data={demoData} />);
+      expect(screen.queryByRole('button', { name: 'Sign out' })).not.toBeInTheDocument();
     });
   });
 });

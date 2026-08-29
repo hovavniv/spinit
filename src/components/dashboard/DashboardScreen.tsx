@@ -8,6 +8,19 @@ import styles from './DashboardScreen.module.css';
 
 interface DashboardScreenProps {
   data: DashboardData;
+  /**
+   * The `signOut` server action, passed in rather than imported: actions.ts is
+   * 'use server' and pulls in dal.ts's `import 'server-only'`, neither
+   * importable from jsdom. Same pattern as CompleteProfile's `updateProfile`
+   * (design §7).
+   *
+   * Optional: the design-preview route at `src/app/design/dashboard/page.tsx`
+   * renders this component with no session to end, and every component in
+   * that tree is a Server Component, so a `<form action={…}>` prop must be a
+   * real server reference or the Flight serializer throws at render — a no-op
+   * function does not work there. When omitted, no sign-out control renders.
+   */
+  signOutAction?: () => Promise<void>;
 }
 
 /**
@@ -16,10 +29,10 @@ interface DashboardScreenProps {
  * Pure function of `data`; nothing here reads a clock, a route, or a store
  * (design/specs/2026-08-29-dj-dashboard-design.md §5).
  */
-export function DashboardScreen({ data }: DashboardScreenProps) {
+export function DashboardScreen({ data, signOutAction }: DashboardScreenProps) {
   return (
     <div className={styles.screen}>
-      <DashboardSidebar dj={data.dj} />
+      <DashboardSidebar dj={data.dj} signOutAction={signOutAction} />
       <div className={styles.main}>
         <div className={styles.content}>
           <DashboardHeader dj={data.dj} now={data.now} />
