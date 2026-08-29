@@ -1,5 +1,12 @@
 import { describe, expect, it, vi, afterEach } from 'vitest';
-import { toLiveEvent, toUpcomingEvents, toPastEvents, type DashboardEventRow, type PastEventCountRow } from './fromDb';
+import {
+  toLiveEvent,
+  toUpcomingEvents,
+  toPastEvents,
+  toDashboardData,
+  type DashboardEventRow,
+  type PastEventCountRow,
+} from './fromDb';
 
 function row(overrides: Partial<DashboardEventRow> = {}): DashboardEventRow {
   return {
@@ -147,5 +154,50 @@ describe('toPastEvents', () => {
       },
     ];
     expect(toPastEvents(rows)[0].songsPlayed).toBe(0);
+  });
+});
+
+describe('toDashboardData', () => {
+  const profile = {
+    id: 'dj-1',
+    full_name: 'Jordan Ellis',
+    business_name: 'Ellis Sound Co.',
+    phone: '+972 50 000 0000',
+    created_at: '2026-01-01T00:00:00Z',
+    updated_at: '2026-01-01T00:00:00Z',
+  };
+
+  it('assembles every field the screen reads', () => {
+    const data = toDashboardData({
+      profile,
+      activeRows: [row({ status: 'live', start_time: '20:00:00' })],
+      pastRows: [],
+      now: '2026-08-27T20:00',
+    });
+    expect(data.dj).toEqual({ name: 'Jordan Ellis', company: 'Ellis Sound Co.' });
+    expect(data.now).toBe('2026-08-27T20:00');
+    expect(data.liveEvent).not.toBeNull();
+    expect(data.upcoming).toEqual([]);
+    expect(data.past).toEqual([]);
+  });
+
+  it('renders a null business_name as an empty string, never "null"', () => {
+    const data = toDashboardData({
+      profile: { ...profile, business_name: null },
+      activeRows: [],
+      pastRows: [],
+      now: '2026-08-27T20:00',
+    });
+    expect(data.dj.company).toBe('');
+  });
+
+  it('falls back to an empty name when the profile could not be read', () => {
+    const data = toDashboardData({
+      profile: null,
+      activeRows: [],
+      pastRows: [],
+      now: '2026-08-27T20:00',
+    });
+    expect(data.dj).toEqual({ name: '', company: '' });
   });
 });

@@ -7,7 +7,15 @@
    its tests point.
    --------------------------------------------------------------------------- */
 
-import type { CoupleStatus, EventPhase, LiveEvent, PastEvent, UpcomingEvent } from './types';
+import type { Profile } from '@/lib/auth/dal';
+import type {
+  CoupleStatus,
+  DashboardData,
+  EventPhase,
+  LiveEvent,
+  PastEvent,
+  UpcomingEvent,
+} from './types';
 
 /** A row of `public.events`, as this branch selects it (design §5). */
 export interface DashboardEventRow {
@@ -109,4 +117,38 @@ export function toPastEvents(rows: PastEventCountRow[]): PastEvent[] {
     date: row.event_date,
     songsPlayed: row.songs_played,
   }));
+}
+
+interface DashboardDataInput {
+  profile: Profile | null;
+  activeRows: DashboardEventRow[];
+  pastRows: PastEventCountRow[];
+  now: string;
+}
+
+/**
+ * The whole `DashboardData` object the screen takes.
+ *
+ * `profile` may be null: `getProfile()` returns null when the read failed
+ * rather than throwing, and a dashboard that renders with an empty name beats
+ * a route that 500s.
+ */
+export function toDashboardData({
+  profile,
+  activeRows,
+  pastRows,
+  now,
+}: DashboardDataInput): DashboardData {
+  return {
+    dj: {
+      name: profile?.full_name ?? '',
+      // business_name is nullable and DjProfile.company is not. An empty
+      // company renders as an empty line rather than the string "null".
+      company: profile?.business_name ?? '',
+    },
+    now,
+    liveEvent: toLiveEvent(activeRows),
+    upcoming: toUpcomingEvents(activeRows),
+    past: toPastEvents(pastRows),
+  };
 }
