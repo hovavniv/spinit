@@ -3,6 +3,7 @@ import { NextResponse, type NextRequest } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { safeRedirect } from '@/lib/auth/redirects';
 import { logAuthError } from '@/lib/auth/errors';
+import { siteUrl } from '@/lib/auth/site-url';
 
 /**
  * design 4.1 / 4.3 step 3, plan task 8. One route handler serves both the
@@ -22,23 +23,6 @@ const REASON_CONFIRMATION_FAILED = 'confirmation_failed';
 const REASON_SAME_BROWSER = 'confirmation_failed_same_browser';
 
 const SAME_BROWSER_ERROR_CODES = new Set(['bad_code_verifier', 'flow_state_not_found']);
-
-/**
- * `SITE_URL`, never `request.nextUrl.origin` — the origin is derived from
- * the `Host`/`X-Forwarded-Host` request headers, and design 4.3 states the
- * origin must come only from `SITE_URL`, never a request header (the same
- * rule `actions.ts`'s `siteUrl()` already follows). Not directly
- * browser-exploitable on its own, but matters behind a reverse
- * proxy/CDN misconfiguration, and this route should follow the same
- * control as the rest of the auth flow.
- */
-function siteUrl(): string {
-  const url = process.env.SITE_URL;
-  if (!url) {
-    throw new Error('SITE_URL is not set');
-  }
-  return url;
-}
 
 function loginRedirect(reason: string): NextResponse {
   return NextResponse.redirect(new URL(`/login?error=${reason}`, siteUrl()));

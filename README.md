@@ -33,7 +33,7 @@ committed; `.env.example` documents the names only.
 |---|---|---|
 | `NEXT_PUBLIC_SUPABASE_URL` | Project URL | Never. Name only, in `.env.example`. |
 | `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | Publishable (anon) key | Never. Name only. |
-| `SITE_URL` | This app's own origin (e.g. `http://localhost:3000` or the Vercel production URL) | Never. Name only. |
+| `SITE_URL` | This app's own origin (e.g. `http://localhost:3000` or the Vercel production URL) — no trailing slash | Never. Name only. |
 | `TEST_USER_A_EMAIL` / `TEST_USER_A_PASSWORD` | Credentials for a pre-created RLS test user A, registered through the app's own `/register` form | Never, and never set in Vercel — local-only, used only to run the integration suite. |
 | `TEST_USER_B_EMAIL` / `TEST_USER_B_PASSWORD` | Credentials for a pre-created RLS test user B, registered through the app's own `/register` form | Never, and never set in Vercel — local-only, used only to run the integration suite. |
 
