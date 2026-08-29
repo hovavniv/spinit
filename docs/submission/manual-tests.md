@@ -9,16 +9,16 @@ own `/register` form.
 No real email addresses, passwords, or user ids are recorded in this file;
 test users are referenced generically as "test user A" / "test user B".
 
-## Design 10.4 manual tests
+### Design 10.4 manual tests
 
-### Google round-trip
+#### Google round-trip
 
 **Blocked — not applicable yet.** Google OAuth is deferred (GitHub issue
 #2); `signInWithGoogle` does not exist in this codebase. Nothing to click
 through. This is not a failure of an existing feature — it is a feature not
 yet built.
 
-### Confirmation email
+#### Confirmation email
 
 **Verified as evidence, not re-clicked live.** Test user A already
 performed this exact flow for real earlier in this project: signed up
@@ -41,7 +41,7 @@ evidence, not a fresh live click-through in this session.
 Test user B has not completed this flow: `email_confirmed_at` is null for
 that row, consistent with its confirmation email not having arrived.
 
-### Proxy guard
+#### Proxy guard
 
 **Verified, fresh this session.**
 
@@ -54,7 +54,7 @@ location: /login
 Requesting `/dashboard` signed out redirects to `/login` with a 307, as
 expected.
 
-### Cookie flags (fix-spec F5, part 1 of 2)
+#### Cookie flags (fix-spec F5, part 1 of 2)
 
 **Verified live**, signed in as a real test user, via Chrome DevTools →
 Application → Cookies → `localhost`. All six `sb-<project-ref>-auth-token.*`
@@ -75,7 +75,7 @@ Also confirms, incidentally: `shouldPromptForProfile` correctly showed the
 Only the sign-out half of design 11's cookie-clearing DoD line remains
 unverified — see below.
 
-## Design 10.2 RLS cross-user cases — 5 of 6 verified live
+### Design 10.2 RLS cross-user cases — 5 of 6 verified live
 
 Both test users can now sign in. Ran `src/lib/auth/rls.integration.test.ts`
 against the live project.
@@ -125,7 +125,7 @@ collide (commit `b53eda8`).
 rate limit above) — everything else in the suite passes, 5/6 RLS cases
 included.
 
-## Definition of done walk-through (design section 11)
+### Definition of done walk-through (design section 11)
 
 - **A DJ can register with email and password, confirm by email, and reach
   `/dashboard`.** Met — verified via the confirmation-email evidence above
