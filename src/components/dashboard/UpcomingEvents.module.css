@@ -1,0 +1,99 @@
+/* Measurements read from design/artboards/Spinit DJ Dashboard.dc.html, the
+   "upcoming-events" block: a two-column card grid. */
+
+.section {
+  margin-bottom: 44px;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+}
+
+/* Below 900px: the two-column card grid collapses to one column — the
+   artboard draws this desktop-only, but a DJ working an event is plausibly
+   holding a phone, and every other screen already collapses at this
+   breakpoint (design/specs/2026-08-29-dj-dashboard-design.md §8). */
+@media (max-width: 899px) {
+  .grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.card {
+  display: block;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  padding: 24px;
+  color: inherit;
+}
+
+.card:hover {
+  border-color: var(--accent);
+}
+
+/* The artboard neutralises the global link colour with an inline
+   style="color:inherit" on the <a>, which outranks its helmet's a:hover.
+   Ported to a CSS Module, `.card { color: inherit }` alone has specificity
+   (0,1,0) and loses to globals.css's `a:hover` at (0,1,1) — the whole card's
+   text would turn pink on hover, which the artboard does not do. This
+   explicit :hover rule (specificity (0,2,0)) outranks a:hover's (0,1,1)
+   outright, so it holds regardless of source order. */
+.card:hover {
+  color: inherit;
+}
+
+.top {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-bottom: 6px;
+}
+
+.coupleNames {
+  font-family: var(--font-sora), sans-serif;
+  font-weight: 700;
+  font-size: 17px;
+}
+
+.date {
+  font-size: 12.5px;
+  color: var(--text-subtle);
+}
+
+.venue {
+  font-size: 14px;
+  color: var(--text-muted);
+  margin-bottom: 16px;
+}
+
+.bottom {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.daysUntil {
+  font-size: 12.5px;
+  color: var(--text-subtle);
+}
+
+.pillConnected {
+  background: oklch(0.95 0.03 190);
+  color: oklch(0.4 0.13 190);
+  font-size: 12px;
+  font-weight: 600;
+  padding: 5px 12px;
+  border-radius: var(--radius-pill);
+}
+
+.pillAwaiting {
+  border: 1.5px solid oklch(0.85 0.012 60);
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 600;
+  padding: 4px 11px;
+  border-radius: var(--radius-pill);
+}

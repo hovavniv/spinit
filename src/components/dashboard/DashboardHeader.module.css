@@ -1,0 +1,41 @@
+/* Measurements read from design/artboards/Spinit DJ Dashboard.dc.html,
+   the header row block (eyebrow date, greeting h1, "+ New event" button). */
+
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  margin-bottom: 36px;
+  gap: 24px;
+}
+
+.eyebrow {
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-subtle);
+  margin-bottom: 8px;
+}
+
+.greeting {
+  font-family: var(--font-sora), sans-serif;
+  font-size: 32px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  margin: 0;
+}
+
+.newEvent {
+  background: var(--accent);
+  color: white;
+  padding: 14px 26px;
+  border-radius: var(--radius-pill);
+  font-weight: 600;
+  font-size: 15px;
+  white-space: nowrap;
+}
+
+.newEvent:hover {
+  color: white;
+}

@@ -1,0 +1,69 @@
+/* Measurements read from design/artboards/Spinit DJ Dashboard.dc.html, the
+   "past-events" block: stacked rows. */
+
+.section {
+  margin-bottom: 44px;
+}
+
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.row {
+  display: flex;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  padding: 20px 24px;
+  justify-content: space-between;
+  align-items: center;
+  gap: 20px;
+  flex-wrap: wrap;
+  color: inherit;
+}
+
+.row:hover {
+  border-color: var(--accent);
+}
+
+/* The artboard neutralises the global link colour with an inline
+   style="color:inherit" on the <a>, which outranks its helmet's a:hover.
+   Ported to a CSS Module, `.row { color: inherit }` alone has specificity
+   (0,1,0) and loses to globals.css's `a:hover` at (0,1,1) — the whole row's
+   text would turn pink on hover, which the artboard does not do. This
+   explicit :hover rule (specificity (0,2,0)) outranks a:hover's (0,1,1)
+   outright, so it holds regardless of source order. */
+.row:hover {
+  color: inherit;
+}
+
+.coupleNames {
+  font-family: var(--font-sora), sans-serif;
+  font-weight: 700;
+  font-size: 16px;
+  margin-bottom: 3px;
+}
+
+.details {
+  font-size: 13.5px;
+  color: var(--text-subtle);
+}
+
+.right {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+}
+
+.songsPlayed {
+  font-size: 13px;
+  color: var(--text-subtle);
+}
+
+.viewRecap {
+  font-weight: 600;
+  font-size: 14px;
+  color: var(--link);
+}
