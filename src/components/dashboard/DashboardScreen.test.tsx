@@ -1,5 +1,5 @@
 import { render, screen } from '@testing-library/react';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { DashboardScreen } from './DashboardScreen';
 import { demoData } from '@/lib/dashboard/demoData';
 
@@ -80,5 +80,35 @@ describe('DashboardScreen', () => {
     // empty both produce zero visible text, so only the element's presence
     // actually distinguishes them (see UpcomingEvents.tsx).
     expect(screen.queryByTestId('days-until-chip')).not.toBeInTheDocument();
+  });
+
+  describe('empty states', () => {
+    const emptyData = {
+      dj: { name: 'Jordan Ellis', company: 'Ellis Sound Co.' },
+      now: '2026-08-27T20:00',
+      liveEvent: null,
+      upcoming: [],
+      past: [],
+    };
+
+    it('tells a DJ with no upcoming events that there are none', () => {
+      render(<DashboardScreen data={emptyData} signOutAction={vi.fn()} />);
+      expect(screen.getByText('No upcoming events yet.')).toBeInTheDocument();
+    });
+
+    it('tells a DJ with no past events that there are none', () => {
+      render(<DashboardScreen data={emptyData} signOutAction={vi.fn()} />);
+      expect(
+        screen.getByText('No past events yet. Once an event wraps, its recap shows up here.'),
+      ).toBeInTheDocument();
+    });
+
+    it('shows neither empty message once events exist', () => {
+      render(<DashboardScreen data={demoData} signOutAction={vi.fn()} />);
+      expect(screen.queryByText('No upcoming events yet.')).not.toBeInTheDocument();
+      expect(
+        screen.queryByText('No past events yet. Once an event wraps, its recap shows up here.'),
+      ).not.toBeInTheDocument();
+    });
   });
 });

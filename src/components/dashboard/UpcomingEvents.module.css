@@ -97,3 +97,12 @@
   padding: 4px 11px;
   border-radius: var(--radius-pill);
 }
+
+/* Empty state — an addition to the artboard, not a transcription of it
+   (design §7). `--text-subtle` is the token PastEvents.module.css already uses
+   for its `.details` line, so the two secondary texts on this screen match. */
+.empty {
+  margin: 0;
+  color: var(--text-subtle);
+  font-size: 15px;
+}

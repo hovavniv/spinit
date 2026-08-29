@@ -33,40 +33,47 @@ export function UpcomingEvents({ events, now }: UpcomingEventsProps) {
         viewAllLabel="View all upcoming events"
         viewAllHref="/events/upcoming"
       />
-      <div className={styles.grid}>
-        {events.map((event) => {
-          const chip = daysUntil(event.date, now);
-          return (
-            <Link key={event.id} href={`/events/${event.id}`} className={styles.card}>
-              <div className={styles.top}>
-                <div className={styles.coupleNames}>{event.coupleNames}</div>
-                <div className={styles.date}>{formatCardDate(event.date)}</div>
-              </div>
-              <div className={styles.venue}>{event.venue}</div>
-              <div className={styles.bottom}>
-                <span
-                  className={
-                    event.status === 'streaming-connected'
-                      ? styles.pillConnected
-                      : styles.pillAwaiting
-                  }
-                >
-                  {STATUS_LABEL[event.status]}
-                </span>
-                {/* data-testid, not text: an empty <span>{null}</span> and no
-                    span at all both render zero visible text, so a text
-                    query can't tell "chip omitted" from "chip rendered
-                    empty" — the element's presence is the thing under test. */}
-                {chip !== null && (
-                  <span className={styles.daysUntil} data-testid="days-until-chip">
-                    {chip}
+      {events.length === 0 ? (
+        // The artboard draws two cards and nothing for a DJ who has none.
+        // Rendering an empty grid would leave a heading with nothing under it,
+        // which reads as a bug (design §7).
+        <p className={styles.empty}>No upcoming events yet.</p>
+      ) : (
+        <div className={styles.grid}>
+          {events.map((event) => {
+            const chip = daysUntil(event.date, now);
+            return (
+              <Link key={event.id} href={`/events/${event.id}`} className={styles.card}>
+                <div className={styles.top}>
+                  <div className={styles.coupleNames}>{event.coupleNames}</div>
+                  <div className={styles.date}>{formatCardDate(event.date)}</div>
+                </div>
+                <div className={styles.venue}>{event.venue}</div>
+                <div className={styles.bottom}>
+                  <span
+                    className={
+                      event.status === 'streaming-connected'
+                        ? styles.pillConnected
+                        : styles.pillAwaiting
+                    }
+                  >
+                    {STATUS_LABEL[event.status]}
                   </span>
-                )}
-              </div>
-            </Link>
-          );
-        })}
-      </div>
+                  {/* data-testid, not text: an empty <span>{null}</span> and no
+                      span at all both render zero visible text, so a text
+                      query can't tell "chip omitted" from "chip rendered
+                      empty" — the element's presence is the thing under test. */}
+                  {chip !== null && (
+                    <span className={styles.daysUntil} data-testid="days-until-chip">
+                      {chip}
+                    </span>
+                  )}
+                </div>
+              </Link>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }
