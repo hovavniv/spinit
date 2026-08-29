@@ -117,3 +117,49 @@
   overflow: hidden;
   text-overflow: ellipsis;
 }
+
+/* Below 900px: the sidebar stops being a sticky 240px full-height rail and
+   becomes a full-width top strip. Leaving `height: 100vh` unreset here
+   reproduces the exact bug commit 7910611 already fixed once for
+   BrandPanel — a full screen of dark background on mobile — so `height:
+   auto` is required, not optional. The strip does not stick
+   (`position: static`, not `sticky`): a sticky strip plus a scrolling page
+   on a short phone viewport costs more vertical space than it earns. It
+   keeps `overflow: hidden` so the decorative circles stay self-contained,
+   the same way BrandPanel handles it at this breakpoint.
+
+   `position: relative`, not `static`: `.blobPink`/`.blobIndigo` are
+   `position: absolute` and need a positioned ancestor to contain them.
+   Dropping to `static` here (verified in a real browser, not just against
+   the artboard's declared values) removes that containing block, so the
+   circles position against the whole document instead of the sidebar and
+   spill out over the page content — `relative` with `top: 0` (inherited
+   from the base rule) is visually identical to `static` for a
+   non-sticky box, but keeps the circles contained.
+
+   The sidebar's DOM is two children — `.top` (logo + nav) and `.chip`
+   (avatar) — so flipping flex-direction on `.sidebar` alone cannot produce
+   "logo left, nav row, avatar right"; `.top` has to become a row too, so
+   its own rule sits inside this same media query below. */
+@media (max-width: 899px) {
+  .sidebar {
+    width: auto;
+    height: auto;
+    position: relative;
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .top {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+  }
+
+  /* Dropped at this breakpoint — the strip only has room for logo, nav,
+     and the avatar circle itself. */
+  .chipText {
+    display: none;
+  }
+}

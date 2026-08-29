@@ -11,6 +11,16 @@
   gap: 20px;
 }
 
+/* Below 900px: the two-column card grid collapses to one column — the
+   artboard draws this desktop-only, but a DJ working an event is plausibly
+   holding a phone, and every other screen already collapses at this
+   breakpoint (design/specs/2026-08-29-dj-dashboard-design.md §8). */
+@media (max-width: 899px) {
+  .grid {
+    grid-template-columns: 1fr;
+  }
+}
+
 .card {
   display: block;
   background: var(--surface);

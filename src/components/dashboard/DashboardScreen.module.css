@@ -1,0 +1,38 @@
+/* Measurements read from design/artboards/Spinit DJ Dashboard.dc.html, the
+   top-level flex row: sidebar + main column, main padded 48px 56px with an
+   inner 1040px max-width wrapper. */
+
+.screen {
+  font-family: var(--font-inter), sans-serif;
+  color: var(--ink-dark);
+  background: var(--bg);
+  width: 100%;
+  min-height: 100vh;
+  display: flex;
+}
+
+.main {
+  flex: 1;
+  min-width: 0;
+  padding: 48px 56px;
+}
+
+.content {
+  max-width: 1040px;
+  margin: 0 auto;
+}
+
+/* Below 900px: the sidebar collapses to a full-width top strip (its own
+   module handles that, design/specs/2026-08-29-dj-dashboard-design.md §8) and
+   this row has to stop being a side-by-side flex row for the strip to sit
+   above the content instead of beside it. Main padding also drops, matching
+   the 24px every other section in this app uses at this breakpoint. */
+@media (max-width: 899px) {
+  .screen {
+    flex-direction: column;
+  }
+
+  .main {
+    padding: 24px;
+  }
+}
