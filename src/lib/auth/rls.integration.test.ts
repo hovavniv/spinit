@@ -114,6 +114,15 @@ describe.skipIf(!hasSupabaseConfig || !hasTestUsers)(
     // Case 2 (design 10.2): A updating B's profile affects zero rows — the
     // RLS update `using` clause holds.
     //
+    // Uses `business_name`, one of the two columns `authenticated` actually
+    // holds an UPDATE grant on (fix-spec F13 scoped the grant to
+    // business_name/phone only). `full_name` was used here originally, but
+    // after F13 it isn't grantable to ANY row, own or otherwise, so an
+    // attempt to write it fails with a `42501` permission-denied error
+    // regardless of which row it targets — that no longer isolates the RLS
+    // `using` clause, it just proves the column grant is absent. A granted
+    // column is required to actually exercise RLS here.
+    //
     // `data: []` from PostgREST's `.select()` re-fetch is ambiguous on its
     // own: it fires both when the `using` clause blocks the write AND when
     // the write silently succeeds but the re-fetch itself is filtered by the
@@ -123,7 +132,7 @@ describe.skipIf(!hasSupabaseConfig || !hasTestUsers)(
     test('A updating B profile affects zero rows', async () => {
       const { data: updateData, error: updateError } = await clientA
         .from('profiles')
-        .update({ full_name: 'Hijacked by A' })
+        .update({ business_name: 'Hijacked by A' })
         .eq('id', userBId)
         .select();
 
@@ -134,24 +143,37 @@ describe.skipIf(!hasSupabaseConfig || !hasTestUsers)(
       // landed.
       const { data: bOwnRow, error: bReadError } = await clientB
         .from('profiles')
-        .select('full_name')
+        .select('business_name')
         .eq('id', userBId)
         .single();
 
       expect(bReadError).toBeNull();
-      expect(bOwnRow?.full_name).not.toBe('Hijacked by A');
+      expect(bOwnRow?.business_name).not.toBe('Hijacked by A');
     });
 
     // Case 3 (design 10.2): A updating their own row but attempting to change
-    // `id` to B's is rejected — the RLS update `with check` clause holds.
+    // `id` to B's is rejected.
+    //
+    // Originally written to isolate the RLS update `with check` clause
+    // specifically. Fix-spec F13 (2026-08-29) scoped the UPDATE grant to
+    // `business_name`/`phone` only, and `id` was never in that set — so this
+    // attempt is now blocked by the missing column grant before Postgres
+    // ever reaches RLS's `with check` evaluation. `with check` is still a
+    // real, correctly-configured control (verified via 5.2's policy
+    // definition and the `role_column_grants` check in the ledger), it's
+    // just no longer the first gate this specific test exercises — the
+    // column grant is. Both failure modes share SQLSTATE `42501`
+    // ("insufficient_privilege"), so the assertion below still holds; the
+    // observed `error.message` is now "permission denied for table
+    // profiles" (privilege denial), not the RLS-specific "new row violates
+    // row-level security policy" text — verified live against this project
+    // on 2026-08-29.
     //
     // B's row already exists at `userBId`, so a plain "error is not null"
-    // check can't tell an RLS `with check` rejection apart from an unrelated
-    // primary-key unique violation — both fire a non-null error here.
-    // Assert the specific SQLSTATE an RLS rejection produces (`42501`,
-    // "new row violates row-level security policy"), distinct from a PK
-    // collision (`23505`) or FK violation (`23503`). Verified live against
-    // this project on 2026-08-29: the observed `error.code` is `42501`.
+    // check can't tell a genuine rejection apart from an unrelated
+    // primary-key unique violation (`23505`) or FK violation (`23503`) —
+    // both also fire a non-null error here. Asserting the specific `42501`
+    // code rules those out.
     test('A changing own row id to B id is rejected', async () => {
       const { error } = await clientA
         .from('profiles')
