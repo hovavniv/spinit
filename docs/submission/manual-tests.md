@@ -216,6 +216,51 @@ CSS is not covered by automated tests — checked by eye against the artboard, a
 
 ---
 
+## Past events screen (visual slice)
+
+**Date:** 2026-08-29
+**What was compared:** `/events/past` (the real route, `listPastEvents` reading through
+`past_events_with_counts` on the live hosted project, signed in as the seeded DJ, Test User A)
+against `design/artboards/Spinit Past Events.dc.html`.
+**How:** this session had no browser automation tool available (Claude in Chrome was declined for
+the session). The user drove the check manually: started the dev server (`npm run dev`, port 3002 —
+3000 was in use by another session), signed in, and reported back with a screenshot.
+
+### Desktop (default width)
+
+Matches the artboard: dark sidebar with "Past events" rendering as the current non-link item and
+"Dashboard"/"Upcoming events" as links; the search field with the magnifier icon; three month
+headings in order (JULY 2026, JUNE 2026, MAY 2026) — the fourth seeded event (Lena & Mark,
+cancelled) correctly does not produce a fourth group or row anywhere on the screen, and the fifth
+(Maya & Tom, upcoming) correctly does not appear either, since the view filters to
+`status = 'completed'`; each row shows the 52px-style date tile (day over weekday), couple name,
+venue, song count, and a "View recap" link; the zero-song event (Ruth & Adam) reads "0 songs
+played", not 1 — the `count(s.id)` case working correctly through the live view, not just in the
+unit test.
+
+**One thing worth recording precisely:** the first screenshot was taken signed in as **Test User
+B**, who correctly saw "No past events yet" — an RLS-correct result (B owns none of the seeded
+rows) but not useful for comparing against the artboard's populated state. Re-signed in as Test
+User A and got the populated screen above. Noted here because it's a real, if accidental,
+confirmation that the owner-scoped `select` policy behaves as intended for a user who currently has
+zero rows, distinct from the "B sees zero of A's rows" case Task 7's integration suite already
+covers directly.
+
+**One known, expected, pre-existing 404, not a defect of this task:** clicking "View recap" 404s.
+`/events/[id]/recap` does not exist — recorded in design §11 gap 1 before this task ran (the
+dashboard's own `PastEvents.tsx` card already links to the same nonexistent route). Out of scope
+for this slice.
+
+### Not tested this round
+
+The ~400px responsive collapse (sidebar to a top strip) and the row-hover behaviour (background
+tint, no pink text) were not checked — the user confirmed the desktop view was sufficient evidence
+to proceed rather than spending more time on the narrower breakpoint and the hover state. Recorded
+as not checked rather than assumed to match; nothing here says they are broken, only that they were
+not looked at.
+
+---
+
 ## Full verification (Task 10)
 
 Run from the worktree root, 2026-08-29, all commands run and their real exit codes read:
