@@ -1,20 +1,52 @@
 'use client';
 
-import { useState } from 'react';
-import type { FormEvent } from 'react';
+import { useActionState, useState } from 'react';
 import { Field } from './Field';
-import { validateRegister } from '@/lib/validation';
-import type { RegisterErrors, RegisterValues } from '@/lib/validation';
+import { registerSchema } from '@/lib/validation';
+import type { ActionResult } from '@/lib/auth/errors';
 import styles from './AuthForm.module.css';
+
+interface RegisterValues {
+  name: string;
+  businessName: string;
+  email: string;
+  confirmEmail: string;
+  phone: string;
+  password: string;
+  confirmPassword: string;
+}
+
+type RegisterErrors = Partial<Record<keyof RegisterValues, string>>;
 
 interface RegisterFormProps {
   onSwitchToLogin: () => void;
+  /**
+   * `signUpWithPassword` from `lib/auth/actions`, passed down from
+   * `app/register/page.tsx` via `AuthScreen`. This component never imports
+   * `lib/auth/actions` itself — see the same note in `LoginForm.tsx` (design
+   * 6, design 10.3).
+   */
+  action: (prevState: ActionResult, formData: FormData) => Promise<ActionResult>;
 }
 
-// The dial-code options, verbatim and in order, from
-// design/artboards/Spinit DJ Login.dc.html, <!-- RIGHT: FORM -->, isRegister
-// branch. Do not reorder or add to this list without re-checking the artboard.
-const dialCodes = ['🇺🇸 +1', '🇬🇧 +44', '🇨🇦 +1', '🇦🇺 +61', '🇮🇱 +972', '🇮🇪 +353', '🇩🇪 +49', '🇫🇷 +33'];
+/**
+ * The dial-code options from design/artboards/Spinit DJ Login.dc.html,
+ * <!-- RIGHT: FORM -->, isRegister branch. `value` is the bare dial code —
+ * what actually reaches `FormData` and the joined `${dialCode}${phone}`
+ * string the server validates against the SQL `phone_fmt` shape (design 4.1
+ * step 4); `label` carries the flag emoji so the rendered appearance in the
+ * artboard is unchanged. US and Canada intentionally share the value `+1`.
+ */
+const dialCodes = [
+  { value: '+1', label: '🇺🇸 +1' },
+  { value: '+44', label: '🇬🇧 +44' },
+  { value: '+1', label: '🇨🇦 +1' },
+  { value: '+61', label: '🇦🇺 +61' },
+  { value: '+972', label: '🇮🇱 +972' },
+  { value: '+353', label: '🇮🇪 +353' },
+  { value: '+49', label: '🇩🇪 +49' },
+  { value: '+33', label: '🇫🇷 +33' },
+];
 
 const fieldOrder: (keyof RegisterValues)[] = [
   'name',
@@ -36,36 +68,76 @@ const emptyValues: RegisterValues = {
   confirmPassword: '',
 };
 
+// Never `{ ok: true }` — that value is reserved for a real successful submit
+// (the "check your email" state), so a render can tell "just mounted" apart
+// from "the action just succeeded".
+const initialState: ActionResult = { ok: false, formErrors: {} };
+
 /**
  * The register field set from design/artboards/Spinit DJ Login.dc.html,
- * <!-- RIGHT: FORM -->, isRegister branch. Validated through lib/validation.ts.
- * A failed submit shows errors but never clears the fields the DJ already
- * typed. Does not submit anywhere — a valid submit shows the "not wired up
- * yet" notice from design doc section 7.
+ * <!-- RIGHT: FORM -->, isRegister branch. Client-validated with
+ * `registerSchema` for immediate feedback, then submitted to the real server
+ * action via `useActionState` (design 4.1, design 4.1's form-conversion
+ * note). A successful submit renders a "check your email" state instead of
+ * the fields, per design 4.1 step 7.
  */
-export function RegisterForm({ onSwitchToLogin }: RegisterFormProps) {
+export function RegisterForm({ onSwitchToLogin, action }: RegisterFormProps) {
   const [values, setValues] = useState<RegisterValues>(emptyValues);
-  const [dialCode, setDialCode] = useState(dialCodes[0]);
-  const [errors, setErrors] = useState<RegisterErrors>({});
-  const [submitted, setSubmitted] = useState(false);
+  const [clientErrors, setClientErrors] = useState<RegisterErrors>({});
+  const [state, formAction, pending] = useActionState(action, initialState);
+
+  const serverFieldErrors = !state.ok && 'formErrors' in state ? state.formErrors : {};
+  const errors: RegisterErrors = { ...serverFieldErrors, ...clientErrors };
+  const generalMessage = !state.ok && 'message' in state ? state.message : undefined;
 
   function handleChange(name: keyof RegisterValues, value: string) {
     setValues((current) => ({ ...current, [name]: value }));
   }
 
-  function handleSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const nextErrors = validateRegister(values);
-    setErrors(nextErrors);
+  /**
+   * Passed straight to `<form action>`. Runs the client-side pre-check first
+   * — invalid input never reaches the server action at all — and only calls
+   * `formAction` (which invokes the real server action) once `registerSchema`
+   * is satisfied.
+   */
+  function submitAction(formData: FormData) {
+    const result = registerSchema.safeParse(values);
+    const nextErrors: RegisterErrors = {};
+    if (!result.success) {
+      for (const issue of result.error.issues) {
+        const name = issue.path[0] as keyof RegisterValues | undefined;
+        if (name && !nextErrors[name]) {
+          nextErrors[name] = issue.message;
+        }
+      }
+    }
+    setClientErrors(nextErrors);
 
     const firstInvalid = fieldOrder.find((name) => nextErrors[name]);
     if (firstInvalid) {
       document.getElementById(firstInvalid)?.focus();
-      setSubmitted(false);
       return;
     }
 
-    setSubmitted(true);
+    formAction(formData);
+  }
+
+  if (state.ok) {
+    return (
+      <>
+        <h2 className={styles.heading}>Check your email</h2>
+        <p className={styles.subheading}>
+          We sent a confirmation link to {values.email || 'your email address'}. Open it in this
+          browser to finish creating your account.
+        </p>
+        <p className={styles.footPrompt}>
+          Already confirmed?{' '}
+          <button type="button" className={styles.inlineSwitch} onClick={onSwitchToLogin}>
+            Log in
+          </button>
+        </p>
+      </>
+    );
   }
 
   return (
@@ -75,13 +147,13 @@ export function RegisterForm({ onSwitchToLogin }: RegisterFormProps) {
         Takes about two minutes. You&apos;ll connect your first couple&apos;s streaming profile next.
       </p>
 
-      {submitted && (
-        <p className={styles.notice} role="status">
-          Registration isn&apos;t wired up yet — this is a preview of the form.
+      {generalMessage && (
+        <p className={styles.notice} role="alert">
+          {generalMessage}
         </p>
       )}
 
-      <form onSubmit={handleSubmit} noValidate>
+      <form action={submitAction} noValidate>
         <div className={styles.fields}>
           <Field
             label="Your name"
@@ -127,12 +199,12 @@ export function RegisterForm({ onSwitchToLogin }: RegisterFormProps) {
               <select
                 className={styles.dialCode}
                 aria-label="Dial code"
-                value={dialCode}
-                onChange={(e) => setDialCode(e.target.value)}
+                name="dialCode"
+                defaultValue={dialCodes[0].value}
               >
-                {dialCodes.map((code) => (
-                  <option key={code} value={code}>
-                    {code}
+                {dialCodes.map(({ value, label }, index) => (
+                  <option key={`${value}-${index}`} value={value}>
+                    {label}
                   </option>
                 ))}
               </select>
@@ -177,7 +249,7 @@ export function RegisterForm({ onSwitchToLogin }: RegisterFormProps) {
           />
         </div>
 
-        <button type="submit" className={styles.submit}>
+        <button type="submit" className={styles.submit} disabled={pending}>
           Create account
         </button>
       </form>
