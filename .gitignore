@@ -10,8 +10,12 @@ Thumbs.db
 .idea/
 .vscode/
 
-# Working specs and plans — local agent working context, not part of the submission
-docs/
+# Working specs and plans — local agent working context, not part of the submission.
+# `docs/*` (not `docs/`) so git still descends into `docs/submission/` to apply
+# the negation below — a bare `docs/` directory-exclude prunes traversal
+# entirely and git cannot re-include anything under a pruned directory.
+docs/*
+!docs/submission/
 
 # --- Next.js ---
 # See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
