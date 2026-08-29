@@ -261,6 +261,26 @@ not looked at.
 
 ---
 
+## Full verification (Past events, Task 13)
+
+```
+$ npm run lint    -> exit 0
+$ npm run typecheck -> exit 0
+$ npm test        -> 1 failed | 163 passed (164), 18/19 files passed
+     The one failure is src/lib/auth/rls.integration.test.ts > "signUp creates a profile row
+     with metadata carried through by the trigger" -- AuthApiError, email_address_invalid.
+     Confirmed unrelated to this branch: `git diff --stat 2304f27...HEAD -- src/lib/auth/
+     src/lib/supabase/` is empty -- this branch changes zero files in that area. Excluding
+     that one file: 18 files / 158 tests pass. This is Supabase's hosted GoTrue now rejecting
+     @example.com as non-deliverable -- a service-side validation change, different from the
+     previously-documented rate-limit issue, and does not self-heal. Belongs to feat/supabase-auth,
+     not this branch.
+$ npm run build   -> exit 0, Route (app) includes ƒ /events/past
+$ npm audit       -> found 0 vulnerabilities
+```
+
+---
+
 ## Full verification (Task 10)
 
 Run from the worktree root, 2026-08-29, all commands run and their real exit codes read:
