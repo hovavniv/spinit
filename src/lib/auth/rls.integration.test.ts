@@ -211,7 +211,16 @@ describe.skipIf(!hasSupabaseConfig || !hasTestUsers)(
       // which per design 7.2 rolls back the whole signUp transaction — so
       // Supabase must report this as a signUp error, not a success with a
       // user whose profile is simply missing.
+      //
+      // `error is not null` alone is too weak a pin: GoTrue's mailer-budget
+      // gate (case 5's failure mode) also produces a non-null error, and
+      // this test runs right after case 5 spends the same budget — so a
+      // rate-limited attempt would report a false pass here without ever
+      // reaching the trigger at all. Assert the error is specifically NOT
+      // the rate-limit error, so this only passes for the reason it claims.
       expect(signUpResult.error).not.toBeNull();
+      expect(signUpResult.error?.code).not.toBe('over_email_send_rate_limit');
+      expect(signUpResult.error?.status).not.toBe(429);
       expect(signUpResult.data.user).toBeNull();
     });
   },
