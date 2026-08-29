@@ -7,11 +7,7 @@
    its tests point.
    --------------------------------------------------------------------------- */
 
-import type {
-  CoupleStatus,
-  EventPhase,
-  LiveEvent,
-} from './types';
+import type { CoupleStatus, EventPhase, LiveEvent, PastEvent, UpcomingEvent } from './types';
 
 /** A row of `public.events`, as this branch selects it (design §5). */
 export interface DashboardEventRow {
@@ -72,4 +68,45 @@ export function toLiveEvent(rows: DashboardEventRow[]): LiveEvent | null {
     // offset, which is what formatStartTime's regex reads (design §4).
     startedAt: `${live.event_date}T${live.start_time.slice(0, 5)}`,
   };
+}
+
+/**
+ * A row of `public.past_events_with_counts`, as this branch consumes it.
+ *
+ * Declared here rather than imported from `src/lib/events/dal.ts`, which
+ * belongs to feat/past-events and does not exist yet: importing from it would
+ * mean this branch cannot typecheck until their code lands (design §5). One
+ * duplicated five-field interface is the price; a branch that cannot run
+ * `npm run typecheck` is worse.
+ */
+export interface PastEventCountRow {
+  id: string;
+  couple_names: string;
+  venue: string;
+  event_date: string; // 'YYYY-MM-DD'
+  songs_played: number;
+}
+
+/** Every `upcoming` row, in the order the query returned them. */
+export function toUpcomingEvents(rows: DashboardEventRow[]): UpcomingEvent[] {
+  return rows
+    .filter((row) => row.status === 'upcoming')
+    .map((row) => ({
+      id: row.id,
+      coupleNames: row.couple_names,
+      venue: row.venue,
+      date: row.event_date,
+      status: row.couple_status,
+    }));
+}
+
+/** View rows to the past-events card's props. */
+export function toPastEvents(rows: PastEventCountRow[]): PastEvent[] {
+  return rows.map((row) => ({
+    id: row.id,
+    coupleNames: row.couple_names,
+    venue: row.venue,
+    date: row.event_date,
+    songsPlayed: row.songs_played,
+  }));
 }

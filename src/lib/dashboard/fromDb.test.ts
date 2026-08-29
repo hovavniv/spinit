@@ -1,5 +1,5 @@
 import { describe, expect, it, vi, afterEach } from 'vitest';
-import { toLiveEvent, type DashboardEventRow } from './fromDb';
+import { toLiveEvent, toUpcomingEvents, toPastEvents, type DashboardEventRow, type PastEventCountRow } from './fromDb';
 
 function row(overrides: Partial<DashboardEventRow> = {}): DashboardEventRow {
   return {
@@ -61,5 +61,91 @@ describe('toLiveEvent', () => {
     expect(toLiveEvent([broken, genuine])).toEqual(
       expect.objectContaining({ id: 'genuine', startedAt: '2026-08-27T21:00' }),
     );
+  });
+});
+
+describe('toUpcomingEvents', () => {
+  it('keeps only upcoming rows, mapped to the card props', () => {
+    const rows = [
+      row({ id: 'live-one', status: 'live', start_time: '20:00:00' }),
+      row({
+        id: 'priya-alex',
+        couple_names: 'Priya & Alex',
+        venue: 'Brookline Barn',
+        event_date: '2026-09-12',
+        status: 'upcoming',
+        couple_status: 'streaming-connected',
+      }),
+      row({ id: 'done', status: 'completed' }),
+      row({ id: 'sketch', status: 'draft' }),
+    ];
+    expect(toUpcomingEvents(rows)).toEqual([
+      {
+        id: 'priya-alex',
+        coupleNames: 'Priya & Alex',
+        venue: 'Brookline Barn',
+        date: '2026-09-12',
+        status: 'streaming-connected',
+      },
+    ]);
+  });
+
+  it('preserves the order the query returned', () => {
+    const rows = [
+      row({ id: 'b', event_date: '2026-09-12' }),
+      row({ id: 'a', event_date: '2026-10-03' }),
+    ];
+    expect(toUpcomingEvents(rows).map((event) => event.id)).toEqual(['b', 'a']);
+  });
+
+  it('carries both couple_status values through unchanged', () => {
+    const rows = [
+      row({ id: 'one', couple_status: 'streaming-connected' }),
+      row({ id: 'two', couple_status: 'awaiting-couple' }),
+    ];
+    expect(toUpcomingEvents(rows).map((event) => event.status)).toEqual([
+      'streaming-connected',
+      'awaiting-couple',
+    ]);
+  });
+
+  it('returns an empty array for a DJ with no events', () => {
+    expect(toUpcomingEvents([])).toEqual([]);
+  });
+});
+
+describe('toPastEvents', () => {
+  it('maps view rows to the past-event row props', () => {
+    const rows: PastEventCountRow[] = [
+      {
+        id: 'noa-eitan',
+        couple_names: 'Noa & Eitan',
+        venue: 'Franklin Hall',
+        event_date: '2026-07-18',
+        songs_played: 10,
+      },
+    ];
+    expect(toPastEvents(rows)).toEqual([
+      {
+        id: 'noa-eitan',
+        coupleNames: 'Noa & Eitan',
+        venue: 'Franklin Hall',
+        date: '2026-07-18',
+        songsPlayed: 10,
+      },
+    ]);
+  });
+
+  it('carries a genuine zero count through, rather than treating it as absent', () => {
+    const rows: PastEventCountRow[] = [
+      {
+        id: 'silent',
+        couple_names: 'Dana & Ori',
+        venue: 'The Foundry',
+        event_date: '2026-05-01',
+        songs_played: 0,
+      },
+    ];
+    expect(toPastEvents(rows)[0].songsPlayed).toBe(0);
   });
 });
