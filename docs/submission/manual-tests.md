@@ -52,6 +52,27 @@ location: /login
 Requesting `/dashboard` signed out redirects to `/login` with a 307, as
 expected.
 
+### Cookie flags (fix-spec F5, part 1 of 2)
+
+**Verified live**, signed in as a real test user, via Chrome DevTools →
+Application → Cookies → `localhost`. All six `sb-<project-ref>-auth-token.*`
+cookie chunks (Supabase splits a large session cookie into parts) show:
+
+- `HttpOnly`: checked, on every chunk.
+- `SameSite`: `Lax`, on every chunk.
+- `Secure`: **unchecked** — this is `npm run dev` over plain `http://`, and
+  `cookieOptions.secure` is `process.env.NODE_ENV === 'production'`, so
+  unchecked here is the correct, expected value, not a defect. Confirming
+  this on an actual production deploy (Vercel, HTTPS) is future work once
+  one exists.
+
+Also confirms, incidentally: `shouldPromptForProfile` correctly showed the
+"Finish your profile" form for this session's test user, whose
+`business_name`/`phone` were null at the time.
+
+Only the sign-out half of design 11's cookie-clearing DoD line remains
+unverified — see below.
+
 ## Design 10.2 RLS cross-user cases — 5 of 6 verified live
 
 Both test users can now sign in. Ran `src/lib/auth/rls.integration.test.ts`
