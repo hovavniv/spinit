@@ -135,9 +135,15 @@ included.
 - **`/dashboard` is unreachable signed out.** Met — verified via the proxy
   guard test above (307 to `/login`).
 - **Sign out clears the auth cookies and no new access token can be minted
-  for that session.** Not verified in this session — this needs a live
-  sign-in/sign-out round trip with cookie inspection, which was not run as
-  part of this partial pass. I did not check this.
+  for that session.** Met, for the cookie-clearing half — verified live: on
+  the same signed-in session used for the cookie-flags check above, clicking
+  "Sign out" removed all six `sb-<project-ref>-auth-token.*` cookie chunks
+  from DevTools' Cookies panel, and a subsequent request to `/dashboard`
+  redirected to `/login` (proxy guard re-engaged, as expected). The second
+  half — that a previously-issued access JWT copied before sign-out remains
+  valid until its own expiry regardless — is a documented, accepted gap
+  (security-gaps.md gap 7), not something sign-out is meant to close; not
+  independently re-tested here beyond what that gap already states.
 - **The signup email template is left at its stock
   `{{ .ConfirmationURL }}`; `site_url` and `additional_redirect_urls` are
   pushed and match `SITE_URL`.** Met — carried forward from earlier tasks
