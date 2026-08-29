@@ -21,6 +21,13 @@ interface AuthScreenProps {
    */
   loginAction: FormAction;
   registerAction: FormAction;
+  /**
+   * Short, DJ-facing copy derived from `/auth/callback/route.ts`'s failure
+   * redirect (`?error=confirmation_failed[_same_browser]`), mapped to fixed
+   * strings by `app/login/page.tsx` — never the raw query value. Only ever
+   * relevant in login mode; threaded straight to `LoginForm`.
+   */
+  callbackMessage?: string;
 }
 
 /**
@@ -33,7 +40,7 @@ interface AuthScreenProps {
  * switchMode. The mode swap itself is immediate client state; router.replace
  * only catches the address bar up afterwards, it is not awaited.
  */
-export function AuthScreen({ defaultMode, loginAction, registerAction }: AuthScreenProps) {
+export function AuthScreen({ defaultMode, loginAction, registerAction, callbackMessage }: AuthScreenProps) {
   const [mode, setMode] = useState<Mode>(defaultMode);
   const router = useRouter();
 
@@ -70,7 +77,11 @@ export function AuthScreen({ defaultMode, loginAction, registerAction }: AuthScr
           </div>
 
           {mode === 'login' ? (
-            <LoginForm onSwitchToRegister={() => switchMode('register')} action={loginAction} />
+            <LoginForm
+              onSwitchToRegister={() => switchMode('register')}
+              action={loginAction}
+              callbackMessage={callbackMessage}
+            />
           ) : (
             <RegisterForm onSwitchToLogin={() => switchMode('login')} action={registerAction} />
           )}

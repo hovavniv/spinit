@@ -55,6 +55,20 @@ vi.mock('next/headers', () => ({
   ])),
 }));
 
+vi.mock('next/cache', () => ({
+  revalidatePath: vi.fn(),
+}));
+
+// Wraps the real mapAuthError so F6's assertions can inspect what actions.ts
+// actually passed in as `context`, without re-implementing errors.ts's own
+// logic (which errors.test.ts already pins independently).
+vi.mock('@/lib/auth/errors', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/lib/auth/errors')>();
+  return { ...actual, mapAuthError: vi.fn(actual.mapAuthError) };
+});
+
+import { revalidatePath } from 'next/cache';
+import { mapAuthError } from '@/lib/auth/errors';
 import { signUpWithPassword, signInWithPassword as signInAction, signOut as signOutAction, updateProfile } from './actions';
 
 function registerFormData(overrides: Record<string, string> = {}): FormData {
@@ -171,6 +185,69 @@ describe('signInWithPassword', () => {
       email: 'jordan@example.com',
       password: 'correct-horse-battery',
     });
+  });
+});
+
+describe('signUpWithPassword — error diagnostics (F6)', () => {
+  it('passes the Supabase error code as constraint, never the raw message', async () => {
+    signUp.mockResolvedValue({ data: {}, error: { code: 'over_email_send_rate_limit', message: 'do not leak this text' } });
+    const fd = registerFormData();
+
+    await signUpWithPassword({ ok: true }, fd);
+
+    expect(mapAuthError).toHaveBeenCalledTimes(1);
+    const context = (mapAuthError as ReturnType<typeof vi.fn>).mock.calls[0][1];
+    expect(context.constraint).toBe('over_email_send_rate_limit');
+    expect(context.constraint).not.toContain('do not leak this text');
+  });
+});
+
+describe('signInWithPassword — error diagnostics (F6)', () => {
+  it('passes the Supabase error code as constraint, never the raw message', async () => {
+    signInWithPassword.mockResolvedValue({ data: {}, error: { code: 'invalid_credentials', message: 'do not leak this text' } });
+    const fd = loginFormData();
+
+    await signInAction({ ok: true }, fd);
+
+    expect(mapAuthError).toHaveBeenCalledTimes(1);
+    const context = (mapAuthError as ReturnType<typeof vi.fn>).mock.calls[0][1];
+    expect(context.constraint).toBe('invalid_credentials');
+    expect(context.constraint).not.toContain('do not leak this text');
+  });
+});
+
+describe('signUpWithPassword — emailRedirectTo with a trailing-slash SITE_URL (F12)', () => {
+  it('strips the trailing slash so the URL never has a double slash', async () => {
+    process.env.SITE_URL = 'http://localhost:3000/';
+    const fd = registerFormData();
+
+    await signUpWithPassword({ ok: true }, fd);
+
+    const args = signUp.mock.calls[0][0];
+    expect(args.options.emailRedirectTo).toBe('http://localhost:3000/auth/callback');
+    expect(args.options.emailRedirectTo).not.toContain('//auth/callback');
+  });
+});
+
+describe('updateProfile — dashboard refresh (F8)', () => {
+  it('revalidates /dashboard after a successful save', async () => {
+    requireUser.mockResolvedValue({ id: 'session-user-id' });
+    const fd = profileFormData();
+
+    const result = await updateProfile({ ok: true }, fd);
+
+    expect(result).toEqual({ ok: true });
+    expect(revalidatePath).toHaveBeenCalledWith('/dashboard');
+  });
+
+  it('does not revalidate when the update fails', async () => {
+    requireUser.mockResolvedValue({ id: 'session-user-id' });
+    updateEq.mockResolvedValue({ error: { message: 'boom' } });
+    const fd = profileFormData();
+
+    await updateProfile({ ok: true }, fd);
+
+    expect(revalidatePath).not.toHaveBeenCalled();
   });
 });
 

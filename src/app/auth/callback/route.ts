@@ -3,6 +3,7 @@ import { NextResponse, type NextRequest } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { safeRedirect } from '@/lib/auth/redirects';
 import { logAuthError } from '@/lib/auth/errors';
+import { siteUrl } from '@/lib/auth/site-url';
 
 /**
  * design 4.1 / 4.3 step 3, plan task 8. One route handler serves both the
@@ -23,12 +24,12 @@ const REASON_SAME_BROWSER = 'confirmation_failed_same_browser';
 
 const SAME_BROWSER_ERROR_CODES = new Set(['bad_code_verifier', 'flow_state_not_found']);
 
-function loginRedirect(origin: string, reason: string): NextResponse {
-  return NextResponse.redirect(new URL(`/login?error=${reason}`, origin));
+function loginRedirect(reason: string): NextResponse {
+  return NextResponse.redirect(new URL(`/login?error=${reason}`, siteUrl()));
 }
 
 export async function GET(request: NextRequest): Promise<NextResponse> {
-  const { searchParams, origin } = request.nextUrl;
+  const { searchParams } = request.nextUrl;
   const code = searchParams.get('code');
   const error = searchParams.get('error');
   const errorCode = searchParams.get('error_code');
@@ -36,13 +37,15 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   // GoTrue's PKCE branch attaches error/error_code to the redirect BEFORE
   // the DB lookup that would otherwise fail, so an expired/used/mismatched
   // link arrives here as ordinary query params, not as an exception from
-  // exchangeCodeForSession (design 4.1).
+  // exchangeCodeForSession (design 4.1). `error`/`error_code` take
+  // precedence over `code` even when both are present together — a buggy
+  // or forged redirect sending both must still fail closed.
   if (error || errorCode || !code) {
     logAuthError({ event: 'callback', constraint: errorCode ?? error ?? 'missing_code' });
     const reason = errorCode && SAME_BROWSER_ERROR_CODES.has(errorCode)
       ? REASON_SAME_BROWSER
       : REASON_CONFIRMATION_FAILED;
-    return loginRedirect(origin, reason);
+    return loginRedirect(reason);
   }
 
   const supabase = await createClient();
@@ -50,9 +53,9 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
 
   if (exchangeError) {
     logAuthError({ event: 'callback', constraint: exchangeError.code ?? exchangeError.message });
-    return loginRedirect(origin, REASON_CONFIRMATION_FAILED);
+    return loginRedirect(REASON_CONFIRMATION_FAILED);
   }
 
   const next = searchParams.get('next');
-  return NextResponse.redirect(new URL(safeRedirect(next), origin));
+  return NextResponse.redirect(new URL(safeRedirect(next), siteUrl()));
 }

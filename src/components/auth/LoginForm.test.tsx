@@ -39,4 +39,28 @@ describe('LoginForm', () => {
     expect(action).toHaveBeenCalledTimes(1);
     expect(await screen.findByText('Email or password is incorrect.')).toBeInTheDocument();
   });
+
+  it('renders the callbackMessage prop when present (e.g. a failed /auth/callback redirect)', () => {
+    const action = vi.fn<(prevState: ActionResult, formData: FormData) => Promise<ActionResult>>();
+
+    render(
+      <LoginForm
+        onSwitchToRegister={() => {}}
+        action={action}
+        callbackMessage="That confirmation link didn't work. It may have expired — try signing up again."
+      />,
+    );
+
+    expect(
+      screen.getByText("That confirmation link didn't work. It may have expired — try signing up again."),
+    ).toBeInTheDocument();
+  });
+
+  it('renders no message when callbackMessage is absent', () => {
+    const action = vi.fn<(prevState: ActionResult, formData: FormData) => Promise<ActionResult>>();
+
+    render(<LoginForm onSwitchToRegister={() => {}} action={action} />);
+
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  });
 });

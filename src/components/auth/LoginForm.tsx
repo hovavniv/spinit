@@ -17,6 +17,14 @@ interface LoginFormProps {
    * keeps this component testable with a plain `vi.fn()`.
    */
   action: (prevState: ActionResult, formData: FormData) => Promise<ActionResult>;
+  /**
+   * Short, fixed copy derived from a failed `/auth/callback` redirect
+   * (see `app/login/page.tsx`), shown on initial load. A `generalMessage`
+   * from a real submit (`state`) takes precedence once one exists — it
+   * reflects what the DJ just did, which is more relevant than a message
+   * from how they arrived at the page.
+   */
+  callbackMessage?: string;
 }
 
 interface LoginValues {
@@ -38,14 +46,18 @@ const initialState: ActionResult = { ok: false, formErrors: {} };
  * for immediate feedback, then submitted to the real server action via
  * `useActionState` (design 4.2, design 4.1's form-conversion note).
  */
-export function LoginForm({ onSwitchToRegister, action }: LoginFormProps) {
+export function LoginForm({ onSwitchToRegister, action, callbackMessage }: LoginFormProps) {
   const [values, setValues] = useState<LoginValues>({ email: '', password: '' });
   const [clientErrors, setClientErrors] = useState<LoginErrors>({});
   const [state, formAction, pending] = useActionState(action, initialState);
 
   const serverFieldErrors = !state.ok && 'formErrors' in state ? state.formErrors : {};
   const errors: LoginErrors = { ...serverFieldErrors, ...clientErrors };
-  const generalMessage = !state.ok && 'message' in state ? state.message : undefined;
+  // A message from an actual submit takes precedence over the callback
+  // message from how the DJ arrived here — see the prop doc comment above.
+  // A message from an actual submit takes precedence over the callback
+  // message from how the DJ arrived here — see the prop doc comment above.
+  const generalMessage = (!state.ok && 'message' in state ? state.message : undefined) ?? callbackMessage;
 
   function handleChange(name: keyof LoginValues, value: string) {
     setValues((current) => ({ ...current, [name]: value }));

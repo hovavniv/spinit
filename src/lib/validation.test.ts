@@ -72,6 +72,21 @@ describe('loginSchema', () => {
     const result = loginSchema.safeParse(formDataToRecord(formData));
     expect(result.success).toBe(false);
   });
+
+  it('errors when password exceeds 72 bytes, pinning bytes not characters', () => {
+    // '💩' is a 4-byte UTF-8 character. 19 repeats = 76 bytes, well over 72,
+    // but only 19 UTF-16 code points, well under a naive 72-character cap.
+    const password = '\u{1F4A9}'.repeat(19);
+    const result = loginSchema.safeParse({ ...validValues, password });
+    expect(result.success).toBe(false);
+  });
+
+  it('passes at exactly 72 bytes with multi-byte characters', () => {
+    // 18 repeats of a 4-byte character = 72 bytes exactly.
+    const password = '\u{1F4A9}'.repeat(18);
+    const result = loginSchema.safeParse({ ...validValues, password });
+    expect(result.success).toBe(true);
+  });
 });
 
 describe('registerSchema', () => {
