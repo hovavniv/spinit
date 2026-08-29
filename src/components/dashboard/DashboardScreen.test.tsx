@@ -148,4 +148,22 @@ describe('DashboardScreen', () => {
       expect(screen.queryByRole('button', { name: 'Sign out' })).not.toBeInTheDocument();
     });
   });
+
+  describe('profile prompt', () => {
+    it('renders the profile prompt when given one', () => {
+      render(
+        <DashboardScreen
+          data={demoData}
+          signOutAction={vi.fn()}
+          profilePrompt={<p>finish your profile</p>}
+        />,
+      );
+      expect(screen.getByText('finish your profile')).toBeInTheDocument();
+    });
+
+    it('renders nothing extra when the prompt is absent', () => {
+      render(<DashboardScreen data={demoData} signOutAction={vi.fn()} />);
+      expect(screen.queryByText('finish your profile')).not.toBeInTheDocument();
+    });
+  });
 });

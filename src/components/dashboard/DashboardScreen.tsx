@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react';
 import { DashboardSidebar } from './DashboardSidebar';
 import { DashboardHeader } from './DashboardHeader';
 import { LiveEventBanner } from './LiveEventBanner';
@@ -21,6 +22,12 @@ interface DashboardScreenProps {
    * function does not work there. When omitted, no sign-out control renders.
    */
   signOutAction?: () => Promise<void>;
+  /**
+   * The "finish your profile" form, or null. Passed as a node rather than a
+   * boolean so the screen never imports CompleteProfile — which would drag
+   * the server action in and break every RTL test in this file (design §7).
+   */
+  profilePrompt?: ReactNode;
 }
 
 /**
@@ -29,13 +36,14 @@ interface DashboardScreenProps {
  * Pure function of `data`; nothing here reads a clock, a route, or a store
  * (design/specs/2026-08-29-dj-dashboard-design.md §5).
  */
-export function DashboardScreen({ data, signOutAction }: DashboardScreenProps) {
+export function DashboardScreen({ data, signOutAction, profilePrompt }: DashboardScreenProps) {
   return (
     <div className={styles.screen}>
       <DashboardSidebar dj={data.dj} signOutAction={signOutAction} />
       <div className={styles.main}>
         <div className={styles.content}>
           <DashboardHeader dj={data.dj} now={data.now} />
+          {profilePrompt}
           {data.liveEvent !== null && <LiveEventBanner liveEvent={data.liveEvent} />}
           <UpcomingEvents events={data.upcoming} now={data.now} />
           <PastEvents events={data.past} />
