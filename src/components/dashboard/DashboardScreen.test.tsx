@@ -14,6 +14,18 @@ describe('DashboardScreen', () => {
     expect(screen.getByText('Sam & Jordan R.')).toBeInTheDocument();
     expect(screen.getByText('Noa & Eitan')).toBeInTheDocument();
     expect(screen.getByText('Claire & Ben')).toBeInTheDocument();
+
+    // Finding 7b: pins formatPastDate's full-month-name output against a
+    // regression to formatCardDate's abbreviated format.
+    expect(screen.getByText('July 18, 2026 · Franklin Hall')).toBeInTheDocument();
+
+    // Finding 7c: pins SectionHeading's aria-label on the "View all" links.
+    expect(screen.getByRole('link', { name: 'View all upcoming events' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'View all past events' })).toBeInTheDocument();
+
+    // Finding 7d: pins the "Dashboard" nav item as a non-link current-page marker.
+    expect(screen.queryByRole('link', { name: 'Dashboard' })).not.toBeInTheDocument();
+    expect(screen.getByText('Dashboard')).toHaveAttribute('aria-current', 'page');
   });
 
   it('renders the live banner when liveEvent is set, and renders no banner when it is null', () => {
@@ -46,5 +58,27 @@ describe('DashboardScreen', () => {
       'href',
       '/events/priya-alex',
     );
+
+    // Finding 7e: pins the past-row "View recap →" link's href — there are
+    // two past rows, both with "View recap →" links, so getByRole throws on
+    // finding two matches; use getAllByRole and check every match instead.
+    const recapLinks = screen.getAllByRole('link', { name: /View recap/ });
+    expect(recapLinks).toHaveLength(2);
+    for (const link of recapLinks) {
+      expect(link.getAttribute('href')).toMatch(/^\/events\/.+\/recap$/);
+    }
+  });
+
+  it('omits the days-until chip for an upcoming event whose date has already passed', () => {
+    const pastUpcoming = {
+      ...demoData,
+      upcoming: [{ ...demoData.upcoming[0], date: '2026-01-01' }],
+    };
+    render(<DashboardScreen data={pastUpcoming} />);
+
+    // Queries by test id, not text: an omitted chip and a chip rendered
+    // empty both produce zero visible text, so only the element's presence
+    // actually distinguishes them (see UpcomingEvents.tsx).
+    expect(screen.queryByTestId('days-until-chip')).not.toBeInTheDocument();
   });
 });

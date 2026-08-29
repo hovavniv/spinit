@@ -2,7 +2,6 @@
    the sidebar block (first child of the top-level flex row). */
 
 .sidebar {
-  position: relative;
   width: 240px;
   flex-shrink: 0;
   background: var(--ink-dark);
@@ -61,6 +60,13 @@
   color: oklch(0.75 0.01 50);
   font-weight: 600;
   font-size: 14px;
+}
+
+/* globals.css's a:hover (specificity (0,1,1)) would otherwise outrank this
+   class's color and turn the label pink on hover — the artboard does not do
+   this (its <a> carries the color inline, which outranks a:hover there too). */
+.navItem:hover {
+  color: oklch(0.75 0.01 50);
 }
 
 .navItemCurrent {

@@ -53,7 +53,15 @@ export function UpcomingEvents({ events, now }: UpcomingEventsProps) {
                 >
                   {STATUS_LABEL[event.status]}
                 </span>
-                {chip !== null && <span className={styles.daysUntil}>{chip}</span>}
+                {/* data-testid, not text: an empty <span>{null}</span> and no
+                    span at all both render zero visible text, so a text
+                    query can't tell "chip omitted" from "chip rendered
+                    empty" — the element's presence is the thing under test. */}
+                {chip !== null && (
+                  <span className={styles.daysUntil} data-testid="days-until-chip">
+                    {chip}
+                  </span>
+                )}
               </div>
             </Link>
           );

@@ -18,7 +18,11 @@ import {
 const ORIGINAL_TZ = process.env.TZ;
 
 afterEach(() => {
-  process.env.TZ = ORIGINAL_TZ;
+  if (ORIGINAL_TZ === undefined) {
+    delete process.env.TZ;
+  } else {
+    process.env.TZ = ORIGINAL_TZ;
+  }
 });
 
 describe('greeting', () => {
@@ -113,10 +117,30 @@ describe('formatCardDate', () => {
   it('formats 2026-09-12 as "Sep 12, 2026" (abbreviated month, no leading zero)', () => {
     expect(formatCardDate('2026-09-12')).toBe('Sep 12, 2026');
   });
+
+  it('yields the same result under TZ=America/Los_Angeles', () => {
+    process.env.TZ = 'America/Los_Angeles';
+    expect(formatCardDate('2026-09-12')).toBe('Sep 12, 2026');
+  });
+
+  it('yields the same result under TZ=Asia/Jerusalem', () => {
+    process.env.TZ = 'Asia/Jerusalem';
+    expect(formatCardDate('2026-09-12')).toBe('Sep 12, 2026');
+  });
 });
 
 describe('formatPastDate', () => {
   it('formats 2026-07-18 as "July 18, 2026" (full month name, distinct from formatCardDate)', () => {
+    expect(formatPastDate('2026-07-18')).toBe('July 18, 2026');
+  });
+
+  it('yields the same result under TZ=America/Los_Angeles', () => {
+    process.env.TZ = 'America/Los_Angeles';
+    expect(formatPastDate('2026-07-18')).toBe('July 18, 2026');
+  });
+
+  it('yields the same result under TZ=Asia/Jerusalem', () => {
+    process.env.TZ = 'Asia/Jerusalem';
     expect(formatPastDate('2026-07-18')).toBe('July 18, 2026');
   });
 });
@@ -124,6 +148,14 @@ describe('formatPastDate', () => {
 describe('formatStartTime', () => {
   it('formats 2026-08-27T20:00:00-07:00 as "8:00 PM" (12-hour, no leading zero)', () => {
     expect(formatStartTime('2026-08-27T20:00:00-07:00')).toBe('8:00 PM');
+  });
+
+  it('formats midnight (00:00) as "12:00 AM"', () => {
+    expect(formatStartTime('2026-08-27T00:00:00-07:00')).toBe('12:00 AM');
+  });
+
+  it('formats noon (12:00) as "12:00 PM"', () => {
+    expect(formatStartTime('2026-08-27T12:00:00-07:00')).toBe('12:00 PM');
   });
 });
 
