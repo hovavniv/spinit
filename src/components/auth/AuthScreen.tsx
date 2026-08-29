@@ -5,12 +5,29 @@ import { useRouter } from 'next/navigation';
 import { BrandPanel } from './BrandPanel';
 import { LoginForm } from './LoginForm';
 import { RegisterForm } from './RegisterForm';
+import type { ActionResult } from '@/lib/auth/errors';
 import styles from './AuthScreen.module.css';
 
 type Mode = 'login' | 'register';
+type FormAction = (prevState: ActionResult, formData: FormData) => Promise<ActionResult>;
 
 interface AuthScreenProps {
   defaultMode: Mode;
+  /**
+   * `signInWithPassword` / `signUpWithPassword` from `lib/auth/actions`,
+   * received from `app/login/page.tsx` / `app/register/page.tsx` and threaded
+   * straight down to `LoginForm` / `RegisterForm`. `AuthScreen` never imports
+   * `lib/auth/actions` itself — see the note in `LoginForm.tsx` (design 6).
+   */
+  loginAction: FormAction;
+  registerAction: FormAction;
+  /**
+   * Short, DJ-facing copy derived from `/auth/callback/route.ts`'s failure
+   * redirect (`?error=confirmation_failed[_same_browser]`), mapped to fixed
+   * strings by `app/login/page.tsx` — never the raw query value. Only ever
+   * relevant in login mode; threaded straight to `LoginForm`.
+   */
+  callbackMessage?: string;
 }
 
 /**
@@ -23,7 +40,7 @@ interface AuthScreenProps {
  * switchMode. The mode swap itself is immediate client state; router.replace
  * only catches the address bar up afterwards, it is not awaited.
  */
-export function AuthScreen({ defaultMode }: AuthScreenProps) {
+export function AuthScreen({ defaultMode, loginAction, registerAction, callbackMessage }: AuthScreenProps) {
   const [mode, setMode] = useState<Mode>(defaultMode);
   const router = useRouter();
 
@@ -60,9 +77,13 @@ export function AuthScreen({ defaultMode }: AuthScreenProps) {
           </div>
 
           {mode === 'login' ? (
-            <LoginForm onSwitchToRegister={() => switchMode('register')} />
+            <LoginForm
+              onSwitchToRegister={() => switchMode('register')}
+              action={loginAction}
+              callbackMessage={callbackMessage}
+            />
           ) : (
-            <RegisterForm onSwitchToLogin={() => switchMode('login')} />
+            <RegisterForm onSwitchToLogin={() => switchMode('login')} action={registerAction} />
           )}
         </div>
       </div>
