@@ -12,7 +12,19 @@ const eslintConfig = [
   // layout and the two tools never disagree about the same line. Must stay last.
   prettier,
   {
-    ignores: ['node_modules/**', '.next/**', 'out/**', 'build/**', 'next-env.d.ts', 'design/**'],
+    // `**/.next/**` (not `.next/**`) so a nested build directory — e.g. a
+    // separate git worktree checked out under `.claude/worktrees/*/.next/`
+    // — is excluded too; a root-only glob doesn't match those nested paths.
+    // `.claude/**` is gitignored working context and out of scope entirely.
+    ignores: [
+      'node_modules/**',
+      '**/.next/**',
+      'out/**',
+      'build/**',
+      'next-env.d.ts',
+      'design/**',
+      '.claude/**',
+    ],
   },
 ];
 
