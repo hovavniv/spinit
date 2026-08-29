@@ -65,9 +65,13 @@ create policy "dj selects own events" on public.events
 create policy "dj inserts own events" on public.events
   for insert with check ((select auth.uid()) = dj_id);
 
--- Both halves are required. `using` decides which rows may be targeted;
--- `with check` decides what they may become. With `using` alone a DJ could
--- reassign dj_id and hand a row to somebody else.
+-- Both are written explicitly even though they are textually identical, so the intent (what
+-- this predicate governs) reads the same for both the pre-image and the post-image rather than
+-- relying on Postgres's own USING-as-WITH-CHECK fallback (per the docs: "if no WITH CHECK
+-- expression is defined, then the USING expression will be used both to determine which rows
+-- are visible and which new rows will be allowed to be added"). Removing the explicit WITH
+-- CHECK here would NOT weaken this policy -- Postgres would enforce the identical USING
+-- predicate in its place.
 create policy "dj updates own events" on public.events
   for update using ((select auth.uid()) = dj_id)
              with check ((select auth.uid()) = dj_id);

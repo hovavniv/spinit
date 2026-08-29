@@ -207,6 +207,9 @@ describe.skipIf(!hasSupabaseConfig || !hasTestUsers)(
       // row. Verified live and reproducibly -- see the comment above.
       expect(error).not.toBeNull();
       expect(error!.code).toBe('42501');
+      // Disambiguates from a grant failure, which reads "permission denied for table" instead --
+      // this message is RLS's own wording, confirmed live 2026-08-29.
+      expect(error!.message).toMatch(/row-level security/);
     });
 
     // count(s.id) vs count(*): a completed event with no songs must read 0,
