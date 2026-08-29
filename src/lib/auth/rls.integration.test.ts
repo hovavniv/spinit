@@ -113,46 +113,73 @@ describe.skipIf(!hasSupabaseConfig || !hasTestUsers)(
 
     // Case 2 (design 10.2): A updating B's profile affects zero rows — the
     // RLS update `using` clause holds.
+    //
+    // `data: []` from PostgREST's `.select()` re-fetch is ambiguous on its
+    // own: it fires both when the `using` clause blocks the write AND when
+    // the write silently succeeds but the re-fetch itself is filtered by the
+    // SELECT policy (which A never passes for B's row either way). The only
+    // observation that actually distinguishes "blocked" from "succeeded
+    // invisibly" is reading B's own row back as B.
     test('A updating B profile affects zero rows', async () => {
-      const { data, error } = await clientA
+      const { data: updateData, error: updateError } = await clientA
         .from('profiles')
         .update({ full_name: 'Hijacked by A' })
         .eq('id', userBId)
         .select();
 
-      expect(error).toBeNull();
-      expect(data).toEqual([]);
+      expect(updateError).toBeNull();
+      expect(updateData).toEqual([]);
+
+      // The real check: read B's own row as B and confirm A's write never
+      // landed.
+      const { data: bOwnRow, error: bReadError } = await clientB
+        .from('profiles')
+        .select('full_name')
+        .eq('id', userBId)
+        .single();
+
+      expect(bReadError).toBeNull();
+      expect(bOwnRow?.full_name).not.toBe('Hijacked by A');
     });
 
     // Case 3 (design 10.2): A updating their own row but attempting to change
     // `id` to B's is rejected — the RLS update `with check` clause holds.
+    //
+    // B's row already exists at `userBId`, so a plain "error is not null"
+    // check can't tell an RLS `with check` rejection apart from an unrelated
+    // primary-key unique violation — both fire a non-null error here.
+    // Assert the specific SQLSTATE an RLS rejection produces (`42501`,
+    // "new row violates row-level security policy"), distinct from a PK
+    // collision (`23505`) or FK violation (`23503`). Verified live against
+    // this project on 2026-08-29: the observed `error.code` is `42501`.
     test('A changing own row id to B id is rejected', async () => {
-      const { data, error } = await clientA
+      const { error } = await clientA
         .from('profiles')
         .update({ id: userBId })
         .eq('id', userAId)
         .select();
 
-      // Either RLS rejects the row (zero rows, no thrown error) or Postgres
-      // raises (primary key / check constraint) — either way, no row may end
-      // up with A's original id repointed to B's id.
-      if (error) {
-        expect(error).not.toBeNull();
-      } else {
-        expect(data).toEqual([]);
-      }
+      expect(error).not.toBeNull();
+      expect(error?.code).toBe('42501');
     });
 
     // Case 4 (design 10.2): a direct client `insert` into `profiles` is
     // rejected — there is no insert policy and no grant; only the trigger may
     // create a row.
+    //
+    // Using `userAId` (an id that already exists) would fail with a PK
+    // collision (`23505`) even if the RLS/grant guard were entirely absent,
+    // masking the thing under test. Use a fresh, non-colliding id so a
+    // successful insert is possible in principle, and assert the specific
+    // RLS-rejection SQLSTATE (same `42501` as case 3, verified live).
     test('direct insert into profiles is rejected', async () => {
       const { error } = await clientA.from('profiles').insert({
-        id: userAId,
+        id: crypto.randomUUID(),
         full_name: 'Should Not Insert',
       });
 
       expect(error).not.toBeNull();
+      expect(error?.code).toBe('42501');
     });
 
     // Case 5 (design 10.2): after signUp, a profile row exists with metadata
@@ -180,14 +207,24 @@ describe.skipIf(!hasSupabaseConfig || !hasTestUsers)(
       // The new user's own row is readable under their own RLS-scoped select
       // only if signed in as them; a plain unauthenticated/anon select of an
       // arbitrary id is blocked by the same select policy exercised in case
-      // 1. Sign in as the freshly created (unconfirmed) user is not possible
-      // without clicking the confirmation email, so this asserts existence
-      // indirectly is not possible from this script either — recorded as a
-      // known limitation rather than worked around with the service-role key.
-      // What IS directly observable without extra credentials is that signUp
-      // itself succeeded and returned the new user id, which is the trigger's
-      // input; the row's existence and content is verified manually per
-      // design 10.4 / task 13's manual test pass.
+      // 1. Signing in as the freshly created (unconfirmed) user is not
+      // possible without clicking the confirmation email, and reading
+      // another user's row from this script is blocked by RLS either way —
+      // a real, structural limitation, not something this test can work
+      // around without the service-role key, which stays out of this
+      // codebase entirely (design 8.1).
+      //
+      // What this assertion actually verifies: `signUp` did not error with
+      // the given valid metadata — i.e. the trigger's insert into `profiles`
+      // did NOT fail a check constraint (a failure surfaces as a signUp
+      // error per design 7.2, exercised directly by case 6's negative test).
+      // That is an indirect but real signal that the trigger ran without
+      // hitting a constraint violation. It is NOT a verification that the
+      // resulting row exists or that its content (metadata carried through)
+      // is correct — that would require the service-role key. The row's
+      // content is verified separately, out of band, via the read-only DB
+      // check documented under "Confirmation email" in
+      // docs/submission/manual-tests.md, for test user A.
       expect(newUserId).toBeTruthy();
     });
 

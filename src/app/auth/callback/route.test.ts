@@ -23,6 +23,7 @@ import { GET } from './route';
 
 beforeEach(() => {
   vi.clearAllMocks();
+  process.env.SITE_URL = 'http://localhost:3000';
   exchangeCodeForSession.mockResolvedValue({ data: {}, error: null });
 });
 
@@ -110,5 +111,25 @@ describe('auth/callback — failure branch', () => {
     const location = response.headers.get('location');
     const url = new URL(location!);
     expect(url.pathname).toBe('/login');
+  });
+
+  it('redirects to /login and never calls exchangeCodeForSession when code AND error are both present', async () => {
+    // A mutation removing the `error || errorCode` terms from the guard
+    // (leaving only `!code`) would still pass every other test in this
+    // file, because none of them send `code` and `error` together — this is
+    // the actual security-relevant combination (an attacker or a buggy
+    // redirect sending both). `error`/`error_code` must take precedence.
+    const request = new NextRequest(
+      'http://localhost:3000/auth/callback?code=abc&error=access_denied&error_code=otp_expired',
+    );
+
+    const response = await GET(request);
+
+    expect(exchangeCodeForSession).not.toHaveBeenCalled();
+    const location = response.headers.get('location');
+    expect(location).toBeTruthy();
+    const url = new URL(location!);
+    expect(url.pathname).toBe('/login');
+    expect(url.searchParams.get('error')).toBeTruthy();
   });
 });

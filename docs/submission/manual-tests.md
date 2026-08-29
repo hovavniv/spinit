@@ -75,13 +75,19 @@ collide (commit `b53eda8`).
 3. A updating their own row and attempting to change `id` to B's is
    rejected — **verified**, live.
 4. A direct client `insert` into `profiles` is rejected — **verified**, live.
-5. After creating a user, a profile row exists with the metadata carried
-   through — **blocked**, not failed. Supabase's built-in mailer caps at 2
-   emails/hour project-wide; this hour's budget was already spent creating
-   the test fixtures and by an earlier unconfirmed registration attempt.
-   The live call returns `AuthApiError` `over_email_send_rate_limit` (429),
-   not a trigger or RLS error. Will pass once the budget resets; not
-   re-verified in this session.
+5. After creating a user, `signUp` succeeds with valid metadata — **blocked**,
+   not failed. Supabase's built-in mailer caps at 2 emails/hour project-wide;
+   this hour's budget was already spent creating the test fixtures and by an
+   earlier unconfirmed registration attempt. The live call returns
+   `AuthApiError` `over_email_send_rate_limit` (429), not a trigger or RLS
+   error. Will pass once the budget resets; not re-verified in this session.
+   **Even once it passes, this case can only verify that `signUp` did not
+   error** (i.e. the trigger ran without hitting a check constraint) — it
+   cannot verify the resulting row's content without the service-role key,
+   which stays out of this codebase entirely (design 8.1). The row's content
+   (full_name carried through from metadata) is verified separately via the
+   DB read-only check already documented under "Confirmation email" above,
+   for test user A.
 6. Negative trigger case — over-length metadata is rejected and creates no
    `auth.users` row — **verified**, live, and specifically confirmed to be a
    genuine trigger/constraint rejection rather than a rate-limit false
