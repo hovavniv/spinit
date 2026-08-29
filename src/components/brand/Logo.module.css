@@ -22,3 +22,9 @@
 .light {
   color: white;
 }
+
+/* Dashboard sidebar wordmark (design/artboards/Spinit DJ Dashboard.dc.html)
+   is 20px; existing call sites keep the default 22px .wordmark size. */
+.sm {
+  font-size: 20px;
+}
