@@ -2,12 +2,24 @@
    Pure formatting/derivation functions for the DJ Dashboard screen
    (design/specs/2026-08-29-dj-dashboard-design.md §6).
 
-   Parsing rule: never pass a 'YYYY-MM-DD' or 'YYYY-MM-DDTHH:mm' string (no
-   explicit offset) to `new Date(s)` or `Date.parse(s)` — both are
-   ambiguous/UTC-parsed per spec and silently shift by a day in negative-offset
-   zones. Instead split the string and construct via
+   Parsing rule: never construct a Date from a string here. Split it and use
    `new Date(y, m - 1, d, h, min)` (local-time constructor args), or read the
    substring directly (formatStartTime, which never constructs a Date at all).
+
+   Why, precisely — an earlier version of this comment got it wrong and said
+   both forms are UTC-parsed. Only the date-only form is. Measured under
+   TZ=America/Los_Angeles:
+
+     new Date('2026-07-18')           -> getDate() 17   date-only, UTC-parsed
+     new Date('2026-07-18T00:00:00')  -> getDate() 18   date-time, LOCAL
+     new Date('2026-07-18T00:00')     -> getDate() 18   date-time, LOCAL
+
+   So 'YYYY-MM-DD' genuinely shifts a day in negative-offset zones, and
+   'YYYY-MM-DDTHH:mm' genuinely does not. The rule below is still "never from
+   a string", because a convention with one exception is a convention someone
+   applies to the wrong case at 2am — but it is a convention we chose, not a
+   requirement the language imposes, and it should not be defended as the
+   latter.
    --------------------------------------------------------------------------- */
 
 const WEEKDAYS = [
@@ -20,7 +32,7 @@ const WEEKDAYS = [
   'Saturday',
 ];
 
-const MONTHS_FULL = [
+export const MONTHS_FULL = [
   'January',
   'February',
   'March',
@@ -58,8 +70,12 @@ function parseLocalDateTime(value: string): Date {
   return new Date(year, month - 1, day, hour || 0, minute || 0);
 }
 
-/** Splits 'YYYY-MM-DD' into a local midnight Date, never via new Date(string). */
-function parseLocalDate(value: string): Date {
+/**
+ * Splits 'YYYY-MM-DD' into a local midnight Date, never via new Date(string).
+ * Exported because src/lib/events/pastEvents.ts needs exactly this parser —
+ * a third copy of it in this repo would be one more thing to keep in sync.
+ */
+export function parseLocalDate(value: string): Date {
   const [year, month, day] = value.split('-').map(Number);
   return new Date(year, month - 1, day);
 }
