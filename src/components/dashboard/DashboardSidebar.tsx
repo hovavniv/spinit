@@ -4,8 +4,22 @@ import { initials } from '@/lib/dashboard/format';
 import type { DjProfile } from '@/lib/dashboard/types';
 import styles from './DashboardSidebar.module.css';
 
+type NavKey = 'dashboard' | 'upcoming' | 'past';
+
+const NAV_ITEMS: { key: NavKey; label: string; href: string }[] = [
+  { key: 'dashboard', label: 'Dashboard', href: '/dashboard' },
+  { key: 'upcoming', label: 'Upcoming events', href: '/events/upcoming' },
+  { key: 'past', label: 'Past events', href: '/events/past' },
+];
+
 interface DashboardSidebarProps {
   dj: DjProfile;
+  /**
+   * Which nav item renders as the current page — a non-link <span> with
+   * aria-current, matching the artboard. Defaults to 'dashboard' so the
+   * existing DashboardScreen call site is unchanged.
+   */
+  current?: NavKey;
 }
 
 /**
@@ -17,7 +31,7 @@ interface DashboardSidebarProps {
  * wrapper independently of the sidebar itself
  * (design/specs/2026-08-29-dj-dashboard-design.md §8).
  */
-export function DashboardSidebar({ dj }: DashboardSidebarProps) {
+export function DashboardSidebar({ dj, current = 'dashboard' }: DashboardSidebarProps) {
   return (
     <div className={styles.sidebar}>
       <div className={styles.blobPink} aria-hidden="true" />
@@ -29,15 +43,17 @@ export function DashboardSidebar({ dj }: DashboardSidebarProps) {
         </div>
 
         <nav aria-label="Main" className={styles.nav}>
-          <span className={styles.navItemCurrent} aria-current="page">
-            Dashboard
-          </span>
-          <Link href="/events/upcoming" className={styles.navItem}>
-            Upcoming events
-          </Link>
-          <Link href="/events/past" className={styles.navItem}>
-            Past events
-          </Link>
+          {NAV_ITEMS.map((item) =>
+            item.key === current ? (
+              <span key={item.key} className={styles.navItemCurrent} aria-current="page">
+                {item.label}
+              </span>
+            ) : (
+              <Link key={item.key} href={item.href} className={styles.navItem}>
+                {item.label}
+              </Link>
+            ),
+          )}
         </nav>
       </div>
 
