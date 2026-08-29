@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;600;700;800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+  <style>
+    body{margin:0;background:oklch(0.97 0.014 75);}
+    *{box-sizing:border-box;}
+    ::selection{background:oklch(0.64 0.19 350 / 0.22);}
+    a{color:oklch(0.55 0.17 265);text-decoration:none;}
+    a:hover{color:oklch(0.64 0.19 350);}
+    @keyframes spinitRecordSpin{from{transform:rotate(0deg);}to{transform:rotate(360deg);}}
+  </style>
+</helmet>
+
+<div style="font-family:'Inter',sans-serif;color:oklch(0.22 0.02 50);background:oklch(0.97 0.014 75);width:100%;min-height:100vh;display:flex;">
+
+  <div style="width:240px;flex-shrink:0;background:oklch(0.22 0.02 50);padding:32px 20px;display:flex;flex-direction:column;justify-content:space-between;position:sticky;top:0;height:100vh;overflow:hidden;">
+    <div style="position:absolute;width:140px;height:140px;border-radius:50%;background:oklch(0.3 0.03 350 / 0.35);top:-50px;right:-60px;"></div>
+    <div style="position:absolute;width:110px;height:110px;border-radius:50%;background:oklch(0.28 0.03 265 / 0.35);bottom:-40px;left:-50px;"></div>
+    <div>
+      <div style="display:flex;align-items:center;gap:10px;padding:0 12px;margin-bottom:40px;">
+        <div style="width:20px;height:20px;border-radius:50%;position:relative;flex-shrink:0;background:radial-gradient(circle at 35% 32%, oklch(0.4 0.01 50), oklch(0.13 0.01 50) 65%);box-shadow:0 1px 3px rgba(0,0,0,0.35);animation:spinitRecordSpin 6s linear infinite;">
+          <div style="position:absolute;inset:3.5px;border-radius:50%;border:1px solid oklch(0.35 0.01 50 / 0.7);"></div>
+          <div style="position:absolute;inset:7px;border-radius:50%;border:1px solid oklch(0.35 0.01 50 / 0.5);"></div>
+          <div style="position:absolute;top:50%;left:50%;width:8px;height:8px;background:{{ accent }};border-radius:50%;transform:translate(-50%,-50%);"></div>
+          <div style="position:absolute;top:50%;left:50%;width:2.5px;height:2.5px;background:oklch(0.97 0.014 75);border-radius:50%;transform:translate(-50%,-50%);"></div>
+        </div>
+        <span style="font-family:'Sora',sans-serif;font-weight:800;font-size:20px;letter-spacing:-0.02em;color:white;">Spinit</span>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:4px;">
+        <div style="padding:11px 16px;border-radius:12px;background:oklch(0.3 0.03 350 / 0.5);color:white;font-weight:600;font-size:14px;">Dashboard</div>
+        <a href="./Spinit Upcoming Events.dc.html" style="padding:11px 16px;border-radius:12px;color:oklch(0.75 0.01 50);font-weight:600;font-size:14px;">Upcoming events</a>
+        <a href="./Spinit Past Events.dc.html" style="padding:11px 16px;border-radius:12px;color:oklch(0.75 0.01 50);font-weight:600;font-size:14px;">Past events</a>
+      </div>
+    </div>
+    <div style="display:flex;align-items:center;gap:12px;padding:0 12px;">
+      <div style="width:38px;height:38px;border-radius:50%;background:oklch(0.3 0.03 265 / 0.5);color:white;font-weight:700;font-size:13px;display:flex;align-items:center;justify-content:center;flex-shrink:0;">JE</div>
+      <div style="min-width:0;">
+        <div style="color:white;font-weight:600;font-size:13.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">Jordan Ellis</div>
+        <div style="color:oklch(0.6 0.01 50);font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">Ellis Sound Co.</div>
+      </div>
+    </div>
+  </div>
+
+  <div style="flex:1;min-width:0;padding:48px 56px;">
+    <div style="max-width:1040px;margin:0 auto;">
+
+      <div style="display:flex;justify-content:space-between;align-items:flex-end;margin-bottom:36px;gap:24px;">
+        <div>
+          <div style="font-size:13px;font-weight:600;letter-spacing:0.04em;text-transform:uppercase;color:oklch(0.5 0.02 50);margin-bottom:8px;">Tuesday, August 27</div>
+          <h1 style="font-family:'Sora',sans-serif;font-size:32px;font-weight:800;letter-spacing:-0.02em;margin:0;">Good evening, Jordan</h1>
+        </div>
+        <a href="./Spinit New Event.dc.html" style="background:{{ accent }};color:white;padding:14px 26px;border-radius:999px;font-weight:600;font-size:15px;white-space:nowrap;">+ New event</a>
+      </div>
+
+      <sc-if value="{{ showLiveBanner }}" hint-placeholder-val="{{ true }}">
+        <div style="background:oklch(0.95 0.045 350);border-radius:24px;padding:28px 32px;display:flex;justify-content:space-between;align-items:center;margin-bottom:44px;gap:20px;flex-wrap:wrap;">
+          <div style="display:flex;align-items:center;gap:20px;flex-wrap:wrap;">
+            <div style="display:flex;align-items:center;gap:7px;background:{{ accent }};color:white;font-size:12px;font-weight:700;letter-spacing:0.04em;text-transform:uppercase;padding:6px 12px;border-radius:999px;">
+              <span style="width:7px;height:7px;border-radius:50%;background:white;"></span>Live
+            </div>
+            <div>
+              <div style="font-family:'Sora',sans-serif;font-weight:700;font-size:19px;margin-bottom:2px;">Maya &amp; Tomer</div>
+              <div style="font-size:13.5px;color:oklch(0.45 0.02 50);">The Wilshire Ebell · Open floor · started 8:00 PM</div>
+            </div>
+          </div>
+          <a href="./Spinit Live Event.dc.html" style="background:oklch(0.22 0.02 50);color:white;padding:12px 24px;border-radius:999px;font-weight:600;font-size:14px;white-space:nowrap;">Manage live event →</a>
+        </div>
+      </sc-if>
+
+      <div id="upcoming-events" style="margin-bottom:44px;scroll-margin-top:24px;">
+        <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:20px;">
+          <h2 style="font-family:'Sora',sans-serif;font-size:21px;font-weight:700;margin:0;">Upcoming events</h2>
+          <a href="./Spinit Upcoming Events.dc.html" style="font-weight:600;font-size:14px;">View all →</a>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;">
+
+          <a href="./Spinit New Event.dc.html?event=priya-alex" style="display:block;background:white;border:1px solid oklch(0.9 0.012 60);border-radius:20px;padding:24px;color:inherit;text-decoration:none;" style-hover="border-color:{{ accent }};">
+            <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:6px;">
+              <div style="font-family:'Sora',sans-serif;font-weight:700;font-size:17px;">Priya &amp; Alex</div>
+              <div style="font-size:12.5px;color:oklch(0.5 0.02 50);">Sep 12, 2026</div>
+            </div>
+            <div style="font-size:14px;color:oklch(0.45 0.02 50);margin-bottom:16px;">Brookline Barn</div>
+            <div style="display:flex;justify-content:space-between;align-items:center;">
+              <span style="background:oklch(0.95 0.03 190);color:oklch(0.4 0.13 190);font-size:12px;font-weight:600;padding:5px 12px;border-radius:999px;">Streaming connected</span>
+              <span style="font-size:12.5px;color:oklch(0.5 0.02 50);">in 16 days</span>
+            </div>
+          </a>
+
+          <a href="./Spinit New Event.dc.html?event=sam-jordan" style="display:block;background:white;border:1px solid oklch(0.9 0.012 60);border-radius:20px;padding:24px;color:inherit;text-decoration:none;" style-hover="border-color:{{ accent }};">
+            <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:6px;">
+              <div style="font-family:'Sora',sans-serif;font-weight:700;font-size:17px;">Sam &amp; Jordan R.</div>
+              <div style="font-size:12.5px;color:oklch(0.5 0.02 50);">Oct 3, 2026</div>
+            </div>
+            <div style="font-size:14px;color:oklch(0.45 0.02 50);margin-bottom:16px;">The Foundry</div>
+            <div style="display:flex;justify-content:space-between;align-items:center;">
+              <span style="border:1.5px solid oklch(0.85 0.012 60);color:oklch(0.45 0.02 50);font-size:12px;font-weight:600;padding:4px 11px;border-radius:999px;">Awaiting couple</span>
+              <span style="font-size:12.5px;color:oklch(0.5 0.02 50);">in 37 days</span>
+            </div>
+          </a>
+
+        </div>
+      </div>
+
+      <div id="past-events" style="scroll-margin-top:24px;">
+        <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:20px;">
+          <h2 style="font-family:'Sora',sans-serif;font-size:21px;font-weight:700;margin:0;">Past events</h2>
+          <a href="./Spinit Past Events.dc.html" style="font-weight:600;font-size:14px;">View all →</a>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:12px;">
+
+          <a href="./Spinit Event Recap.dc.html?event=noa-eitan" style="display:flex;background:white;border:1px solid oklch(0.9 0.012 60);border-radius:20px;padding:20px 24px;justify-content:space-between;align-items:center;gap:20px;flex-wrap:wrap;color:inherit;text-decoration:none;" style-hover="border-color:{{ accent }};">
+            <div>
+              <div style="font-family:'Sora',sans-serif;font-weight:700;font-size:16px;margin-bottom:3px;">Noa &amp; Eitan</div>
+              <div style="font-size:13.5px;color:oklch(0.5 0.02 50);">July 18, 2026 · Franklin Hall</div>
+            </div>
+            <div style="display:flex;align-items:center;gap:24px;">
+              <span style="font-size:13px;color:oklch(0.5 0.02 50);">10 songs played</span>
+              <span style="font-weight:600;font-size:14px;color:oklch(0.55 0.17 265);">View recap →</span>
+            </div>
+          </a>
+
+          <a href="./Spinit Event Recap.dc.html?event=claire-ben" style="display:flex;background:white;border:1px solid oklch(0.9 0.012 60);border-radius:20px;padding:20px 24px;justify-content:space-between;align-items:center;gap:20px;flex-wrap:wrap;color:inherit;text-decoration:none;" style-hover="border-color:{{ accent }};">
+            <div>
+              <div style="font-family:'Sora',sans-serif;font-weight:700;font-size:16px;margin-bottom:3px;">Claire &amp; Ben</div>
+              <div style="font-size:13.5px;color:oklch(0.5 0.02 50);">June 6, 2026 · Rooftop at Dune</div>
+            </div>
+            <div style="display:flex;align-items:center;gap:24px;">
+              <span style="font-size:13px;color:oklch(0.5 0.02 50);">8 songs played</span>
+              <span style="font-weight:600;font-size:14px;color:oklch(0.55 0.17 265);">View recap →</span>
+            </div>
+          </a>
+
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{
+  &quot;accentColor&quot;: {&quot;editor&quot;:&quot;color&quot;,&quot;default&quot;:&quot;oklch(0.64 0.19 350)&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;options&quot;:[&quot;oklch(0.64 0.19 350)&quot;,&quot;oklch(0.55 0.17 265)&quot;,&quot;oklch(0.62 0.13 190)&quot;],&quot;section&quot;:&quot;Theme&quot;},
+  &quot;hasLiveEvent&quot;: {&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Behavior&quot;}
+}">
+class Component extends DCLogic {
+  renderVals() {
+    return {
+      accent: this.props.accentColor || 'oklch(0.64 0.19 350)',
+      showLiveBanner: this.props.hasLiveEvent !== false
+    };
+  }
+}
+</script>
+</body>
+</html>
