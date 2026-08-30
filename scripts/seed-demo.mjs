@@ -311,20 +311,36 @@ async function main() {
     // @example.com addresses deliberately: these land in a database a grader
     // may read, and RFC 2606 reserves that domain so none of them can reach a
     // real inbox.
+    //
+    // Validated before use, not trusted: every current fixture is 'X & Y',
+    // but a fixture without ' & ' would leave secondPartner undefined and
+    // throw an uncaught TypeError at .toLowerCase() -- bypassing this
+    // script's own console.error + process.exit(1) handling, the same as
+    // every other failure below. localPart() also guards a multi-word name:
+    // an email address containing a space has no format constraint on
+    // event_partners to reject it, and claim_partner_slot's email match could
+    // never satisfy it.
     const [firstPartner, secondPartner] = event.couple_names.split(' & ');
+    if (!firstPartner?.trim() || !secondPartner?.trim()) {
+      console.error(
+        `seed-demo: couple_names for ${event.slug} is not "X & Y" (got ${JSON.stringify(event.couple_names)}), cannot derive partner slots`,
+      );
+      process.exit(1);
+    }
+    const localPart = (name) => name.toLowerCase().replace(/[^a-z0-9]+/g, '.');
     const { error: partnerError } = await supabase.from('event_partners').upsert(
       [
         {
           event_id: eventId,
           slot: 1,
           display_name: firstPartner,
-          invite_email: `${firstPartner.toLowerCase()}.${event.slug}@example.com`,
+          invite_email: `${localPart(firstPartner)}.${event.slug}@example.com`,
         },
         {
           event_id: eventId,
           slot: 2,
           display_name: secondPartner,
-          invite_email: `${secondPartner.toLowerCase()}.${event.slug}@example.com`,
+          invite_email: `${localPart(secondPartner)}.${event.slug}@example.com`,
         },
       ],
       { onConflict: 'event_id,slot', ignoreDuplicates: true },
