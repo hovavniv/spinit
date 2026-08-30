@@ -1,5 +1,10 @@
-import { describe, test, expect } from 'vitest';
-import { render } from '@testing-library/react';
+import { describe, test, expect, vi } from 'vitest';
+import { render, screen } from '@testing-library/react';
+
+vi.mock('@/lib/events/notesActions', () => ({
+  savePrivateNotes: vi.fn(),
+  saveSharedNotes: vi.fn(),
+}));
 
 import { EventDetailScreen } from './EventDetailScreen';
 import { DETAILS_FORM_ID } from './formId';
@@ -25,7 +30,10 @@ function buildEvent(): EventDetail {
     id: EVENT_ID,
     couple_names: 'Noa & Eitan',
     couple_status: 'awaiting-couple',
-    notes: null,
+    dj_id: 'dj-1',
+    privateNotes: '',
+    sharedNotes: '',
+    partners: [],
     mustPlay: [
       {
         id: 'must-1',
@@ -50,7 +58,9 @@ function buildEvent(): EventDetail {
 
 describe('EventDetailScreen', () => {
   test('the details form has a unique id and is not a wrapper around the list sections', () => {
-    const { container } = render(<EventDetailScreen event={buildEvent()} />);
+    const { container } = render(
+      <EventDetailScreen event={buildEvent()} viewer={{ role: 'dj' }} />,
+    );
 
     // Exactly one form carries the details-form id -- it is not duplicated
     // and it is trivially locatable by id, the same way EventDetailsForm.tsx
@@ -74,5 +84,56 @@ describe('EventDetailScreen', () => {
     // with a row, add form alone for the two empty segments), not only on
     // an empty page.
     expect(container.querySelectorAll('form').length).toBeGreaterThan(1);
+  });
+
+  test('shows the private notes field to the dj', () => {
+    render(<EventDetailScreen event={buildEvent()} viewer={{ role: 'dj' }} />);
+
+    expect(screen.getByText(/only you can see this/i)).toBeInTheDocument();
+  });
+
+  test('hides the private notes field from a partner', () => {
+    // A convenience, not the control: a partner's read never returns that row
+    // because the policy filters it (design §3). Hiding it keeps the screen
+    // from drawing an empty box the partner could type into and lose.
+    render(
+      <EventDetailScreen
+        event={buildEvent()}
+        viewer={{ role: 'partner', partnerId: 'p1' }}
+      />,
+    );
+
+    expect(screen.queryByText(/only you can see this/i)).not.toBeInTheDocument();
+  });
+
+  test('shows shared notes to both', () => {
+    for (const viewer of [
+      { role: 'dj' } as const,
+      { role: 'partner', partnerId: 'p1' } as const,
+    ]) {
+      const { unmount } = render(
+        <EventDetailScreen event={buildEvent()} viewer={viewer} />,
+      );
+
+      expect(screen.getByText(/couple can see/i)).toBeInTheDocument();
+      unmount();
+    }
+  });
+
+  test('the notes forms are siblings of the details form, not nested in it', () => {
+    // Both note sections are their own <form> now. Nested forms are dropped
+    // by the parser, so this is the same structural trap the first test pins,
+    // one section over (design §2.2).
+    const { container } = render(
+      <EventDetailScreen event={buildEvent()} viewer={{ role: 'dj' }} />,
+    );
+
+    const [detailsForm] = Array.from(container.querySelectorAll('form')).filter(
+      (form) => form.id === DETAILS_FORM_ID,
+    );
+
+    expect(detailsForm.querySelectorAll('form')).toHaveLength(0);
+    expect(screen.getByLabelText(/your private notes/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/shared notes/i)).toBeInTheDocument();
   });
 });

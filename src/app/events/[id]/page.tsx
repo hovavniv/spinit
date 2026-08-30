@@ -3,6 +3,7 @@ import { notFound } from 'next/navigation';
 
 import { requireUser, getProfile } from '@/lib/auth/dal';
 import { getEventDetail } from '@/lib/events/detailDal';
+import { resolveViewer } from '@/lib/events/viewer';
 import { isUuid } from '@/lib/validation';
 import { AppShell } from '@/components/shell/AppShell';
 import { DashboardSidebar } from '@/components/dashboard/DashboardSidebar';
@@ -24,9 +25,10 @@ export const metadata: Metadata = {
  *
  * `params` is a Promise: Next 16 removed synchronous access entirely.
  *
- * notFound() covers BOTH "no such event" and "another DJ's event" — a 403 on
- * the second would confirm the id is real and turn this route into an oracle
- * for enumerating event ids (design §2.5). It throws, so nothing here may wrap
+ * notFound() covers "no such event", "another DJ's event" and "an event you
+ * neither run nor are a partner on" — a 403 on any of them would confirm the
+ * id is real and turn this route into an oracle for enumerating event ids
+ * (design §2.5, §4). It throws, so nothing here may wrap
  * it in a try/catch, and it is awaited in the page body rather than inside a
  * <Suspense> child, which would produce a soft 404 (HTTP 200) instead.
  *
@@ -49,6 +51,15 @@ export default async function EventPage({ params }: PageProps<'/events/[id]'>) {
 
   if (!event) notFound();
 
+  // notFound() for a non-participant, never a 403 -- a 403 would confirm the
+  // id is real and turn this route into an oracle for enumerating event ids
+  // (design §4). RLS has already decided what this user can READ; this only
+  // decides what the page draws, and refuses to draw anything for someone who
+  // is neither the DJ nor a linked partner.
+  const viewer = resolveViewer(user.id, event.dj_id, event.partners);
+
+  if (!viewer) notFound();
+
   const dj = {
     name: profile?.full_name || user.email || 'DJ',
     // business_name is nullable and at least one live row is null. Falling
@@ -60,7 +71,7 @@ export default async function EventPage({ params }: PageProps<'/events/[id]'>) {
 
   return (
     <AppShell sidebar={<DashboardSidebar dj={dj} current="none" />}>
-      <EventDetailScreen event={event} />
+      <EventDetailScreen event={event} viewer={viewer} />
     </AppShell>
   );
 }

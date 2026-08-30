@@ -1,6 +1,6 @@
 import Link from 'next/link';
 
-import type { EventDetail } from '@/lib/events/detailTypes';
+import type { EventDetail, Viewer } from '@/lib/events/detailTypes';
 import { splitBySegment } from '@/lib/events/segments';
 import {
   addMustPlay,
@@ -15,11 +15,13 @@ import { CeremonySongs } from './CeremonySongs';
 import { MustPlaySection } from './MustPlaySection';
 import { BlocklistSection } from './BlocklistSection';
 import { NotesSection } from './NotesSection';
+import { SharedNotesSection } from './SharedNotesSection';
 import { EventDetailsForm } from './EventDetailsForm';
 import styles from './EventDetailScreen.module.css';
 
 interface EventDetailScreenProps {
   event: EventDetail;
+  viewer: Viewer;
 }
 
 /**
@@ -27,12 +29,16 @@ interface EventDetailScreenProps {
  * with the couple's names, its primary button "Save changes"
  * (design §2.1, §4).
  *
+ * `viewer` decides which note fields render (design §4). It is resolved on
+ * the server in page.tsx, never here: a Client Component cannot be trusted
+ * with an authorization decision, and this one is only a rendering choice.
+ *
  * The actions are imported here and threaded down as props. The list sections
  * are Client Components and must not import them: an action module is
  * 'use server' and pulls in the DAL's `import 'server-only'`, which cannot be
  * evaluated in jsdom — the trap DashboardSidebar already documents.
  */
-export function EventDetailScreen({ event }: EventDetailScreenProps) {
+export function EventDetailScreen({ event, viewer }: EventDetailScreenProps) {
   const mustPlay = splitBySegment(event.mustPlay);
   const blocklist = splitBySegment(event.blocklist);
 
@@ -91,7 +97,16 @@ export function EventDetailScreen({ event }: EventDetailScreenProps) {
           />
         </section>
 
-        <NotesSection notes={event.notes} />
+        {/*
+          Hiding the private field from a partner is a CONVENIENCE, not the
+          control -- their read never returns that row, because the policy
+          filters it (design §3). Rendering it anyway would draw an empty box
+          they could type into and lose. Do not rely on this in either
+          direction.
+        */}
+        {viewer.role === 'dj' && <NotesSection eventId={event.id} body={event.privateNotes} />}
+
+        <SharedNotesSection eventId={event.id} body={event.sharedNotes} />
 
         <EventDetailsForm eventId={event.id} saveAction={saveEventDetails} />
       </div>
