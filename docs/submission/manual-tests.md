@@ -9,16 +9,16 @@ own `/register` form.
 No real email addresses, passwords, or user ids are recorded in this file;
 test users are referenced generically as "test user A" / "test user B".
 
-## Design 10.4 manual tests
+### Design 10.4 manual tests
 
-### Google round-trip
+#### Google round-trip
 
 **Blocked — not applicable yet.** Google OAuth is deferred (GitHub issue
 #2); `signInWithGoogle` does not exist in this codebase. Nothing to click
 through. This is not a failure of an existing feature — it is a feature not
 yet built.
 
-### Confirmation email
+#### Confirmation email
 
 **Verified as evidence, not re-clicked live.** Test user A already
 performed this exact flow for real earlier in this project: signed up
@@ -41,7 +41,7 @@ evidence, not a fresh live click-through in this session.
 Test user B has not completed this flow: `email_confirmed_at` is null for
 that row, consistent with its confirmation email not having arrived.
 
-### Proxy guard
+#### Proxy guard
 
 **Verified, fresh this session.**
 
@@ -54,7 +54,7 @@ location: /login
 Requesting `/dashboard` signed out redirects to `/login` with a 307, as
 expected.
 
-### Cookie flags (fix-spec F5, part 1 of 2)
+#### Cookie flags (fix-spec F5, part 1 of 2)
 
 **Verified live**, signed in as a real test user, via Chrome DevTools →
 Application → Cookies → `localhost`. All six `sb-<project-ref>-auth-token.*`
@@ -75,7 +75,7 @@ Also confirms, incidentally: `shouldPromptForProfile` correctly showed the
 Only the sign-out half of design 11's cookie-clearing DoD line remains
 unverified — see below.
 
-## Design 10.2 RLS cross-user cases — 5 of 6 verified live
+### Design 10.2 RLS cross-user cases — 5 of 6 verified live
 
 Both test users can now sign in. Ran `src/lib/auth/rls.integration.test.ts`
 against the live project.
@@ -125,7 +125,7 @@ collide (commit `b53eda8`).
 rate limit above) — everything else in the suite passes, 5/6 RLS cases
 included.
 
-## Definition of done walk-through (design section 11)
+### Definition of done walk-through (design section 11)
 
 - **A DJ can register with email and password, confirm by email, and reach
   `/dashboard`.** Met — verified via the confirmation-email evidence above
@@ -213,6 +213,71 @@ weekday rather than reproducing the artboard's error — recorded in design doc 
 ### Not tested
 
 CSS is not covered by automated tests — checked by eye against the artboard, as recorded above.
+
+---
+
+## Past events screen (visual slice)
+
+**Date:** 2026-08-29
+**What was compared:** `/events/past` (the real route, `listPastEvents` reading through
+`past_events_with_counts` on the live hosted project, signed in as the seeded DJ, Test User A)
+against `design/artboards/Spinit Past Events.dc.html`.
+**How:** this session had no browser automation tool available (Claude in Chrome was declined for
+the session). The user drove the check manually: started the dev server (`npm run dev`, port 3002 —
+3000 was in use by another session), signed in, and reported back with a screenshot.
+
+### Desktop (default width)
+
+Matches the artboard: dark sidebar with "Past events" rendering as the current non-link item and
+"Dashboard"/"Upcoming events" as links; the search field with the magnifier icon; three month
+headings in order (JULY 2026, JUNE 2026, MAY 2026) — the fourth seeded event (Lena & Mark,
+cancelled) correctly does not produce a fourth group or row anywhere on the screen, and the fifth
+(Maya & Tom, upcoming) correctly does not appear either, since the view filters to
+`status = 'completed'`; each row shows the 52px-style date tile (day over weekday), couple name,
+venue, song count, and a "View recap" link; the zero-song event (Ruth & Adam) reads "0 songs
+played", not 1 — the `count(s.id)` case working correctly through the live view, not just in the
+unit test.
+
+**One thing worth recording precisely:** the first screenshot was taken signed in as **Test User
+B**, who correctly saw "No past events yet" — an RLS-correct result (B owns none of the seeded
+rows) but not useful for comparing against the artboard's populated state. Re-signed in as Test
+User A and got the populated screen above. Noted here because it's a real, if accidental,
+confirmation that the owner-scoped `select` policy behaves as intended for a user who currently has
+zero rows, distinct from the "B sees zero of A's rows" case Task 7's integration suite already
+covers directly.
+
+**One known, expected, pre-existing 404, not a defect of this task:** clicking "View recap" 404s.
+`/events/[id]/recap` does not exist — recorded in design §11 gap 1 before this task ran (the
+dashboard's own `PastEvents.tsx` card already links to the same nonexistent route). Out of scope
+for this slice.
+
+### Not tested this round
+
+The ~400px responsive collapse (sidebar to a top strip) and the row-hover behaviour (background
+tint, no pink text) were not checked — the user confirmed the desktop view was sufficient evidence
+to proceed rather than spending more time on the narrower breakpoint and the hover state. Recorded
+as not checked rather than assumed to match; nothing here says they are broken, only that they were
+not looked at.
+
+---
+
+## Full verification (Past events, Task 13)
+
+```
+$ npm run lint    -> exit 0
+$ npm run typecheck -> exit 0
+$ npm test        -> 1 failed | 163 passed (164), 18/19 files passed
+     The one failure is src/lib/auth/rls.integration.test.ts > "signUp creates a profile row
+     with metadata carried through by the trigger" -- AuthApiError, email_address_invalid.
+     Confirmed unrelated to this branch: `git diff --stat 2304f27...HEAD -- src/lib/auth/
+     src/lib/supabase/` is empty -- this branch changes zero files in that area. Excluding
+     that one file: 18 files / 158 tests pass. This is Supabase's hosted GoTrue now rejecting
+     @example.com as non-deliverable -- a service-side validation change, different from the
+     previously-documented rate-limit issue, and does not self-heal. Belongs to feat/supabase-auth,
+     not this branch.
+$ npm run build   -> exit 0, Route (app) includes ƒ /events/past
+$ npm audit       -> found 0 vulnerabilities
+```
 
 ---
 
