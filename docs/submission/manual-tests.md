@@ -440,3 +440,28 @@ I am stating the distinction rather than blurring it.
 - `listActiveEvents` and `listRecentPastEvents` (this slice's dashboard queries) are now verified
   against a real, live Supabase database, not merely against fixtures, via Task 11's suite re-run
   above.
+
+## Correction, 2026-08-30 — the node_modules gap above is fixed, and both flagged items are now real
+
+The "could not genuinely verify" items above were an environment gap, not a code defect: this
+worktree's `node_modules/` had never been populated (`npm install` was never run in it — confirmed by
+comparing against the other worktrees in this repo, `dj-dashboard` and `past-events`, which both have
+a full `node_modules/next`). Fixed by running `npm install` in this worktree (458 packages added, 0
+vulnerabilities). Both checks were then re-run for real:
+
+- **`npm run test`, re-run after the install:** `Test Files 1 failed | 21 passed (22)`, `Tests 1 failed
+  | 197 passed (198)`. The `server.test.ts` failure recorded above is gone — it was the same
+  `node_modules` gap. The one remaining failure is the same, already-documented mailer rate limit
+  (`AuthApiError`, `over_email_send_rate_limit`, 429) on `src/lib/auth/rls.integration.test.ts`'s
+  `signUp` case — environmental, not a defect, not part of this slice.
+- **Preview route, actually loaded:** `npm run dev` (port 3001, `next dev` / Turbopack, no `next.config.ts`
+  or install changes needed beyond the `npm install` above) then `curl http://localhost:3001/design/dashboard`
+  → `HTTP 200`. The response body contains `Jordan Ellis`, `Ellis Sound`, and `8:00 PM` (the live banner,
+  rendered from `demoData`'s `startedAt`), and does **not** contain "Sign out" — correct per Task 8/10's
+  own spec, since the preview route passes no `signOutAction` and a design preview has no session to
+  end. Dev server stopped after the check.
+
+Net result: every item Task 12 flagged as unverified is now verified, and nothing found in doing so
+contradicts anything recorded above. The dashboard-data slice (Tasks 1-12) is fully implemented, fully
+tested (197/198 real test results, the one gap being a documented external rate limit), and its
+preview route confirmed rendering correctly.
