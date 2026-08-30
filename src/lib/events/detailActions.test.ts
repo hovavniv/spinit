@@ -143,13 +143,12 @@ describe('removeMustPlay', () => {
 });
 
 describe('saveEventDetails', () => {
-  test('updates a filled slot that already has a row, and writes notes', async () => {
+  test('updates a filled slot that already has a row', async () => {
     const table = tableDouble({ error: null });
     from.mockReturnValue(table);
 
     const result = await saveEventDetails(null, formData({
       eventId: EVENT_ID,
-      notes: 'Speech at 9pm',
       'ceremony-0-id': ROW_ID,
       'ceremony-0-title': 'A Thousand Years',
       'ceremony-0-artist': 'Christina Perri',
@@ -159,7 +158,9 @@ describe('saveEventDetails', () => {
     }));
 
     expect(result).toEqual({ ok: true });
-    expect(from).toHaveBeenCalledWith('events');
+    // `events` is NOT touched any more: notes left that table for their own
+    // two tables and their own two actions (design §3, §5.2).
+    expect(from).not.toHaveBeenCalledWith('events');
     expect(from).toHaveBeenCalledWith('event_must_play');
     expect(table.update).toHaveBeenCalled();
     // Slot 1 is empty and has no row: nothing is inserted for it.
@@ -172,7 +173,6 @@ describe('saveEventDetails', () => {
 
     await saveEventDetails(null, formData({
       eventId: EVENT_ID,
-      notes: '',
       'ceremony-0-id': ROW_ID,
       'ceremony-0-title': '   ',
       'ceremony-0-artist': '',
@@ -190,7 +190,6 @@ describe('saveEventDetails', () => {
 
     await saveEventDetails(null, formData({
       eventId: EVENT_ID,
-      notes: '',
       'ceremony-0-id': '',
       'ceremony-0-title': 'Hava Nagila',
       'ceremony-0-artist': 'Traditional',
