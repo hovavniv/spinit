@@ -73,14 +73,40 @@ export const getEventDetail = cache(async (eventId: string): Promise<EventDetail
     dj_id: data.dj_id,
     couple_names: data.couple_names,
     couple_status: data.couple_status,
-    // PostgREST returns every embed as an array, even a one-to-one. A DJ's
-    // read returns the private row; a partner's returns an EMPTY ARRAY,
-    // because the policy filters it. That is the boundary working, not an
-    // error — do not log it and do not treat it as a failed load.
-    privateNotes: data.event_private_notes?.[0]?.body ?? '',
-    sharedNotes: data.event_shared_notes?.[0]?.body ?? '',
+    // Both note tables declare `event_id` as PRIMARY KEY and FOREIGN KEY,
+    // which is PostgREST's documented condition for detecting a one-to-one
+    // relationship: a to-one embed comes back as an OBJECT (`{ body }`), not
+    // an array (`[{ body }]`). event_partners' FK is not unique, so it stays
+    // to-many and is read as an array below, unchanged.
+    //
+    // A DJ's read returns the private row; a partner's returns EMPTY
+    // (null/undefined), because the policy filters it. That is the boundary
+    // working, not an error — do not log it and do not treat it as a failed
+    // load. firstRow() normalises either shape so this holds even if the
+    // real embed shape (unverifiable until the migration lands) turns out to
+    // differ from what's expected here.
+    privateNotes: firstRow(data.event_private_notes)?.body ?? '',
+    sharedNotes: firstRow(data.event_shared_notes)?.body ?? '',
     partners: data.event_partners ?? [],
     mustPlay: data.event_must_play ?? [],
     blocklist: data.event_blocklist ?? [],
   };
 });
+
+/**
+ * PostgREST returns a to-MANY embed as an array and a to-ONE embed as an
+ * OBJECT. Both note tables declare `event_id` as primary key AND foreign key,
+ * which is PostgREST's one-to-one detection condition, so they come back as
+ * `{ body }` rather than `[{ body }]`.
+ *
+ * Reading a to-one embed as an array yields undefined, which defaults to ''.
+ * The note then renders blank and the next save upserts that blank over the
+ * stored text -- a silent destroy, not merely a silent read failure.
+ *
+ * Normalised rather than indexed so this holds whichever shape comes back.
+ * The migration is not pushed yet, so the real shape cannot be observed here.
+ */
+function firstRow<T>(embed: T | T[] | null | undefined): T | undefined {
+  if (embed == null) return undefined;
+  return Array.isArray(embed) ? embed[0] : embed;
+}

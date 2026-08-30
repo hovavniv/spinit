@@ -73,6 +73,11 @@ export interface EventDetail {
    * The two note bodies (design §3, §5.2). Strings, never null: both tables
    * default the body to '' and the migration backfills a row per event.
    *
+   * Each note table's `event_id` is both primary key and foreign key, which
+   * is PostgREST's one-to-one detection condition, so the DAL reads the
+   * embed back as an OBJECT (`{ body }`), not an array — see
+   * `firstRow()` in detailDal.ts.
+   *
    * `privateNotes` is '' for a partner because their read returns no row at
    * all — the policy filters it. That is the boundary working, not an error.
    */
