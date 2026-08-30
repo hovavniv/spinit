@@ -195,21 +195,37 @@ export async function saveEventDetails(
     const { id, title, artist } = slotParsed.data;
 
     if (id && title) {
-      const { error } = await supabase
+      // .select() turns this back into a row check: a policy-filtered or
+      // nonexistent id/eventId/segment combination would otherwise match zero
+      // rows and Postgres would still report success -- the repo's documented
+      // silent-zero-row shape (see CLAUDE.md).
+      const { data: updated, error } = await supabase
         .from('event_must_play')
         .update({ title, artist })
         .eq('id', id)
         .eq('event_id', eventId)
-        .eq('segment', 'ceremony');
+        .eq('segment', 'ceremony')
+        .select();
       if (error) return failure('saveEventDetails', eventId, error);
+      if (!updated || updated.length === 0) {
+        return failure('saveEventDetails', eventId, {
+          message: 'update matched zero rows',
+        });
+      }
     } else if (id && !title) {
-      const { error } = await supabase
+      const { data: deleted, error } = await supabase
         .from('event_must_play')
         .delete()
         .eq('id', id)
         .eq('event_id', eventId)
-        .eq('segment', 'ceremony');
+        .eq('segment', 'ceremony')
+        .select();
       if (error) return failure('saveEventDetails', eventId, error);
+      if (!deleted || deleted.length === 0) {
+        return failure('saveEventDetails', eventId, {
+          message: 'delete matched zero rows',
+        });
+      }
     } else if (!id && title) {
       const { error } = await supabase.from('event_must_play').insert({
         event_id: eventId,
@@ -221,6 +237,14 @@ export async function saveEventDetails(
       if (error) return failure('saveEventDetails', eventId, error);
     }
     // !id && !title: an empty slot that has never been filled. Nothing to do.
+    // If every slot takes this branch the loop issues no statement at all and
+    // this still returns { ok: true } -- deliberate, not the silent-zero-row
+    // bug the .select() checks above guard against. There is nothing to save,
+    // and it is not an information leak: a caller who cannot reach this event
+    // at all is turned away before the page even renders (getEventDetail
+    // returns null for a non-participant, design §2.5), so a legitimately
+    // empty slot and an unreachable event are never distinguishable from this
+    // response either way. Do not "fix" this into a failure.
   }
 
   revalidatePath(`/events/${eventId}`);
