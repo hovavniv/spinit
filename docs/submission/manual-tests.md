@@ -511,3 +511,7 @@ different points — not because anything regressed between them, but because of
 file, that is expected** and does not by itself mean something broke. Check the failure's own error
 text before concluding a regression: `over_email_send_rate_limit` (429) is the mailer cap, not an app
 or RLS defect. A failure with a different message is worth investigating; this one is not.
+
+Corroborated independently: a second session ran the full suite four times in roughly ten minutes,
+from the same clean tree at the same commit, and read 197, 196, and 199 passing (out of 198-200
+depending on which run) at different points in that window — same mechanism, same conclusion.
