@@ -4,7 +4,8 @@ import { cache } from 'react';
 
 import { createClient } from '@/lib/supabase/server';
 import { requireUser } from '@/lib/auth/dal';
-import type { PastEventRow } from './types';
+import { isUuid } from '@/lib/validation';
+import type { PastEventRow, EventRecap } from './types';
 
 /**
  * Every completed event of the CURRENT verified DJ, newest first.
@@ -51,4 +52,80 @@ export const listPastEvents = cache(async (): Promise<PastEventRow[]> => {
   }
 
   return data ?? [];
+});
+
+/**
+ * One completed event of the CURRENT verified DJ, with its playlist in order.
+ * Returns null for anything this DJ may not see.
+ *
+ * Calls requireUser() itself for the same reason listPastEvents does: a
+ * forgotten requireUser() upstream must not be able to turn this into a way to
+ * read another DJ's event.
+ *
+ * FOUR CASES COLLAPSE INTO null, deliberately (design §4.2): a malformed id, a
+ * nonexistent event, another DJ's event, and an event that is not completed.
+ * The page turns all four into the same notFound(), so the route cannot be
+ * used to probe which event ids exist.
+ *
+ * `.eq('dj_id', user.id)` is defence in depth and NOT the primary control --
+ * the RLS select policy on public.events is. Written for consistency with
+ * listPastEvents, because two DALs in one repo applying opposite rules is
+ * worse than either rule.
+ *
+ * The second query carries no owner predicate and needs none: played_songs'
+ * select policy scopes rows through their event's dj_id, and the first query
+ * has already established ownership or returned null.
+ *
+ * ERRORS THROW, they are not swallowed into null (design §8). listPastEvents
+ * returns [] on error because a degraded list is still a list. Here, returning
+ * null would tell a DJ that a wedding they know they ran does not exist, with
+ * no retry offered. Throwing reaches src/app/error.tsx, which has one.
+ */
+export const getEventRecap = cache(async (id: string): Promise<EventRecap | null> => {
+  // Before any query: `where id = 'banana'` raises 22P02 in Postgres, which
+  // would surface as a 500 where a 404 belongs.
+  if (!isUuid(id)) return null;
+
+  const user = await requireUser();
+  const supabase = await createClient();
+
+  const { data: event, error: eventError } = await supabase
+    .from('events')
+    .select('id, couple_names, venue, event_date')
+    .eq('id', id)
+    .eq('dj_id', user.id)
+    .eq('status', 'completed')
+    .maybeSingle();
+
+  if (eventError) {
+    console.error('getEventRecap: failed to load the event', {
+      eventId: id,
+      userId: user.id,
+      message: eventError.message,
+    });
+    throw new Error('getEventRecap: could not load the event');
+  }
+
+  if (!event) return null;
+
+  // position carries `unique (event_id, position)` and `check (position > 0)`,
+  // so within one event this is a total order and needs no tiebreaker --
+  // unlike listPastEvents, where two events can share a date.
+  const { data: songs, error: songsError } = await supabase
+    .from('played_songs')
+    .select('position, title, artist, suggested_by')
+    .eq('event_id', id)
+    .order('position', { ascending: true });
+
+  if (songsError) {
+    console.error('getEventRecap: failed to load the playlist', {
+      eventId: id,
+      userId: user.id,
+      message: songsError.message,
+    });
+    throw new Error('getEventRecap: could not load the playlist');
+  }
+
+  // An event with no songs is a valid recap, not an error (design §7.4).
+  return { event, songs: songs ?? [] };
 });
