@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;600;700;800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+  <style>
+    body{margin:0;background:oklch(0.97 0.014 75);}
+    *{box-sizing:border-box;}
+    ::selection{background:oklch(0.64 0.19 350 / 0.22);}
+    a{color:oklch(0.55 0.17 265);text-decoration:none;}
+    a:hover{color:oklch(0.64 0.19 350);}
+    @keyframes spinitRecordSpin{from{transform:rotate(0deg);}to{transform:rotate(360deg);}}
+  </style>
+</helmet>
+
+<div style="font-family:'Inter',sans-serif;color:oklch(0.22 0.02 50);background:oklch(0.97 0.014 75);width:100%;min-height:100vh;display:flex;">
+
+  <div style="width:240px;flex-shrink:0;background:oklch(0.22 0.02 50);padding:32px 20px;display:flex;flex-direction:column;justify-content:space-between;position:sticky;top:0;height:100vh;overflow:hidden;">
+    <div style="position:absolute;width:140px;height:140px;border-radius:50%;background:oklch(0.3 0.03 350 / 0.35);top:-50px;right:-60px;"></div>
+    <div style="position:absolute;width:110px;height:110px;border-radius:50%;background:oklch(0.28 0.03 265 / 0.35);bottom:-40px;left:-50px;"></div>
+    <div>
+      <div style="display:flex;align-items:center;gap:10px;padding:0 12px;margin-bottom:40px;">
+        <div style="width:20px;height:20px;border-radius:50%;position:relative;flex-shrink:0;background:radial-gradient(circle at 35% 32%, oklch(0.4 0.01 50), oklch(0.13 0.01 50) 65%);box-shadow:0 1px 3px rgba(0,0,0,0.35);animation:spinitRecordSpin 6s linear infinite;">
+          <div style="position:absolute;inset:3.5px;border-radius:50%;border:1px solid oklch(0.35 0.01 50 / 0.7);"></div>
+          <div style="position:absolute;inset:7px;border-radius:50%;border:1px solid oklch(0.35 0.01 50 / 0.5);"></div>
+          <div style="position:absolute;top:50%;left:50%;width:8px;height:8px;background:{{ accent }};border-radius:50%;transform:translate(-50%,-50%);"></div>
+          <div style="position:absolute;top:50%;left:50%;width:2.5px;height:2.5px;background:oklch(0.97 0.014 75);border-radius:50%;transform:translate(-50%,-50%);"></div>
+        </div>
+        <span style="font-family:'Sora',sans-serif;font-weight:800;font-size:20px;letter-spacing:-0.02em;color:white;">Spinit</span>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:4px;">
+        <a href="./Spinit DJ Dashboard.dc.html" style="padding:11px 16px;border-radius:12px;color:oklch(0.75 0.01 50);font-weight:600;font-size:14px;">Dashboard</a>
+        <a href="./Spinit Upcoming Events.dc.html" style="padding:11px 16px;border-radius:12px;color:oklch(0.75 0.01 50);font-weight:600;font-size:14px;">Upcoming events</a>
+        <a href="./Spinit Past Events.dc.html" style="padding:11px 16px;border-radius:12px;color:oklch(0.75 0.01 50);font-weight:600;font-size:14px;">Past events</a>
+      </div>
+    </div>
+    <div style="display:flex;align-items:center;gap:12px;padding:0 12px;">
+      <div style="width:38px;height:38px;border-radius:50%;background:oklch(0.3 0.03 265 / 0.5);color:white;font-weight:700;font-size:13px;display:flex;align-items:center;justify-content:center;flex-shrink:0;">JE</div>
+      <div style="min-width:0;">
+        <div style="color:white;font-weight:600;font-size:13.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">Jordan Ellis</div>
+        <div style="color:oklch(0.6 0.01 50);font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">Ellis Sound Co.</div>
+      </div>
+    </div>
+  </div>
+
+  <div style="flex:1;min-width:0;padding:56px;">
+    <div style="max-width:760px;margin:0 auto;">
+
+      <a href="./Spinit DJ Dashboard.dc.html" style="font-size:13.5px;font-weight:600;color:oklch(0.5 0.02 50);">← Back to dashboard</a>
+
+      <div style="display:flex;justify-content:space-between;align-items:flex-end;margin:20px 0 8px;gap:20px;flex-wrap:wrap;">
+        <div>
+          <div style="font-size:13px;font-weight:600;letter-spacing:0.04em;text-transform:uppercase;color:oklch(0.5 0.19 350);margin-bottom:8px;">Completed</div>
+          <h1 style="font-family:'Sora',sans-serif;font-size:34px;font-weight:800;letter-spacing:-0.02em;margin:0;">{{ data.couple }}</h1>
+          <div style="font-size:14.5px;color:oklch(0.45 0.02 50);margin-top:6px;">{{ data.date }} · {{ data.venue }}</div>
+        </div>
+        <button style="background:{{ accent }};color:white;border:none;padding:12px 22px;border-radius:999px;font-family:'Inter',sans-serif;font-weight:700;font-size:14px;cursor:pointer;white-space:nowrap;">Send to couple</button>
+      </div>
+
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin:32px 0;">
+        <div style="background:white;border:1px solid oklch(0.9 0.012 60);border-radius:16px;padding:16px;">
+          <div style="font-family:'Sora',sans-serif;font-size:22px;font-weight:800;">{{ data.songCount }}</div>
+          <div style="font-size:12px;color:oklch(0.5 0.02 50);">Songs played</div>
+        </div>
+        <div style="background:white;border:1px solid oklch(0.9 0.012 60);border-radius:16px;padding:16px;">
+          <div style="font-family:'Sora',sans-serif;font-size:22px;font-weight:800;">{{ data.length }}</div>
+          <div style="font-size:12px;color:oklch(0.5 0.02 50);">Party length</div>
+        </div>
+        <div style="background:white;border:1px solid oklch(0.9 0.012 60);border-radius:16px;padding:16px;">
+          <div style="font-family:'Sora',sans-serif;font-size:22px;font-weight:800;">{{ data.closedTime }}</div>
+          <div style="font-size:12px;color:oklch(0.5 0.02 50);">Closed</div>
+        </div>
+        <div style="background:white;border:1px solid oklch(0.9 0.012 60);border-radius:16px;padding:16px;">
+          <div style="font-family:'Sora',sans-serif;font-size:22px;font-weight:800;">{{ data.mostActiveGuest }}</div>
+          <div style="font-size:12px;color:oklch(0.5 0.02 50);">Most active guest</div>
+        </div>
+        <div style="background:white;border:1px solid oklch(0.9 0.012 60);border-radius:16px;padding:16px;grid-column:span 2;">
+          <div style="font-family:'Sora',sans-serif;font-size:22px;font-weight:800;">{{ data.mostRequestedSong }} <span style="font-size:14px;font-weight:600;color:oklch(0.5 0.02 50);">— {{ data.mostRequestedArtist }} ({{ data.mostRequestedVotes }} votes)</span></div>
+          <div style="font-size:12px;color:oklch(0.5 0.02 50);">Most requested song</div>
+        </div>
+      </div>
+
+      <div style="background:white;border-radius:20px;box-shadow:0 30px 60px -30px rgba(30,20,10,0.2);padding:32px 28px;position:relative;">
+        <div style="position:absolute;top:0;left:24px;right:24px;height:1px;background:repeating-linear-gradient(90deg, oklch(0.85 0.012 60) 0 8px, transparent 8px 16px);"></div>
+        <div style="font-family:'Sora',sans-serif;font-weight:700;font-size:16px;margin-bottom:20px;">Final playlist</div>
+        <div style="display:flex;flex-direction:column;gap:14px;">
+          <sc-for list="{{ data.playlist }}" as="track" hint-placeholder-count="8">
+            <div style="display:flex;justify-content:space-between;align-items:baseline;gap:12px;">
+              <div style="min-width:0;"><span style="font-weight:600;font-size:14.5px;">{{ track.rank }}. {{ track.title }}</span> <span style="font-size:13px;color:oklch(0.5 0.02 50);">— {{ track.artist }}</span></div>
+              <span style="font-size:12px;font-weight:600;color:{{ track.tagColor }};white-space:nowrap;">{{ track.tag }}</span>
+            </div>
+          </sc-for>
+        </div>
+        <div style="position:absolute;bottom:0;left:24px;right:24px;height:1px;background:repeating-linear-gradient(90deg, oklch(0.85 0.012 60) 0 8px, transparent 8px 16px);"></div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{
+  &quot;accentColor&quot;: {&quot;editor&quot;:&quot;color&quot;,&quot;default&quot;:&quot;oklch(0.64 0.19 350)&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;options&quot;:[&quot;oklch(0.64 0.19 350)&quot;,&quot;oklch(0.55 0.17 265)&quot;,&quot;oklch(0.62 0.13 190)&quot;],&quot;section&quot;:&quot;Theme&quot;}
+}">
+const RECAPS = {
+  'noa-eitan': {
+    couple: 'Noa & Eitan', date: 'July 18, 2026', venue: 'Franklin Hall',
+    songCount: 10, length: '5h', closedTime: '12:22 AM', mostActiveGuest: "Eitan's dad", mostRequestedSong: 'Uptown Funk', mostRequestedArtist: 'Bruno Mars', mostRequestedVotes: 24,
+    playlist: [
+      { title: 'Perfect', artist: 'Ed Sheeran', tag: 'First dance', tagColor: 'oklch(0.5 0.19 350)' },
+      { title: 'Uptown Funk', artist: 'Bruno Mars', tag: '24 guests', tagColor: 'oklch(0.5 0.02 50)' },
+      { title: 'September', artist: 'Earth, Wind & Fire', tag: '19 guests', tagColor: 'oklch(0.5 0.02 50)' },
+      { title: 'Levitating', artist: 'Dua Lipa', tag: 'requested by Noa', tagColor: 'oklch(0.5 0.02 50)' },
+      { title: "Don't Stop Believin'", artist: 'Journey', tag: "requested by Eitan's dad", tagColor: 'oklch(0.5 0.02 50)' },
+      { title: 'Mr. Brightside', artist: 'The Killers', tag: '16 guests', tagColor: 'oklch(0.5 0.02 50)' },
+      { title: 'I Wanna Dance with Somebody', artist: 'Whitney Houston', tag: '12 guests', tagColor: 'oklch(0.5 0.02 50)' },
+      { title: 'Shut Up and Dance', artist: 'WALK THE MOON', tag: '9 guests', tagColor: 'oklch(0.5 0.02 50)' },
+      { title: 'Sweet Caroline', artist: 'Neil Diamond', tag: 'requested by the bridal party', tagColor: 'oklch(0.5 0.02 50)' },
+      { title: 'Last Dance', artist: 'Donna Summer', tag: 'closing song', tagColor: 'oklch(0.5 0.02 50)' }
+    ]
+  },
+  'claire-ben': {
+    couple: 'Claire & Ben', date: 'June 6, 2026', venue: 'Rooftop at Dune',
+    songCount: 8, length: '4h', closedTime: '11:58 PM', mostActiveGuest: "Claire's mom", mostRequestedSong: 'Uptown Funk', mostRequestedArtist: 'Bruno Mars', mostRequestedVotes: 20,
+    playlist: [
+      { title: 'At Last', artist: 'Etta James', tag: 'First dance', tagColor: 'oklch(0.5 0.19 350)' },
+      { title: 'Uptown Funk', artist: 'Bruno Mars', tag: '20 guests', tagColor: 'oklch(0.5 0.02 50)' },
+      { title: 'Valerie', artist: 'Amy Winehouse', tag: '14 guests', tagColor: 'oklch(0.5 0.02 50)' },
+      { title: 'Superstition', artist: 'Stevie Wonder', tag: 'requested by Ben', tagColor: 'oklch(0.5 0.02 50)' },
+      { title: 'Dancing Queen', artist: 'ABBA', tag: '17 guests', tagColor: 'oklch(0.5 0.02 50)' },
+      { title: 'September', artist: 'Earth, Wind & Fire', tag: '15 guests', tagColor: 'oklch(0.5 0.02 50)' },
+      { title: "Ain't No Mountain High Enough", artist: 'Marvin Gaye & Tammi Terrell', tag: "requested by Claire's mom", tagColor: 'oklch(0.5 0.02 50)' },
+      { title: 'Last Dance', artist: 'Donna Summer', tag: 'closing song', tagColor: 'oklch(0.5 0.02 50)' }
+    ]
+  }
+};
+
+class Component extends DCLogic {
+  componentDidMount() {
+    const params = new URLSearchParams(window.location.search);
+    const key = params.get('event');
+    if (key && RECAPS[key]) this.setState({ eventKey: key });
+  }
+
+  renderVals() {
+    const key = this.state && this.state.eventKey && RECAPS[this.state.eventKey] ? this.state.eventKey : 'noa-eitan';
+    const raw = RECAPS[key];
+    const data = { ...raw, playlist: raw.playlist.map((t, i) => ({ ...t, rank: i + 1 })) };
+    return { accent: this.props.accentColor || 'oklch(0.64 0.19 350)', data };
+  }
+}
+</script>
+</body>
+</html>
