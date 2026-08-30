@@ -18,11 +18,13 @@
    Targets whatever .env.local points at -- hosted project or a local stack.
 
    Idempotent for ADDITIONS and EDITS, not for REMOVALS. Every write is an
-   upsert on a derived id, so re-running converges. But this slice grants no
-   delete and defines no delete policy, so if you shorten a `songs` array and
-   re-run, the rows you removed stay in the database forever and the counts in
-   Task 6 Step 5 stop matching. Removing seeded data is a manual job until a
-   delete policy exists.
+   upsert on a derived id, so re-running converges. But for `events` and
+   `played_songs` this slice grants no delete and defines no delete policy, so
+   if you shorten a `songs` array and re-run, the rows you removed stay in the
+   database forever and the counts in Task 6 Step 5 stop matching. Removing
+   seeded data from those two tables is a manual job until a delete policy
+   exists. `event_must_play` and `event_blocklist` are not affected -- they do
+   have a delete policy and grant, so the seed converges on removals for them.
    --------------------------------------------------------------------------- */
 
 import { createHash } from 'node:crypto';
@@ -138,6 +140,9 @@ const EVENTS = [
       ['I Wanna Dance with Somebody', 'Whitney Houston', 'Eitan'],
       ['Closing Time', 'Semisonic', null],
     ],
+    mustPlay: [],
+    blocklist: [],
+    notes: null,
   },
   {
     slug: 'claire-ben',
@@ -155,6 +160,9 @@ const EVENTS = [
       ['Take On Me', 'a-ha', 'Guest'],
       ['Time of My Life', 'Bill Medley', 'Claire'],
     ],
+    mustPlay: [],
+    blocklist: [],
+    notes: null,
   },
   {
     slug: 'ruth-adam',
@@ -163,6 +171,9 @@ const EVENTS = [
     event_date: '2026-05-09',
     status: 'completed',
     songs: [], // must render "0 songs played"
+    mustPlay: [],
+    blocklist: [],
+    notes: null,
   },
   {
     slug: 'lena-mark',
@@ -171,6 +182,9 @@ const EVENTS = [
     event_date: '2026-04-11',
     status: 'cancelled',
     songs: [], // must NOT appear on the screen at all
+    mustPlay: [],
+    blocklist: [],
+    notes: null,
   },
   {
     slug: 'maya-tom',
@@ -184,6 +198,32 @@ const EVENTS = [
     event_date: inDays(21),
     status: 'upcoming',
     songs: [], // an event that has not happened yet has no played songs
+    mustPlay: [],
+    blocklist: [],
+    notes: null,
+  },
+  {
+    slug: 'priya-alex',
+    couple_names: 'Priya & Alex',
+    venue: 'Brookline Barn',
+    // Computed, never a fixed 2026-09-12: a hardcoded future date silently
+    // becomes an "upcoming" event whose date has already passed -- the same
+    // class of wrong data as the `live` row this seed omits, just slower to go
+    // wrong. This is the row the event page is demonstrated against.
+    event_date: inDays(13),
+    status: 'upcoming',
+    songs: [],
+    mustPlay: [
+      ['ceremony', 'A Thousand Years', 'Christina Perri', 'Walking down the aisle'],
+      ['ceremony', 'Hava Nagila', 'Traditional', 'Breaking the glass'],
+      ['reception', "Can't Help Falling in Love", 'Elvis Presley', 'First dance'],
+      ['party', 'September', 'Earth, Wind & Fire', 'Guaranteed dance-floor filler'],
+    ],
+    blocklist: [
+      ['party', 'artist', 'Nickelback'],
+      ['party', 'song', 'Cha Cha Slide'],
+    ],
+    notes: "Alex's dad wants to do a surprise speech around 9pm — leave room in the timeline.",
   },
 ];
 
@@ -232,6 +272,48 @@ async function main() {
         .upsert(rows, { onConflict: 'id' });
       if (songError) {
         console.error(`seed-demo: failed to upsert songs for ${event.slug}: ${songError.message}`);
+        process.exit(1);
+      }
+    }
+
+    if (event.notes) {
+      const { error: notesError } = await supabase
+        .from('events')
+        .update({ notes: event.notes })
+        .eq('id', eventId);
+      if (notesError) {
+        console.error(`seed-demo: failed to set notes for ${event.slug}: ${notesError.message}`);
+        process.exit(1);
+      }
+    }
+
+    if (event.mustPlay.length > 0) {
+      const rows = event.mustPlay.map(([segment, title, artist, moment], index) => ({
+        id: derivedId(djId, `${event.slug}:mustplay:${index + 1}`),
+        event_id: eventId,
+        segment,
+        title,
+        artist,
+        moment,
+      }));
+      const { error } = await supabase.from('event_must_play').upsert(rows, { onConflict: 'id' });
+      if (error) {
+        console.error(`seed-demo: failed to upsert must-plays for ${event.slug}: ${error.message}`);
+        process.exit(1);
+      }
+    }
+
+    if (event.blocklist.length > 0) {
+      const rows = event.blocklist.map(([segment, entry_type, value], index) => ({
+        id: derivedId(djId, `${event.slug}:blocklist:${index + 1}`),
+        event_id: eventId,
+        segment,
+        entry_type,
+        value,
+      }));
+      const { error } = await supabase.from('event_blocklist').upsert(rows, { onConflict: 'id' });
+      if (error) {
+        console.error(`seed-demo: failed to upsert blocklist for ${event.slug}: ${error.message}`);
         process.exit(1);
       }
     }
