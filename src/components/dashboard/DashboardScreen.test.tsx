@@ -1,5 +1,6 @@
 import { render, screen } from '@testing-library/react';
-import { describe, expect, it } from 'vitest';
+import userEvent from '@testing-library/user-event';
+import { describe, expect, it, vi } from 'vitest';
 import { DashboardScreen } from './DashboardScreen';
 import { demoData } from '@/lib/dashboard/demoData';
 
@@ -80,5 +81,89 @@ describe('DashboardScreen', () => {
     // empty both produce zero visible text, so only the element's presence
     // actually distinguishes them (see UpcomingEvents.tsx).
     expect(screen.queryByTestId('days-until-chip')).not.toBeInTheDocument();
+  });
+
+  describe('empty states', () => {
+    const emptyData = {
+      dj: { name: 'Jordan Ellis', company: 'Ellis Sound Co.' },
+      now: '2026-08-27T20:00',
+      liveEvent: null,
+      upcoming: [],
+      past: [],
+    };
+
+    it('tells a DJ with no upcoming events that there are none', () => {
+      render(<DashboardScreen data={emptyData} signOutAction={vi.fn()} />);
+      expect(screen.getByText('No upcoming events yet.')).toBeInTheDocument();
+    });
+
+    it('tells a DJ with no past events that there are none', () => {
+      render(<DashboardScreen data={emptyData} signOutAction={vi.fn()} />);
+      expect(
+        screen.getByText('No past events yet. Once an event wraps, its recap shows up here.'),
+      ).toBeInTheDocument();
+    });
+
+    it('shows neither empty message once events exist', () => {
+      render(<DashboardScreen data={demoData} signOutAction={vi.fn()} />);
+      expect(screen.queryByText('No upcoming events yet.')).not.toBeInTheDocument();
+      expect(
+        screen.queryByText('No past events yet. Once an event wraps, its recap shows up here.'),
+      ).not.toBeInTheDocument();
+    });
+  });
+
+  describe('sign out', () => {
+    it('offers a sign-out control when the DJ has events', () => {
+      render(<DashboardScreen data={demoData} signOutAction={vi.fn()} />);
+      expect(screen.getByRole('button', { name: 'Sign out' })).toBeInTheDocument();
+    });
+
+    it('offers a sign-out control when the DJ has none', () => {
+      render(
+        <DashboardScreen
+          data={{
+            dj: { name: 'Jordan Ellis', company: 'Ellis Sound Co.' },
+            now: '2026-08-27T20:00',
+            liveEvent: null,
+            upcoming: [],
+            past: [],
+          }}
+          signOutAction={vi.fn()}
+        />,
+      );
+      expect(screen.getByRole('button', { name: 'Sign out' })).toBeInTheDocument();
+    });
+
+    it('submits the action it was given, not one of its own', async () => {
+      const signOutAction = vi.fn();
+      const user = userEvent.setup();
+      render(<DashboardScreen data={demoData} signOutAction={signOutAction} />);
+      await user.click(screen.getByRole('button', { name: 'Sign out' }));
+      expect(signOutAction).toHaveBeenCalled();
+    });
+
+    it('renders no sign-out control when no action is supplied', () => {
+      render(<DashboardScreen data={demoData} />);
+      expect(screen.queryByRole('button', { name: 'Sign out' })).not.toBeInTheDocument();
+    });
+  });
+
+  describe('profile prompt', () => {
+    it('renders the profile prompt when given one', () => {
+      render(
+        <DashboardScreen
+          data={demoData}
+          signOutAction={vi.fn()}
+          profilePrompt={<p>finish your profile</p>}
+        />,
+      );
+      expect(screen.getByText('finish your profile')).toBeInTheDocument();
+    });
+
+    it('renders nothing extra when the prompt is absent', () => {
+      render(<DashboardScreen data={demoData} signOutAction={vi.fn()} />);
+      expect(screen.queryByText('finish your profile')).not.toBeInTheDocument();
+    });
   });
 });

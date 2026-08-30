@@ -23,22 +23,28 @@ export function PastEvents({ events }: PastEventsProps) {
         viewAllLabel="View all past events"
         viewAllHref="/events/past"
       />
-      <div className={styles.list}>
-        {events.map((event) => (
-          <Link key={event.id} href={`/events/${event.id}/recap`} className={styles.row}>
-            <div>
-              <div className={styles.coupleNames}>{event.coupleNames}</div>
-              <div className={styles.details}>
-                {formatPastDate(event.date)} · {event.venue}
+      {events.length === 0 ? (
+        <p className={styles.empty}>
+          No past events yet. Once an event wraps, its recap shows up here.
+        </p>
+      ) : (
+        <div className={styles.list}>
+          {events.map((event) => (
+            <Link key={event.id} href={`/events/${event.id}/recap`} className={styles.row}>
+              <div>
+                <div className={styles.coupleNames}>{event.coupleNames}</div>
+                <div className={styles.details}>
+                  {formatPastDate(event.date)} · {event.venue}
+                </div>
               </div>
-            </div>
-            <div className={styles.right}>
-              <span className={styles.songsPlayed}>{event.songsPlayed} songs played</span>
-              <span className={styles.viewRecap}>View recap →</span>
-            </div>
-          </Link>
-        ))}
-      </div>
+              <div className={styles.right}>
+                <span className={styles.songsPlayed}>{event.songsPlayed} songs played</span>
+                <span className={styles.viewRecap}>View recap →</span>
+              </div>
+            </Link>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

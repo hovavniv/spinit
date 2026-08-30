@@ -21,7 +21,16 @@ export type LiveEvent = {
   coupleNames: string;
   venue: string;
   phase: EventPhase;
-  /** Full ISO instant WITH an explicit offset, e.g. '2026-08-27T20:00:00-07:00'. */
+  /**
+   * Local wall clock, 'YYYY-MM-DDTHH:mm', with NO offset and no trailing 'Z'.
+   *
+   * Composed by fromDb.ts from the event's `event_date` and `start_time`
+   * columns. `formatStartTime` reads the HH:mm substring with a regex and
+   * never constructs a Date, so this string is rendered verbatim — which is
+   * why the column is a bare `time` rather than a timestamptz, and why an
+   * offset here would be wrong rather than merely redundant
+   * (docs/specs/2026-08-29-dashboard-data-design.md §4).
+   */
   startedAt: string;
 };
 

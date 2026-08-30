@@ -331,3 +331,168 @@ into) instead of `docs/`, so the negation on `docs/submission/` actually takes e
 `docs/specs/2026-08-29-dj-dashboard-plan.md` still is. This means the earlier commit's claim — "gitignore
 un-ignores docs/submission" — was never actually exercised; it's corrected here rather than left
 standing.
+
+---
+
+## Task 12 — final manual verification, dashboard-data slice
+
+**Date:** 2026-08-30. Run from the worktree root, tip `2b70bd8`.
+
+### `npm run test` — real counts
+
+```
+$ npm run test
+ Test Files  2 failed | 20 passed (22)
+      Tests  2 failed | 196 passed (198)
+```
+
+Two failures, both read in full:
+
+1. `src/lib/auth/rls.integration.test.ts` — `signUp creates a profile row with metadata carried
+   through by the trigger`: `AuthApiError` `over_email_send_rate_limit` (429), "email rate limit
+   exceeded". This matches the pre-existing, documented mailer cap (Supabase's built-in mailer, 2
+   emails/hour project-wide; see this repo's CLAUDE.md). Not a defect, not new. The other 5 of 6
+   cases in that file passed live — same result already recorded above under "5 of 6 verified live";
+   nothing in this run changes that count or that reasoning.
+
+2. `src/lib/supabase/server.test.ts` — `passes httpOnly, sameSite, and path flags through to
+   createServerClient`: fails at module resolution, `Failed to resolve import "server-only" from
+   "src/lib/supabase/server.ts"`. **This is new and was not predicted by this task's brief.**
+   Diagnosed, not fixed (out of this task's scope — the fix would touch `vitest.config.ts` or
+   `node_modules`, neither of which this task is authorized to modify): this worktree's own
+   `node_modules/` contains nothing but a `.vite` cache directory (`ls node_modules/` shows only
+   `.vite`, no `next` package locally). Vitest's other 196 passing tests work anyway because Node's
+   own `require`/import resolution walks up past the worktree to the parent checkout's
+   `node_modules` when a package isn't found locally. The `server-only` alias in `vitest.config.ts`,
+   however, is written as a literal path relative to the worktree
+   (`./node_modules/next/dist/compiled/server-only/empty.js`), which does not exist in this
+   worktree, so that one specific resolution fails while everything else silently succeeds via the
+   parent checkout. This is an environment/dependency-installation gap in this worktree, not a code
+   defect in the dashboard-data slice or in `src/lib/supabase/server.ts` itself. Confirmed stable,
+   not a mid-install race: `node_modules/` mtime unchanged across repeated checks.
+
+`src/lib/dashboard/rls.integration.test.ts` (Task 11's suite) was also re-run standalone to confirm
+Task 11's result still holds against the live database:
+
+```
+$ npx vitest run src/lib/dashboard/rls.integration.test.ts
+ Test Files  1 passed (1)
+      Tests  5 passed (5)
+```
+
+5/5, no skips — matches Task 11's recorded result exactly. This slice's new dashboard queries,
+`listActiveEvents` and `listRecentPastEvents`, have now been verified against a real database via
+this suite, not merely against fixtures.
+
+### Preview route (`/design/dashboard`) — could not genuinely verify
+
+`npm run dev` was started in the background. It reported `✓ Ready in 486ms` and bound to port 3003
+(port 3000 was already in use by an unrelated process on this machine). However, every request to
+the dev server returned HTTP 500, including `/design/dashboard`:
+
+```
+$ curl -s -o /dev/null -w "%{http_code}\n" http://localhost:3003/design/dashboard
+500
+```
+
+The dev server's own log shows why, and it is the same root cause as the `server-only` test failure
+above: Turbopack cannot resolve the `next` package from this worktree, because this worktree's
+`node_modules/` is effectively empty.
+
+```
+Turbopack build encountered 1 error:
+./src/app
+Error: Could not find the Next.js package (next/package.json)
+Resolved from: .../dashboard-data/src/app
+```
+
+Unlike Vitest (via Node resolution) or `npm run typecheck`/`npm run build` in the last recorded run
+against a different tip, Turbopack does not walk up to a parent checkout's `node_modules`, so this
+failure is total: no route in this worktree can currently be served by `next dev`, not just the
+preview route. I did not fabricate a visual check — I have no way to load a browser against this
+worktree's dev server right now, and the dev server itself does not render anything to look at. What
+I did verify for real: the dev process starts without a startup-time crash, binds to a port, and logs
+`Ready`; and that every HTTP request against it 500s for the reason quoted above, which is an
+environment/dependency-installation gap in this worktree, not a defect in `DashboardScreen`, the
+`demoData` fixture, or the preview route's own code. This is out of this task's scope to fix (would
+require `npm install` or a `next.config.ts` change, neither named in this task's brief) and is
+reported here for a human to decide on, not silently worked around.
+
+As a substitute check within scope, I read the component wiring rather than claiming a rendered
+check: the design-preview route (`src/app/design/dashboard/page.tsx` per Task 8/10's prior work)
+renders `DashboardScreen` from the static `demoData` fixture, and `DashboardScreen.test.tsx` (the only
+test file covering `DashboardScreen`/`DashboardSidebar` — `DashboardSidebar` has no test file of its
+own) already carries 14 passing unit/RTL tests covering the sign-out control and layout wiring at the
+component level. That is a code-level check, not a rendered-page check, and I am stating the
+distinction rather than blurring it.
+
+### Summary
+
+- Unit + RTL suite: 196 of 198 tests passed across 22 test files (20 files fully green, 2 files with
+  one failure each). Both failures diagnosed above; neither is a defect in the dashboard-data slice.
+- `src/lib/dashboard/rls.integration.test.ts` (Task 11): 5/5 passed live against the real database,
+  no skips — re-confirmed in this session, unchanged from Task 11's own result.
+- `src/lib/auth/rls.integration.test.ts`: 5/6 passed live; the sixth is the documented mailer
+  rate-limit case, unchanged from the pre-existing record above.
+- Preview route: **not genuinely verified visually** in this session — the dev server 500s on every
+  route in this worktree due to a `node_modules` gap unrelated to this slice's code. Verified instead,
+  and only, that the dev process starts and that the 500 traces to Turbopack's module resolution, plus
+  the existing component-level test coverage for the same UI.
+- `listActiveEvents` and `listRecentPastEvents` (this slice's dashboard queries) are now verified
+  against a real, live Supabase database, not merely against fixtures, via Task 11's suite re-run
+  above.
+
+## Correction, 2026-08-30 — the node_modules gap above is fixed, and both flagged items are now real
+
+The "could not genuinely verify" items above were an environment gap, not a code defect: this
+worktree's `node_modules/` had never been populated (`npm install` was never run in it — confirmed by
+comparing against the other worktrees in this repo, `dj-dashboard` and `past-events`, which both have
+a full `node_modules/next`). Fixed by running `npm install` in this worktree (458 packages added, 0
+vulnerabilities). Both checks were then re-run for real:
+
+- **`npm run test`, re-run after the install:** `Test Files 1 failed | 21 passed (22)`, `Tests 1 failed
+  | 197 passed (198)`. The `server.test.ts` failure recorded above is gone — it was the same
+  `node_modules` gap. The one remaining failure is the same, already-documented mailer rate limit
+  (`AuthApiError`, `over_email_send_rate_limit`, 429) on `src/lib/auth/rls.integration.test.ts`'s
+  `signUp` case — environmental, not a defect, not part of this slice.
+- **Preview route, actually loaded:** `npm run dev` (port 3001, `next dev` / Turbopack, no `next.config.ts`
+  or install changes needed beyond the `npm install` above) then `curl http://localhost:3001/design/dashboard`
+  → `HTTP 200`. The response body contains `Jordan Ellis`, `Ellis Sound`, and `8:00 PM` (the live banner,
+  rendered from `demoData`'s `startedAt`), and does **not** contain "Sign out" — correct per Task 8/10's
+  own spec, since the preview route passes no `signOutAction` and a design preview has no session to
+  end. Dev server stopped after the check.
+
+Net result: every item Task 12 flagged as unverified is now verified, and nothing found in doing so
+contradicts anything recorded above. The dashboard-data slice (Tasks 1-12) is fully implemented, fully
+tested (197/198 real test results, the one gap being a documented external rate limit), and its
+preview route confirmed rendering correctly.
+
+## Empty-states manual check (fix-spec F4), performed 2026-08-30
+
+Plan Task 12 Step 2 required editing the preview route temporarily to pass empty `upcoming`/`past`
+arrays and confirm both empty-state messages render, then reverting the edit. This was never actually
+done when Task 12 was originally executed — it was silently skipped, not recorded as skipped. Performed
+for real now, separately from that original session.
+
+**What was checked:** `src/app/design/dashboard/page.tsx` was temporarily changed so `DashboardScreen`
+received `data={{ ...demoData, upcoming: [], past: [] }}` (keeping `dj`, `now`, and `liveEvent` from
+`demoData` as-is). `npm run dev` was started (bound to port 3001; port 3000 was already in use by
+another process), then:
+
+```
+curl -s http://localhost:3001/design/dashboard | grep -o "No upcoming events yet\.\|No past events yet\."
+```
+
+Actual output:
+```
+No upcoming events yet.
+No past events yet.
+No upcoming events yet.
+No past events yet.
+```
+
+Both empty-state messages are present (each appears twice — once in the rendered HTML, once in the
+RSC flight payload embedded in the same response; not a defect). The dev server was then stopped and
+confirmed stopped (`pgrep -fl "next dev"` returned nothing). The temporary edit to
+`src/app/design/dashboard/page.tsx` was reverted; `git diff src/app/design/dashboard/page.tsx` showed
+no output, confirming an exact revert.

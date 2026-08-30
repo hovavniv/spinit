@@ -1,6 +1,10 @@
 import type { Metadata } from 'next';
 import { requireUser, getProfile } from '@/lib/auth/dal';
 import { updateProfile, signOut } from '@/lib/auth/actions';
+import { DashboardScreen } from '@/components/dashboard/DashboardScreen';
+import { listActiveEvents, listRecentPastEvents } from '@/lib/dashboard/dal';
+import { toDashboardData } from '@/lib/dashboard/fromDb';
+import { currentLocalNow } from '@/lib/dashboard/now';
 import { CompleteProfile } from './CompleteProfile';
 import { shouldPromptForProfile } from './shouldPromptForProfile';
 
@@ -9,42 +13,38 @@ export const metadata: Metadata = {
 };
 
 /**
- * A protected placeholder proving the session, the route guard, and RLS work
- * (design 1). The real DJ Dashboard artboard is a later chunk — this stays
- * minimal and functional rather than trying to match any specific visual
- * design.
+ * The DJ Dashboard, populated from the signed-in DJ's own rows
+ * (docs/specs/2026-08-29-dashboard-data-design.md §7).
  *
  * Calls `requireUser()` directly here, not in a layout: Next's own docs warn
  * that a layout check does not re-run on client-side navigation and does not
- * block child segment rendering, so the real gate belongs in the page
- * (design 3).
+ * block child segment rendering, so the real gate belongs in the page.
+ * `getProfile()` and both DAL functions call it again themselves; every one of
+ * them is React-`cache()`d, so that is one network round trip, not four.
  */
 export default async function DashboardPage() {
-  const user = await requireUser();
-  const profile = await getProfile();
+  await requireUser();
+
+  const [profile, activeRows, pastRows] = await Promise.all([
+    getProfile(),
+    listActiveEvents(),
+    listRecentPastEvents(),
+  ]);
+
+  const data = toDashboardData({
+    profile,
+    activeRows,
+    pastRows,
+    now: currentLocalNow(),
+  });
 
   return (
-    <main>
-      <h1>Welcome, {profile?.full_name || user.email}</h1>
-      <p>Signed in as {user.email}</p>
-
-      {shouldPromptForProfile(profile) ? (
-        <CompleteProfile updateProfile={updateProfile} />
-      ) : (
-        <section>
-          <h2>Your profile</h2>
-          <dl>
-            <dt>Business name</dt>
-            <dd>{profile?.business_name}</dd>
-            <dt>Phone</dt>
-            <dd>{profile?.phone}</dd>
-          </dl>
-        </section>
-      )}
-
-      <form action={signOut}>
-        <button type="submit">Sign out</button>
-      </form>
-    </main>
+    <DashboardScreen
+      data={data}
+      signOutAction={signOut}
+      profilePrompt={
+        shouldPromptForProfile(profile) ? <CompleteProfile updateProfile={updateProfile} /> : null
+      }
+    />
   );
 }

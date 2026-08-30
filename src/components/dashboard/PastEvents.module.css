@@ -67,3 +67,11 @@
   font-size: 14px;
   color: var(--link);
 }
+
+/* Empty state — an addition to the artboard, not a transcription of it
+   (design §7). Same token as UpcomingEvents.module.css's `.empty`. */
+.empty {
+  margin: 0;
+  color: var(--text-subtle);
+  font-size: 15px;
+}
