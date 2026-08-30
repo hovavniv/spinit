@@ -1,0 +1,81 @@
+/* Measurements read from design/artboards/Spinit Event Recap.dc.html — the
+   Final playlist card. */
+
+.card {
+  background: var(--surface);
+  border-radius: 20px;
+  box-shadow: 0 30px 60px -30px rgba(30, 20, 10, 0.2);
+  padding: 32px 28px;
+  position: relative;
+}
+
+/* The ticket-stub perforation, top and bottom. This is the card's whole
+   character in the artboard, not decoration to drop. The colour has no token
+   because nothing else in the app uses it -- globals.css promotes a colour
+   only when a second component needs it. */
+.rule {
+  position: absolute;
+  top: 0;
+  left: 24px;
+  right: 24px;
+  height: 1px;
+  background: repeating-linear-gradient(
+    90deg,
+    oklch(0.85 0.012 60) 0 8px,
+    transparent 8px 16px
+  );
+}
+
+.ruleBottom {
+  top: auto;
+  bottom: 0;
+}
+
+.heading {
+  font-family: var(--font-sora), sans-serif;
+  font-weight: 700;
+  font-size: 16px;
+  margin: 0 0 20px;
+}
+
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+}
+
+/* min-width:0 lets a long title truncate instead of shoving the tag off the
+   right edge -- a flex item will not shrink below its content without it. */
+.what {
+  min-width: 0;
+}
+
+.track {
+  font-weight: 600;
+  font-size: 14.5px;
+}
+
+.artist {
+  font-size: 13px;
+  color: var(--text-subtle);
+}
+
+.tag {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-subtle);
+  white-space: nowrap;
+}
+
+.empty {
+  margin: 0;
+  color: var(--text-subtle);
+  font-size: 14px;
+}
