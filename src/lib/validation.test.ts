@@ -472,7 +472,25 @@ describe('privateNotesSchema', () => {
 });
 
 describe('sharedNotesSchema', () => {
-  test('has the same shape as the private one', () => {
-    expect(sharedNotesSchema.safeParse({ eventId: A_UUID, body: 'hi' }).success).toBe(true);
+  // sharedNotesSchema is privateNotesSchema -- the identical object, not a
+  // copy (design §5.2: same shape, different table and policy). A test that
+  // re-parses that shared schema and asserts success can only fail if
+  // privateNotesSchema is already broken, which the block above covers; it
+  // pins nothing of sharedNotesSchema's own. These assert its own behaviour
+  // directly, so the tests keep their meaning if the two schemas are ever
+  // decoupled into two separately-defined objects.
+
+  test('accepts an empty body', () => {
+    expect(sharedNotesSchema.safeParse({ eventId: A_UUID, body: '' }).success).toBe(true);
+  });
+
+  test('rejects a body over 2000 characters, matching the check constraint', () => {
+    const result = sharedNotesSchema.safeParse({ eventId: A_UUID, body: 'x'.repeat(2001) });
+
+    expect(result.success).toBe(false);
+  });
+
+  test('rejects a non-uuid event id before it reaches Postgres', () => {
+    expect(sharedNotesSchema.safeParse({ eventId: 'nope', body: '' }).success).toBe(false);
   });
 });
