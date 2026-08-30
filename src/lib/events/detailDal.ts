@@ -47,7 +47,9 @@ export const getEventDetail = cache(async (eventId: string): Promise<EventDetail
     .eq('id', eventId)
     .eq('dj_id', user.id)
     .order('created_at', { referencedTable: 'event_must_play', ascending: true })
+    .order('id', { referencedTable: 'event_must_play', ascending: true })
     .order('created_at', { referencedTable: 'event_blocklist', ascending: true })
+    .order('id', { referencedTable: 'event_blocklist', ascending: true })
     .maybeSingle();
 
   if (error) {
