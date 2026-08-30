@@ -14,7 +14,7 @@
  */
 
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
-import { describe, test, expect, beforeAll } from 'vitest';
+import { describe, test, expect, beforeAll, afterAll } from 'vitest';
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
@@ -257,6 +257,36 @@ describe.skipIf(!hasSupabaseConfig || !hasTestUsers)(
           .single();
         if (error || !data) throw new Error(`A could not insert a must-play: ${error?.message}`);
         rowOfA = data.id;
+      });
+
+      // This suite runs against the LIVE project, not a mock -- anything it
+      // inserts and does not remove permanently litters the demo data. The
+      // beforeAll row and the ceremony test's two rows below are the only
+      // rows this describe block leaves behind if left uncleaned; the
+      // blocklist test already cleans up after itself inline. Best-effort:
+      // a cleanup failure here must not mask the real test results above,
+      // so errors are logged, not thrown.
+      afterAll(async () => {
+        const { error: rowOfAError } = await clientA.from('event_must_play').delete().eq('id', rowOfA);
+        if (rowOfAError) {
+          console.warn(`afterAll cleanup: could not delete rowOfA (${rowOfA}): ${rowOfAError.message}`);
+        }
+
+        // anEventOfA is 'Noa & Eitan' (see the outer beforeAll), which the
+        // seed script gives an empty mustPlay list -- it has no ceremony
+        // rows of its own, unlike 'Priya & Alex', which really does use
+        // these same two moment strings. Scoping by event_id + segment +
+        // moment means this only ever deletes the rows this specific test
+        // created, on this specific event.
+        const { error: ceremonyError } = await clientA
+          .from('event_must_play')
+          .delete()
+          .eq('event_id', anEventOfA)
+          .eq('segment', 'ceremony')
+          .in('moment', ['Walking down the aisle', 'Breaking the glass']);
+        if (ceremonyError) {
+          console.warn(`afterAll cleanup: could not delete ceremony rows: ${ceremonyError.message}`);
+        }
       });
 
       test('B cannot see any of A rows', async () => {
