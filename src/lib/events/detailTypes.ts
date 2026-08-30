@@ -50,8 +50,6 @@ export type DetailActionState = ActionResult | null;
 export interface EventDetail {
   id: string;
   couple_names: string;
-  /** 'YYYY-MM-DD'. Never pass this to `new Date(string)` — see dashboard/format.ts. */
-  event_date: string;
   couple_status: CoupleStatus;
   notes: string | null;
   mustPlay: MustPlayRow[];

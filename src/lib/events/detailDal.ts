@@ -40,7 +40,7 @@ export const getEventDetail = cache(async (eventId: string): Promise<EventDetail
   const { data, error } = await supabase
     .from('events')
     .select(
-      `id, couple_names, event_date, couple_status, notes,
+      `id, couple_names, couple_status, notes,
        event_must_play (id, segment, title, artist, moment, created_at),
        event_blocklist (id, segment, entry_type, value, created_at)`,
     )
@@ -66,7 +66,6 @@ export const getEventDetail = cache(async (eventId: string): Promise<EventDetail
   return {
     id: data.id,
     couple_names: data.couple_names,
-    event_date: data.event_date,
     couple_status: data.couple_status,
     notes: data.notes,
     mustPlay: data.event_must_play ?? [],
