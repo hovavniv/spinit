@@ -1,0 +1,45 @@
+/* Measurements read from design/artboards/Spinit Past Events.dc.html, the
+   top-level flex row: sidebar + main column, main padded 48px 56px with an
+   inner 1040px max-width wrapper.
+
+   DUPLICATION, DELIBERATE AND TEMPORARY: these three rules are byte-for-byte
+   what src/components/dashboard/DashboardScreen.module.css declares for
+   .screen / .main / .content, because both artboards draw the same shell.
+   DashboardScreen was NOT converted to use this component, because the branch
+   that owns it is still in flight and rewriting its layout underneath it
+   would conflict for no gain. A change to one of these rules belongs in both
+   files until that conversion happens
+   (docs/specs/2026-08-29-past-events-design.md §3 and §11.4). */
+
+.screen {
+  font-family: var(--font-inter), sans-serif;
+  color: var(--ink-dark);
+  background: var(--bg);
+  width: 100%;
+  min-height: 100vh;
+  display: flex;
+}
+
+.main {
+  flex: 1;
+  min-width: 0;
+  padding: 48px 56px;
+}
+
+.content {
+  max-width: 1040px;
+  margin: 0 auto;
+}
+
+/* Below 900px the sidebar collapses to a full-width top strip (its own module
+   handles that), so this row has to stop being side-by-side for the strip to
+   sit above the content instead of beside it. */
+@media (max-width: 899px) {
+  .screen {
+    flex-direction: column;
+  }
+
+  .main {
+    padding: 24px;
+  }
+}

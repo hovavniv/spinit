@@ -1,0 +1,151 @@
+/* Measurements read from design/artboards/Spinit Past Events.dc.html — the
+   search field, the month labels, and the event rows. */
+
+.searchWrap {
+  position: relative;
+  max-width: 320px;
+  margin-bottom: 24px;
+}
+
+.searchIcon {
+  position: absolute;
+  left: 14px;
+  top: 50%;
+  transform: translateY(-50%);
+  pointer-events: none;
+  color: oklch(0.55 0.02 50);
+}
+
+.search {
+  width: 100%;
+  padding: 10px 14px 10px 38px;
+  border-radius: 10px;
+  border: 1.5px solid var(--border-input);
+  font-family: var(--font-inter), sans-serif;
+  font-size: 13.5px;
+  background: var(--surface);
+  color: var(--ink-dark);
+}
+
+.empty {
+  padding: 40px 0;
+  text-align: center;
+  color: var(--text-subtle);
+  font-size: 14px;
+}
+
+.list {
+  display: flex;
+  flex-direction: column;
+}
+
+.group {
+  margin-bottom: 8px;
+}
+
+.monthLabel {
+  font-family: var(--font-sora), sans-serif;
+  font-size: 12.5px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-subtle);
+  padding: 0 4px;
+  margin-bottom: 12px;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  padding: 16px 12px;
+  border-radius: 14px;
+  color: inherit;
+  text-decoration: none;
+  border-bottom: 1px solid oklch(0.91 0.012 60);
+  flex-wrap: wrap;
+}
+
+/* The artboard's row hover is a BACKGROUND TINT (style-hover on the <a>).
+   This is deliberately not the dashboard card's hover in
+   src/components/dashboard/PastEvents.module.css, which changes border-color
+   — different component, different artboard block. */
+.row:hover {
+  background: oklch(0.96 0.014 75);
+}
+
+/* globals.css's `a:hover` has specificity (0,1,1) and would outrank
+   `.row { color: inherit }` at (0,1,0), turning the whole row's text pink on
+   hover — which the artboard does not do (it neutralises the same thing with
+   an inline style). This rule is (0,2,0) and wins regardless of source order.
+   The same trap is annotated in PastEvents.module.css and
+   DashboardSidebar.module.css; it bites once per new file that wraps a row in
+   a link. */
+.row:hover {
+  color: inherit;
+}
+
+.dateTile {
+  width: 52px;
+  height: 52px;
+  border-radius: 12px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.day {
+  font-family: var(--font-sora), sans-serif;
+  font-size: 18px;
+  font-weight: 800;
+  line-height: 1.1;
+}
+
+.weekday {
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-subtle);
+}
+
+/* min-width: 0 is what lets the venue's ellipsis work at all — a flex item
+   defaults to min-width: auto and refuses to shrink below its content. */
+.who {
+  flex: 1;
+  min-width: 0;
+}
+
+.couple {
+  font-family: var(--font-sora), sans-serif;
+  font-weight: 700;
+  font-size: 16px;
+  margin-bottom: 2px;
+}
+
+.venue {
+  font-size: 13.5px;
+  color: var(--text-subtle);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.songCount {
+  font-size: 13px;
+  color: var(--text-subtle);
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+.viewRecap {
+  font-weight: 600;
+  font-size: 14px;
+  color: var(--link);
+  flex-shrink: 0;
+  white-space: nowrap;
+}
