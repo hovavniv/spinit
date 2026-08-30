@@ -420,10 +420,11 @@ reported here for a human to decide on, not silently worked around.
 
 As a substitute check within scope, I read the component wiring rather than claiming a rendered
 check: the design-preview route (`src/app/design/dashboard/page.tsx` per Task 8/10's prior work)
-renders `DashboardScreen` from the static `demoData` fixture, and `DashboardScreen`/`DashboardSidebar`
-already carry 63 passing unit/RTL tests (see the Task 10 entry above) covering the sign-out control
-and layout wiring at the component level. That is a code-level check, not a rendered-page check, and
-I am stating the distinction rather than blurring it.
+renders `DashboardScreen` from the static `demoData` fixture, and `DashboardScreen.test.tsx` (the only
+test file covering `DashboardScreen`/`DashboardSidebar` — `DashboardSidebar` has no test file of its
+own) already carries 14 passing unit/RTL tests covering the sign-out control and layout wiring at the
+component level. That is a code-level check, not a rendered-page check, and I am stating the
+distinction rather than blurring it.
 
 ### Summary
 
