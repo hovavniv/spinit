@@ -6,6 +6,10 @@ import {
   PHONE_PATTERN,
   profileSchema,
   registerSchema,
+  mustPlayAddSchema,
+  blocklistAddSchema,
+  rowRefSchema,
+  eventDetailsSchema,
 } from './validation';
 
 function toFormData(values: Record<string, string>): FormData {
@@ -328,5 +332,130 @@ describe('PHONE_PATTERN', () => {
     // check. Fixing the <select> itself is a later task; this test only pins
     // that the regex correctly rejects the current buggy joined value.
     expect(PHONE_PATTERN.test('🇺🇸 +1(555) 123-4567')).toBe(false);
+  });
+});
+
+const A_UUID = '11111111-2222-4333-8444-555555555555';
+
+describe('mustPlayAddSchema', () => {
+  test('trims before checking length, so spaces are an empty title', () => {
+    const result = mustPlayAddSchema.safeParse({
+      eventId: A_UUID,
+      segment: 'reception',
+      title: '   ',
+      artist: '',
+      moment: '',
+    });
+
+    expect(result.success).toBe(false);
+  });
+
+  test('accepts a title alone and trims it', () => {
+    const result = mustPlayAddSchema.safeParse({
+      eventId: A_UUID,
+      segment: 'party',
+      title: '  September  ',
+      artist: '',
+      moment: '',
+    });
+
+    expect(result.success).toBe(true);
+    expect(result.data?.title).toBe('September');
+  });
+
+  test('rejects ceremony — that segment is written only by its slots', () => {
+    const result = mustPlayAddSchema.safeParse({
+      eventId: A_UUID,
+      segment: 'ceremony',
+      title: 'Hava Nagila',
+      artist: '',
+      moment: '',
+    });
+
+    expect(result.success).toBe(false);
+  });
+
+  test('rejects a title of 201 characters', () => {
+    const result = mustPlayAddSchema.safeParse({
+      eventId: A_UUID,
+      segment: 'party',
+      title: 'x'.repeat(201),
+      artist: '',
+      moment: '',
+    });
+
+    expect(result.success).toBe(false);
+  });
+
+  test('rejects an eventId that is not a uuid', () => {
+    const result = mustPlayAddSchema.safeParse({
+      eventId: 'priya-alex',
+      segment: 'party',
+      title: 'September',
+      artist: '',
+      moment: '',
+    });
+
+    expect(result.success).toBe(false);
+  });
+});
+
+describe('blocklistAddSchema', () => {
+  test('accepts the three entry types and nothing else', () => {
+    for (const entryType of ['artist', 'song', 'genre']) {
+      expect(
+        blocklistAddSchema.safeParse({
+          eventId: A_UUID,
+          segment: 'party',
+          entryType,
+          value: 'Nickelback',
+        }).success,
+      ).toBe(true);
+    }
+
+    expect(
+      blocklistAddSchema.safeParse({
+        eventId: A_UUID,
+        segment: 'party',
+        entryType: 'album',
+        value: 'Nickelback',
+      }).success,
+    ).toBe(false);
+  });
+
+  test('rejects an empty value', () => {
+    const result = blocklistAddSchema.safeParse({
+      eventId: A_UUID,
+      segment: 'party',
+      entryType: 'artist',
+      value: '  ',
+    });
+
+    expect(result.success).toBe(false);
+  });
+});
+
+describe('rowRefSchema', () => {
+  test('needs both a row id and an event id, both uuids', () => {
+    expect(rowRefSchema.safeParse({ id: A_UUID, eventId: A_UUID }).success).toBe(true);
+    expect(rowRefSchema.safeParse({ id: A_UUID, eventId: '' }).success).toBe(false);
+    expect(rowRefSchema.safeParse({ id: 'nope', eventId: A_UUID }).success).toBe(false);
+  });
+});
+
+describe('eventDetailsSchema', () => {
+  test('turns empty notes into null rather than an empty string', () => {
+    // An event nobody has written notes for has NO notes, which is not the
+    // same fact as an empty string (design §5.1).
+    const result = eventDetailsSchema.safeParse({ eventId: A_UUID, notes: '   ' });
+
+    expect(result.success).toBe(true);
+    expect(result.data?.notes).toBeNull();
+  });
+
+  test('rejects notes over 2000 characters', () => {
+    const result = eventDetailsSchema.safeParse({ eventId: A_UUID, notes: 'x'.repeat(2001) });
+
+    expect(result.success).toBe(false);
   });
 });

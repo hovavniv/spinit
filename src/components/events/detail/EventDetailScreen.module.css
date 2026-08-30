@@ -1,0 +1,41 @@
+/* The artboard's step-3 column: a 640px card centred in the content area. */
+
+.page {
+  width: 100%;
+  max-width: 640px;
+  margin: 0 auto;
+}
+
+.backLink {
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--text-subtle);
+}
+
+.title {
+  font-family: var(--font-sora), sans-serif;
+  font-size: 30px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  margin: 20px 0 32px;
+}
+
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 24px;
+  padding: 36px;
+}
+
+.segment {
+  border-top: 1px solid oklch(0.91 0.012 60);
+  padding-top: 28px;
+  margin-bottom: 28px;
+}
+
+.segmentHeading {
+  font-family: var(--font-sora), sans-serif;
+  font-size: 17.5px;
+  font-weight: 800;
+  margin: 0 0 18px;
+}

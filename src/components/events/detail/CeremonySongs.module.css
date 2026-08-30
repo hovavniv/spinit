@@ -1,0 +1,64 @@
+.section {
+  border-top: 1px solid oklch(0.91 0.012 60);
+  padding-top: 28px;
+  margin-bottom: 28px;
+}
+
+.heading {
+  font-family: var(--font-sora), sans-serif;
+  font-size: 16.5px;
+  font-weight: 700;
+  margin: 0 0 4px;
+}
+
+.blurb {
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--text-subtle);
+  margin: 0 0 16px;
+}
+
+.slots {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.slotLabel {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text-label);
+  margin-bottom: 6px;
+}
+
+.slotRow {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.title,
+.artist {
+  padding: 11px 13px;
+  border-radius: 10px;
+  border: 1.5px solid var(--border-input);
+  font-family: var(--font-inter), sans-serif;
+  font-size: 13.5px;
+  background: var(--surface);
+  color: var(--ink-dark);
+  min-width: 0;
+}
+
+.title {
+  flex: 1.4 1 140px;
+}
+
+.artist {
+  flex: 1 1 120px;
+}
+
+.title:focus,
+.artist:focus {
+  outline: none;
+  border-color: var(--accent);
+}

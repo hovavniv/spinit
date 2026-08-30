@@ -118,3 +118,76 @@ export const profileSchema = z.object({
 export function isUuid(value: string): boolean {
   return z.uuid().safeParse(value).success;
 }
+
+/* ---------------------------------------------------------------------------
+   The event page (docs/specs/2026-08-30-event-detail-design.md §8.1).
+
+   Every rule below mirrors a database constraint from §5.1, so a bad input is
+   refused before it reaches Postgres -- and refused again by the check
+   constraint if it somehow does. `.trim()` runs before `.min()`, so a field of
+   spaces is empty rather than valid.
+   --------------------------------------------------------------------------- */
+
+const eventIdField = z.uuid('That event link is not valid.');
+
+/**
+ * Ceremony is absent on purpose. Its rows are written only by the ceremony
+ * slots, which resolve their `moment` from CEREMONY_SLOTS -- so the add-row
+ * form cannot be pointed at the ceremony segment.
+ */
+const addableSegmentField = z.enum(['reception', 'party'], {
+  message: 'Unknown part of the evening.',
+});
+
+const optionalText = (max: number, message: string) =>
+  z
+    .string()
+    .trim()
+    .max(max, message)
+    .transform((value) => (value === '' ? null : value));
+
+export const mustPlayAddSchema = z.object({
+  eventId: eventIdField,
+  segment: addableSegmentField,
+  title: z
+    .string()
+    .trim()
+    .min(1, 'A song title is required.')
+    .max(200, 'Song title must be at most 200 characters.'),
+  artist: optionalText(200, 'Artist must be at most 200 characters.'),
+  moment: optionalText(100, 'Moment must be at most 100 characters.'),
+});
+
+export const blocklistAddSchema = z.object({
+  eventId: eventIdField,
+  segment: addableSegmentField,
+  entryType: z.enum(['artist', 'song', 'genre'], { message: 'Choose artist, song or genre.' }),
+  value: z
+    .string()
+    .trim()
+    .min(1, 'Enter an artist, song or genre.')
+    .max(100, 'Must be at most 100 characters.'),
+});
+
+/** A remove: which row, and which event's page to revalidate. */
+export const rowRefSchema = z.object({
+  id: z.uuid('That row is not valid.'),
+  eventId: eventIdField,
+});
+
+export const eventDetailsSchema = z.object({
+  eventId: eventIdField,
+  notes: optionalText(2000, 'Notes must be at most 2000 characters.'),
+});
+
+/**
+ * One ceremony slot. A BLANK TITLE IS LEGAL and means "clear this slot"
+ * (design §8.1): both slots are empty on a fresh event, and the save bar
+ * submits them together with the notes, so treating an empty title as a
+ * validation error would mean a DJ who typed only notes loses the notes.
+ */
+export const ceremonySlotSchema = z.object({
+  id: z.union([z.uuid(), z.literal('')]),
+  title: z.string().trim().max(200, 'Song title must be at most 200 characters.'),
+  artist: optionalText(200, 'Artist must be at most 200 characters.'),
+});

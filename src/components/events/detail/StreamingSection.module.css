@@ -1,0 +1,82 @@
+/* The artboard's step-3 blocks: a section rule above the heading, bordered
+   status rows, and the pale panel the artboard already uses for its own
+   "analysis will appear here" empty state. */
+
+.section {
+  border-top: 1px solid oklch(0.91 0.012 60);
+  padding-top: 28px;
+  margin-bottom: 28px;
+}
+
+.heading {
+  font-family: var(--font-sora), sans-serif;
+  font-size: 20px;
+  font-weight: 700;
+  margin: 0 0 6px;
+}
+
+.blurb {
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--text-muted);
+  margin: 0 0 24px;
+}
+
+.statusRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 16px 18px;
+  border-radius: 16px;
+  border: 1.5px solid var(--border);
+  background: var(--bg);
+  margin-bottom: 12px;
+}
+
+.statusTitle {
+  font-weight: 700;
+  font-size: 15px;
+  margin-bottom: 2px;
+}
+
+.statusDetail {
+  font-size: 12.5px;
+  color: var(--text-subtle);
+}
+
+/* Same two pill variants the dashboard's upcoming cards use, so one status
+   reads identically on both screens. */
+.pillConnected {
+  font-size: 12px;
+  font-weight: 600;
+  padding: 5px 12px;
+  border-radius: var(--radius-pill);
+  background: oklch(0.95 0.03 190);
+  color: oklch(0.4 0.13 190);
+  white-space: nowrap;
+}
+
+.pillAwaiting {
+  font-size: 12px;
+  font-weight: 600;
+  padding: 5px 12px;
+  border-radius: var(--radius-pill);
+  background: oklch(0.94 0.012 60);
+  color: oklch(0.45 0.02 50);
+  white-space: nowrap;
+}
+
+.comingSoon {
+  background: var(--bg);
+  border-radius: 16px;
+  padding: 18px 20px;
+  font-size: 13.5px;
+  line-height: 1.6;
+  color: var(--text-subtle);
+}
+
+.comingSoonLabel {
+  color: var(--accent-deep);
+  font-weight: 700;
+}

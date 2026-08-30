@@ -1,0 +1,132 @@
+/* The artboard's Reception/Party must-play block: a 13px label, a 12.5px
+   blurb, 12px row chips on the warm ground, and a wrapping add row whose
+   title field is the widest. */
+
+.block {
+  margin-bottom: 26px;
+}
+
+.label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-label);
+  margin-bottom: 4px;
+}
+
+.blurb {
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--text-subtle);
+  margin: 0 0 12px;
+}
+
+.rows {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0 0 12px;
+  padding: 0;
+  list-style: none;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+}
+
+.rowText {
+  min-width: 0;
+}
+
+.rowTitle {
+  font-weight: 700;
+  font-size: 14px;
+}
+
+.rowArtist {
+  font-weight: 500;
+  color: var(--text-subtle);
+}
+
+.rowMoment {
+  font-size: 12px;
+  color: var(--text-subtle);
+  margin-top: 2px;
+}
+
+.remove {
+  background: none;
+  border: none;
+  color: oklch(0.6 0.02 50);
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 4px;
+  flex-shrink: 0;
+}
+
+.remove:hover {
+  color: var(--accent-deep);
+}
+
+.addRow {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.inputTitle,
+.inputArtist,
+.inputMoment {
+  padding: 11px 13px;
+  border-radius: 10px;
+  border: 1.5px solid var(--border-input);
+  font-family: var(--font-inter), sans-serif;
+  font-size: 13.5px;
+  background: var(--surface);
+  color: var(--ink-dark);
+  min-width: 0;
+}
+
+.inputTitle {
+  flex: 1.4 1 120px;
+}
+
+.inputArtist {
+  flex: 1 1 100px;
+}
+
+.inputMoment {
+  flex: 1 1 130px;
+}
+
+.inputTitle:focus,
+.inputArtist:focus,
+.inputMoment:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.add {
+  background: var(--accent);
+  color: white;
+  border: none;
+  padding: 0 20px;
+  border-radius: 10px;
+  font-family: var(--font-inter), sans-serif;
+  font-weight: 700;
+  font-size: 13.5px;
+  cursor: pointer;
+}
+
+.error {
+  margin: 8px 0 0;
+  font-size: 13px;
+  color: var(--accent-deep);
+}
