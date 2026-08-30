@@ -2,30 +2,29 @@
 
 import { useActionState } from 'react';
 
-import { savePrivateNotes } from '@/lib/events/notesActions';
+import { saveSharedNotes } from '@/lib/events/notesActions';
 import type { DetailActionState } from '@/lib/events/detailTypes';
-import styles from './NotesSection.module.css';
+import styles from './SharedNotesSection.module.css';
 
-interface NotesSectionProps {
+interface SharedNotesSectionProps {
   eventId: string;
   body: string;
 }
 
 /**
- * The artboard's "Additional notes" block, now the DJ's PRIVATE note (design
- * §3). Only the event's DJ can read or write this row; a partner's read
- * returns no row at all.
+ * The note both people on the event can read and write (design §3).
  *
- * Its OWN <form> for the same reason SharedNotesSection has one: notes have
- * their own action and `saveEventDetails` no longer writes them, so a control
- * still associated with the details form would be silently discarded.
+ * Its OWN <form>, not a control associated with the details form: notes now
+ * have their own action, and `saveEventDetails` no longer writes them at all.
+ * A textarea left on `form={DETAILS_FORM_ID}` would post to an action that
+ * ignores it and still flash "Saved ✓".
  *
- * The screen also hides this section from a partner. That is a convenience,
- * not the control — the policy is (design §3). Do not rely on it either way.
+ * A sibling of the details form, never nested inside it. HTML forbids nested
+ * forms and the parser drops the inner one (design §2.2).
  */
-export function NotesSection({ eventId, body }: NotesSectionProps) {
+export function SharedNotesSection({ eventId, body }: SharedNotesSectionProps) {
   const [state, formAction, isPending] = useActionState<DetailActionState, FormData>(
-    savePrivateNotes,
+    saveSharedNotes,
     null,
   );
   const fieldError = state && !state.ok && 'formErrors' in state ? state.formErrors.body : null;
@@ -35,9 +34,9 @@ export function NotesSection({ eventId, body }: NotesSectionProps) {
     <form action={formAction} className={styles.section}>
       <input type="hidden" name="eventId" value={eventId} />
 
-      <h3 className={styles.heading}>Your private notes</h3>
+      <h3 className={styles.heading}>Shared notes</h3>
       <p className={styles.blurb}>
-        Only you can see this. Family dynamics, timeline quirks, allergies.
+        The couple can see and edit this. Keep planning notes in your private notes above.
       </p>
 
       <textarea
@@ -45,8 +44,8 @@ export function NotesSection({ eventId, body }: NotesSectionProps) {
         rows={4}
         maxLength={2000}
         defaultValue={body}
-        placeholder="Notes from your planning call…"
-        aria-label="Your private notes"
+        placeholder="Anything the two of you agreed on together…"
+        aria-label="Shared notes"
         className={styles.textarea}
       />
 
@@ -58,7 +57,7 @@ export function NotesSection({ eventId, body }: NotesSectionProps) {
         )}
         {state?.ok && !isPending && <span className={styles.saved}>Saved ✓</span>}
         <button type="submit" className={styles.save} disabled={isPending}>
-          {isPending ? 'Saving…' : 'Save private notes'}
+          {isPending ? 'Saving…' : 'Save shared notes'}
         </button>
       </div>
     </form>
