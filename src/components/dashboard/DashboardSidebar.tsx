@@ -4,7 +4,7 @@ import { initials } from '@/lib/dashboard/format';
 import type { DjProfile } from '@/lib/dashboard/types';
 import styles from './DashboardSidebar.module.css';
 
-type NavKey = 'dashboard' | 'upcoming' | 'past';
+type NavKey = 'dashboard' | 'upcoming' | 'past' | 'none';
 
 const NAV_ITEMS: { key: NavKey; label: string; href: string }[] = [
   { key: 'dashboard', label: 'Dashboard', href: '/dashboard' },
@@ -16,8 +16,9 @@ interface DashboardSidebarProps {
   dj: DjProfile;
   /**
    * Which nav item renders as the current page — a non-link <span> with
-   * aria-current, matching the artboard. Defaults to 'dashboard' so the
-   * existing DashboardScreen call site is unchanged.
+   * aria-current, matching the artboard. `'none'` highlights nothing, which is
+   * what the event page needs: the New Event artboard draws all three as
+   * links. Defaults to 'dashboard' so existing call sites are unchanged.
    */
   current?: NavKey;
   /**
