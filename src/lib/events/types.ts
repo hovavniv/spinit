@@ -32,3 +32,33 @@ export interface DayTile {
   /** Three letters, upper case, e.g. 'SAT' — the artboard's own format. */
   weekday: string;
 }
+
+/**
+ * One row of `public.played_songs`, as selected by getEventRecap.
+ *
+ * `suggested_by` is a guest's display name, not a foreign key. NULL means the
+ * DJ's own pick — and so does '', which the column's check constraint
+ * permits. Treat "absent" as null-or-blank everywhere; recap.ts has the one
+ * predicate that decides it.
+ */
+export interface PlayedSong {
+  position: number;
+  title: string;
+  artist: string;
+  suggested_by: string | null;
+}
+
+/** The event half of a recap. */
+export interface RecapEvent {
+  id: string;
+  couple_names: string;
+  venue: string;
+  /** 'YYYY-MM-DD'. Never pass this to `new Date(string)` — see format.ts. */
+  event_date: string;
+}
+
+/** Everything /events/[id]/recap renders. */
+export interface EventRecap {
+  event: RecapEvent;
+  songs: PlayedSong[];
+}
