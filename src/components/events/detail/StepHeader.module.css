@@ -1,0 +1,55 @@
+/* Measurements read from the New Event artboard's step row: a 26px pip, a
+   13.5px label, and a 1px rule filling the gap between steps. */
+
+.steps {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0 0 40px;
+  padding: 0;
+  list-style: none;
+}
+
+.step {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.step:not(:last-child)::after {
+  content: '';
+  display: block;
+  width: 100%;
+  min-width: 24px;
+  height: 1px;
+  background: var(--border-input);
+}
+
+.steps > .step {
+  flex: 0 0 auto;
+}
+
+.steps > .step:not(:last-child) {
+  flex: 1 1 auto;
+}
+
+.pip {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: var(--accent);
+  color: white;
+  font-size: 12.5px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.label {
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--ink-dark);
+  white-space: nowrap;
+}
