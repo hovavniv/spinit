@@ -515,3 +515,97 @@ or RLS defect. A failure with a different message is worth investigating; this o
 Corroborated independently: a second session ran the full suite four times in roughly ten minutes,
 from the same clean tree at the same commit, and read 197, 196, and 199 passing (out of 198-200
 depending on which run) at different points in that window — same mechanism, same conclusion.
+
+## Event page (/events/[id]) — design 2026-08-30
+
+Recorded 2026-08-30. Plan: `docs/specs/2026-08-30-event-detail-plan.md`, task 15.
+
+Driven with a throwaway Playwright script (`npm install --no-save playwright`, deleted
+afterward) against a real `next dev` server bound to port 3000, confirmed by process `cwd`
+to be this exact worktree/branch (`feat/event-detail`) — a second `next dev` instance found
+running on port 3001 turned out to belong to a *different* worktree
+(`.claude/worktrees/feat+event-recap`) and was not used. `chromium-cli` / the Claude-in-Chrome
+extension were not available in this session, hence the scripted approach. Logged in as the
+seeded demo DJ (`SEED_DJ_EMAIL`/`SEED_DJ_PASSWORD` from `.env.local`) and exercised the real
+`/events/[id]` route end to end — no mocks, no stubbed data.
+
+An early pass of the script had a selector bug (`nth()` indexing collided across the
+ceremony/reception/party inputs) that clicked the wrong "Add" button and left stray text in
+the ceremony "Breaking the glass" field. This was a bug in the *test script*, not the app —
+confirmed by screenshot and fixed by scoping locators to each section's `<section>` container
+and by each field's accessible label instead of guessing index positions. `npm run seed:demo`
+was re-run afterward to restore Priya & Alex's seeded ceremony data (idempotent upsert by
+derived id), and Maya & Tom's `notes` column (touched by check 6 below, which the seed script
+doesn't reset since that fixture's `notes` is `null`) was cleared back to `null` directly.
+
+1. **Page renders names/step-trail/streaming/ceremony/lists/notes.** Verified. Opened
+   `/events/01fda947-...` (Priya & Alex) as the DJ. The rendered page shows "Priya & Alex",
+   all three step pips filled (Details/Invite/Streaming), the "Coming soon" streaming
+   placeholder (see note below on the intentional deviation here), both ceremony slots
+   pre-filled ("A Thousand Years" / "Hava Nagila"), one reception must-play ("Can't Help
+   Falling in Love"), one party must-play ("September"), two party do-not-play entries
+   ("Nickelback", "Cha Cha Slide"), and the note about the surprise speech. Cross-checked
+   directly against the database with `supabase db query --linked` on `event_must_play` and
+   `event_blocklist` for that event id — the four must-play rows and two blocklist rows
+   returned by that read-only query match the page byte-for-byte (same titles, artists,
+   moments, entry types). This is live data through the real DAL, not mock data.
+
+2. **Side-by-side against the New Event artboard.** Verified by reading the artboard's
+   source (`Spinit New Event.dc.html`, via `DesignSync.get_file`) alongside a full-page
+   screenshot of the running app, rather than a pixel-diff tool. Structure matches: 640px
+   card, 24px radius, 36px padding; 26px step pips; the ceremony slot layout (label above a
+   1.4:1 title/artist row); must-play chips (rounded pale panel, title — artist, moment
+   line, × remove); do-not-play chips (uppercase red type pill + value); the add-row field
+   proportions and the pink accent buttons; the notes textarea; the bottom bar with
+   "← Back" / "Saved ✓" / primary button. Two **intentional, already-documented** deviations
+   from the artboard, not defects: (a) the streaming/taste-analysis block shows honest
+   "coming soon" copy instead of the artboard's fixture 84%-match numbers, since no streaming
+   integration exists yet (`StreamingSection.tsx`, design §7.2 scope); (b) "← Back" always
+   returns to `/dashboard` rather than the artboard's step-2, since steps 1–2 (create/invite)
+   are out of scope for this page (`EventDetailsForm.tsx`, design §4).
+
+3. **Add then remove a party must-play, no manual reload.** Verified. Added "Smoke Test
+   Song" to the Party must-play list; it appeared in the list within ~1s with no page
+   navigation. Clicked its × remove button; it disappeared, again with no reload. Confirms
+   `revalidatePath` is being given the literal `/events/<id>` path rather than the `[id]`
+   pattern (the failure mode the plan calls out explicitly).
+
+4. **Duplicate do-not-play entry, different case.** Verified. Added "NICKELBACK" to the
+   Party do-not-play list, which already had "Nickelback". Got the exact message "Already on
+   the do-not-play list." — confirms the `lower(value)` unique index and the 23505→friendly-
+   message mapping in `addBlocklistEntry`.
+
+5. **Clear a ceremony slot and save.** Verified. Cleared the "Breaking the glass" title
+   (leaving "Walking down the aisle" untouched) and pressed "Save changes". Saw "Saved ✓".
+   Reloaded the page: the cleared slot came back empty, and the untouched slot still read "A
+   Thousand Years" — confirms per-slot id-keyed writes don't clobber siblings.
+
+6. **Notes-only save on a slot-less event.** Verified, using "Maya & Tom" (seeded with no
+   must-play/blocklist rows). Typed a note with nothing else filled in and saved: got "Saved
+   ✓", and the note was still there after a reload. Confirms the ceremony schema's "blank
+   title is legal" rule doesn't block an otherwise-valid notes-only submission. (Test note
+   was cleared back to `null` afterward, see above.)
+
+7. **With JavaScript disabled.** Verified, using a second browser context that reused the
+   authenticated session's cookies but had `javaScriptEnabled: false` (Playwright's
+   equivalent of DevTools → Disable JavaScript). Added a party must-play row ("NoJS Song")
+   and removed it again — both worked via real full-page form posts, confirming the actions
+   are reachable without client JS. Also confirmed the notes textarea's value was byte-for-
+   byte unchanged before and after those two form submissions — the check that would catch
+   the details form wrapping the list sections (nested `<form>`s silently dropped by the
+   parser, turning every add/remove into a save-notes submit). It didn't happen: the sibling-
+   form structure from task 11 holds under real no-JS form posts, not just under jsdom.
+
+8. **Unknown event id → 404.** Verified. `/events/00000000-0000-0000-0000-000000000000`
+   returned a real HTTP 404 (checked the response status, not just page text) and rendered
+   the app's not-found page.
+
+9. **Another DJ's event id → the same 404, not 403.** Verified. Logged in as `TEST_USER_B`
+   (a second Supabase user configured for the RLS integration tests) in a separate browser
+   context and requested Priya & Alex's event id, which belongs to the seed DJ, not
+   `TEST_USER_B`. Got HTTP 404 — the same response as check 8, not a 403 — confirming the
+   route doesn't leak whether an id exists to a DJ who doesn't own it.
+
+**Result: all nine checks passed.** No app defects found. The only issues encountered were in
+the throwaway test script itself (selector ambiguity), not in the product, and were fixed
+before drawing conclusions rather than worked around.
