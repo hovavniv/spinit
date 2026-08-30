@@ -75,6 +75,11 @@ export const listRecentPastEvents = cache(async (): Promise<PastEventCountRow[]>
     .select(PAST_COLUMNS)
     .eq('dj_id', user.id)
     .order('event_date', { ascending: false })
+    // Tiebreaker, not decoration: two events on one date would otherwise come
+    // back in an arbitrary order that can differ load to load, and because this
+    // query also carries a LIMIT, a tie can change WHICH two rows return, not
+    // just their order. Same fix as listPastEvents in src/lib/events/dal.ts.
+    .order('id', { ascending: false })
     .limit(2);
 
   if (error) {
