@@ -1,16 +1,28 @@
-import { describe, test, expect, vi } from 'vitest';
+import { describe, test, expect } from 'vitest';
 import { render, screen } from '@testing-library/react';
-
-vi.mock('@/lib/events/notesActions', () => ({
-  savePrivateNotes: vi.fn(),
-  saveSharedNotes: vi.fn(),
-}));
 
 import { EventDetailScreen } from './EventDetailScreen';
 import { DETAILS_FORM_ID } from './formId';
 import type { EventDetail } from '@/lib/events/detailTypes';
 
 const EVENT_ID = '11111111-2222-4333-8444-555555555555';
+
+/**
+ * Asserts the real invariant: no <form> on the page has a <form> ANCESTOR.
+ * `detailsForm.querySelectorAll('form')` only proves a form has no form
+ * DESCENDANTS -- EventDetailsForm renders no children at all, so that
+ * assertion is structurally incapable of failing and would stay green even
+ * if some OTHER element wrapped every form on the page, details form
+ * included, in an outer <form> (exactly the §2.2 defect these tests exist to
+ * catch). Walking up from each form's parentElement is what actually tests
+ * for nesting in either direction.
+ */
+function assertNoFormIsNestedInAnotherForm(container: HTMLElement) {
+  const forms = Array.from(container.querySelectorAll('form'));
+  for (const form of forms) {
+    expect(form.parentElement?.closest('form') ?? null).toBeNull();
+  }
+}
 
 /**
  * Pins the single riskiest structural fact on this page: EventDetailsForm's
@@ -31,8 +43,8 @@ function buildEvent(): EventDetail {
     couple_names: 'Noa & Eitan',
     couple_status: 'awaiting-couple',
     dj_id: 'dj-1',
-    privateNotes: '',
-    sharedNotes: '',
+    privateNotes: 'DJ private note',
+    sharedNotes: 'Couple shared note',
     partners: [],
     mustPlay: [
       {
@@ -64,19 +76,19 @@ describe('EventDetailScreen', () => {
 
     // Exactly one form carries the details-form id -- it is not duplicated
     // and it is trivially locatable by id, the same way EventDetailsForm.tsx
-    // wires the ceremony inputs and notes textarea to it via `form={id}`.
+    // wires the ceremony inputs to it via `form={id}`.
     const detailsForms = Array.from(container.querySelectorAll('form')).filter(
       (form) => form.id === DETAILS_FORM_ID,
     );
     expect(detailsForms).toHaveLength(1);
-    const [detailsForm] = detailsForms;
 
     // If EventDetailsForm ever became a WRAPPER instead of a sibling, the
     // list sections' own add/remove forms would render NESTED inside this
     // one -- exactly the shape a real browser's HTML parser silently drops.
-    // Asserting zero <form> descendants of the details form is what proves
-    // it stayed a sibling.
-    expect(detailsForm.querySelectorAll('form')).toHaveLength(0);
+    // EventDetailsForm renders no children, so a descendant-only check can
+    // never fail; walking up from every form's parent is what actually
+    // proves nothing on the page nests one form inside another.
+    assertNoFormIsNestedInAnotherForm(container);
 
     // The list sections DO render their own forms elsewhere in the tree --
     // this fixture carries a real mustPlay row and a real blocklist row
@@ -120,6 +132,13 @@ describe('EventDetailScreen', () => {
     }
   });
 
+  test('each notes textarea holds its own body, not the other one\'s', () => {
+    render(<EventDetailScreen event={buildEvent()} viewer={{ role: 'dj' }} />);
+
+    expect(screen.getByLabelText(/your private notes/i)).toHaveValue('DJ private note');
+    expect(screen.getByLabelText(/shared notes/i)).toHaveValue('Couple shared note');
+  });
+
   test('the notes forms are siblings of the details form, not nested in it', () => {
     // Both note sections are their own <form> now. Nested forms are dropped
     // by the parser, so this is the same structural trap the first test pins,
@@ -128,11 +147,7 @@ describe('EventDetailScreen', () => {
       <EventDetailScreen event={buildEvent()} viewer={{ role: 'dj' }} />,
     );
 
-    const [detailsForm] = Array.from(container.querySelectorAll('form')).filter(
-      (form) => form.id === DETAILS_FORM_ID,
-    );
-
-    expect(detailsForm.querySelectorAll('form')).toHaveLength(0);
+    assertNoFormIsNestedInAnotherForm(container);
     expect(screen.getByLabelText(/your private notes/i)).toBeInTheDocument();
     expect(screen.getByLabelText(/shared notes/i)).toBeInTheDocument();
   });

@@ -19,9 +19,11 @@ interface EventDetailsFormProps {
  * This renders the ONLY <form id="event-details"> on the page, as a SIBLING of
  * the ceremony and notes blocks — never a wrapper around them. Wrapping would
  * enclose the four list sections' own forms, which the HTML parser drops
- * (design §2.2). The ceremony inputs and the notes textarea reach this form
- * through their form="event-details" attribute; the browser submits
- * form-associated controls with it, so the no-JavaScript path is unaffected.
+ * (design §2.2). The ceremony inputs reach this form through their
+ * form="event-details" attribute; the browser submits form-associated
+ * controls with it, so the no-JavaScript path is unaffected. The notes
+ * textareas have their own forms and their own actions and do not use this
+ * attribute.
  *
  * The artboard's "← Back" moves between wizard steps. With steps 1–2 out of
  * scope it goes to the dashboard, which is where a DJ pressing back from this

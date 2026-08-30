@@ -9,6 +9,7 @@ import {
   removeBlocklistEntry,
   saveEventDetails,
 } from '@/lib/events/detailActions';
+import { savePrivateNotes, saveSharedNotes } from '@/lib/events/notesActions';
 import { StepHeader } from './StepHeader';
 import { StreamingSection } from './StreamingSection';
 import { CeremonySongs } from './CeremonySongs';
@@ -34,9 +35,10 @@ interface EventDetailScreenProps {
  * with an authorization decision, and this one is only a rendering choice.
  *
  * The actions are imported here and threaded down as props. The list sections
- * are Client Components and must not import them: an action module is
- * 'use server' and pulls in the DAL's `import 'server-only'`, which cannot be
- * evaluated in jsdom — the trap DashboardSidebar already documents.
+ * and the note sections are all Client Components and must not import their
+ * own actions: an action module is 'use server' and pulls in the DAL's
+ * `import 'server-only'`, which cannot be evaluated in jsdom — the trap
+ * DashboardSidebar already documents.
  */
 export function EventDetailScreen({ event, viewer }: EventDetailScreenProps) {
   const mustPlay = splitBySegment(event.mustPlay);
@@ -104,9 +106,20 @@ export function EventDetailScreen({ event, viewer }: EventDetailScreenProps) {
           they could type into and lose. Do not rely on this in either
           direction.
         */}
-        {viewer.role === 'dj' && <NotesSection eventId={event.id} body={event.privateNotes} />}
+        {viewer.role === 'dj' && (
+          <NotesSection
+            eventId={event.id}
+            body={event.privateNotes}
+            saveAction={savePrivateNotes}
+          />
+        )}
 
-        <SharedNotesSection eventId={event.id} body={event.sharedNotes} />
+        <SharedNotesSection
+          eventId={event.id}
+          body={event.sharedNotes}
+          saveAction={saveSharedNotes}
+          isDj={viewer.role === 'dj'}
+        />
 
         <EventDetailsForm eventId={event.id} saveAction={saveEventDetails} />
       </div>

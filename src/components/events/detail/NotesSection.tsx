@@ -2,13 +2,14 @@
 
 import { useActionState } from 'react';
 
-import { savePrivateNotes } from '@/lib/events/notesActions';
+import type { ActionResult } from '@/lib/auth/errors';
 import type { DetailActionState } from '@/lib/events/detailTypes';
 import styles from './NotesSection.module.css';
 
 interface NotesSectionProps {
   eventId: string;
   body: string;
+  saveAction: (prevState: DetailActionState, formData: FormData) => Promise<ActionResult>;
 }
 
 /**
@@ -23,9 +24,9 @@ interface NotesSectionProps {
  * The screen also hides this section from a partner. That is a convenience,
  * not the control — the policy is (design §3). Do not rely on it either way.
  */
-export function NotesSection({ eventId, body }: NotesSectionProps) {
+export function NotesSection({ eventId, body, saveAction }: NotesSectionProps) {
   const [state, formAction, isPending] = useActionState<DetailActionState, FormData>(
-    savePrivateNotes,
+    saveAction,
     null,
   );
   const fieldError = state && !state.ok && 'formErrors' in state ? state.formErrors.body : null;

@@ -2,13 +2,21 @@
 
 import { useActionState } from 'react';
 
-import { saveSharedNotes } from '@/lib/events/notesActions';
+import type { ActionResult } from '@/lib/auth/errors';
 import type { DetailActionState } from '@/lib/events/detailTypes';
 import styles from './SharedNotesSection.module.css';
 
 interface SharedNotesSectionProps {
   eventId: string;
   body: string;
+  saveAction: (prevState: DetailActionState, formData: FormData) => Promise<ActionResult>;
+  /**
+   * Whether the DJ is reading this box, not the couple. A `boolean` rather
+   * than the full `Viewer` union: this component only ever needs the one bit
+   * of information the second sentence of the blurb depends on, and a
+   * narrower prop is one less place a caller can pass the wrong shape.
+   */
+  isDj: boolean;
 }
 
 /**
@@ -22,9 +30,9 @@ interface SharedNotesSectionProps {
  * A sibling of the details form, never nested inside it. HTML forbids nested
  * forms and the parser drops the inner one (design §2.2).
  */
-export function SharedNotesSection({ eventId, body }: SharedNotesSectionProps) {
+export function SharedNotesSection({ eventId, body, saveAction, isDj }: SharedNotesSectionProps) {
   const [state, formAction, isPending] = useActionState<DetailActionState, FormData>(
-    saveSharedNotes,
+    saveAction,
     null,
   );
   const fieldError = state && !state.ok && 'formErrors' in state ? state.formErrors.body : null;
@@ -36,7 +44,14 @@ export function SharedNotesSection({ eventId, body }: SharedNotesSectionProps) {
 
       <h3 className={styles.heading}>Shared notes</h3>
       <p className={styles.blurb}>
-        The couple can see and edit this. Keep planning notes in your private notes above.
+        The couple can see and edit this.
+        {/*
+          Only the DJ has a private-notes section on their page at all
+          (EventDetailScreen gates it on viewer.role === 'dj') -- a partner
+          reading "keep planning notes in your private notes above" would see
+          a sentence pointing at a box that does not exist on their screen.
+        */}
+        {isDj && ' Keep planning notes in your private notes above.'}
       </p>
 
       <textarea
