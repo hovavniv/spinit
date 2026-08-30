@@ -465,3 +465,33 @@ Net result: every item Task 12 flagged as unverified is now verified, and nothin
 contradicts anything recorded above. The dashboard-data slice (Tasks 1-12) is fully implemented, fully
 tested (197/198 real test results, the one gap being a documented external rate limit), and its
 preview route confirmed rendering correctly.
+
+## Empty-states manual check (fix-spec F4), performed 2026-08-30
+
+Plan Task 12 Step 2 required editing the preview route temporarily to pass empty `upcoming`/`past`
+arrays and confirm both empty-state messages render, then reverting the edit. This was never actually
+done when Task 12 was originally executed — it was silently skipped, not recorded as skipped. Performed
+for real now, separately from that original session.
+
+**What was checked:** `src/app/design/dashboard/page.tsx` was temporarily changed so `DashboardScreen`
+received `data={{ ...demoData, upcoming: [], past: [] }}` (keeping `dj`, `now`, and `liveEvent` from
+`demoData` as-is). `npm run dev` was started (bound to port 3001; port 3000 was already in use by
+another process), then:
+
+```
+curl -s http://localhost:3001/design/dashboard | grep -o "No upcoming events yet\.\|No past events yet\."
+```
+
+Actual output:
+```
+No upcoming events yet.
+No past events yet.
+No upcoming events yet.
+No past events yet.
+```
+
+Both empty-state messages are present (each appears twice — once in the rendered HTML, once in the
+RSC flight payload embedded in the same response; not a defect). The dev server was then stopped and
+confirmed stopped (`pgrep -fl "next dev"` returned nothing). The temporary edit to
+`src/app/design/dashboard/page.tsx` was reverted; `git diff src/app/design/dashboard/page.tsx` showed
+no output, confirming an exact revert.
