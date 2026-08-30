@@ -245,5 +245,120 @@ describe.skipIf(!hasSupabaseConfig || !hasTestUsers)(
       expect(error).toBeNull();
       expect(data).toEqual([]);
     });
+
+    describe('event_must_play and event_blocklist', () => {
+      let rowOfA: string;
+
+      beforeAll(async () => {
+        const { data, error } = await clientA
+          .from('event_must_play')
+          .insert({ event_id: anEventOfA, segment: 'party', title: 'Seeded by the RLS suite' })
+          .select('id')
+          .single();
+        if (error || !data) throw new Error(`A could not insert a must-play: ${error?.message}`);
+        rowOfA = data.id;
+      });
+
+      test('B cannot see any of A rows', async () => {
+        const { data, error } = await clientB.from('event_must_play').select('id');
+
+        expect(error).toBeNull();
+        expect(data?.some((row) => row.id === rowOfA)).toBe(false);
+      });
+
+      test('B cannot insert against A event', async () => {
+        const { error } = await clientB
+          .from('event_must_play')
+          .insert({ event_id: anEventOfA, segment: 'party', title: 'Not mine' });
+
+        // insert is refused by `with check`, which RAISES.
+        expect(error?.code).toBe('42501');
+      });
+
+      test('B deleting A row affects zero rows and raises nothing', async () => {
+        // A delete policy has only `using`, which FILTERS — Postgres rejects
+        // `for delete ... with check` outright. So the correct assertion is
+        // "no error, nothing deleted", not "an error". The cross-tenant update
+        // case above is pinned the same way.
+        const { data, error } = await clientB
+          .from('event_must_play')
+          .delete()
+          .eq('id', rowOfA)
+          .select();
+
+        expect(error).toBeNull();
+        expect(data).toEqual([]);
+
+        const stillThere = await clientA.from('event_must_play').select('id').eq('id', rowOfA);
+        expect(stillThere.data).toHaveLength(1);
+      });
+
+      test('A can insert, read and delete their own blocklist entry', async () => {
+        const inserted = await clientA
+          .from('event_blocklist')
+          .insert({
+            event_id: anEventOfA,
+            segment: 'party',
+            entry_type: 'genre',
+            value: `rls-suite-${Date.now()}`,
+          })
+          .select('id')
+          .single();
+        expect(inserted.error).toBeNull();
+
+        const deleted = await clientA
+          .from('event_blocklist')
+          .delete()
+          .eq('id', inserted.data!.id)
+          .select();
+        expect(deleted.error).toBeNull();
+        expect(deleted.data).toHaveLength(1);
+      });
+
+      test('saving both ceremony slots twice leaves two rows, not four', async () => {
+        // This is the test that catches a broken ceremony write. A mocked
+        // client cannot: it returns whatever the double was told to return, so
+        // it passes cleanly while the real statement fails. An earlier draft of
+        // this design upserted against a PARTIAL unique index, which Postgres
+        // refuses as an ON CONFLICT target (42P10) — the page's Save button
+        // would have been permanently broken behind a generic error message.
+        const slots = ['Walking down the aisle', 'Breaking the glass'];
+
+        for (let pass = 0; pass < 2; pass += 1) {
+          for (const moment of slots) {
+            const existing = await clientA
+              .from('event_must_play')
+              .select('id')
+              .eq('event_id', anEventOfA)
+              .eq('segment', 'ceremony')
+              .eq('moment', moment)
+              .maybeSingle();
+
+            if (existing.data) {
+              const { error } = await clientA
+                .from('event_must_play')
+                .update({ title: `pass ${pass}` })
+                .eq('id', existing.data.id)
+                .eq('event_id', anEventOfA)
+                .eq('segment', 'ceremony');
+              expect(error).toBeNull();
+            } else {
+              const { error } = await clientA
+                .from('event_must_play')
+                .insert({ event_id: anEventOfA, segment: 'ceremony', moment, title: `pass ${pass}` });
+              expect(error).toBeNull();
+            }
+          }
+        }
+
+        const { data } = await clientA
+          .from('event_must_play')
+          .select('id, moment')
+          .eq('event_id', anEventOfA)
+          .eq('segment', 'ceremony');
+
+        expect(data).toHaveLength(2);
+      });
+    });
   },
 );
