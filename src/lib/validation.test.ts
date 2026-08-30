@@ -295,7 +295,7 @@ describe('isUuid', () => {
     expect(isUuid('3f0c1a5e-8b2d-4f6a-9c1e-2d4b6a8c0e2f')).toBe(true);
   });
 
-  test('accepts the seed\'s derived v5 ids', () => {
+  test("accepts the seed's derived v5 ids", () => {
     expect(isUuid('a1b2c3d4-e5f6-5789-8abc-def012345678')).toBe(true);
   });
 

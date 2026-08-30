@@ -23,9 +23,7 @@ const NO_SUGGESTIONS = 'No guest suggestions were recorded for this event.';
  * than doubling it — and it has to survive the not-found case, since Next
  * calls this before the component runs.
  */
-export async function generateMetadata(
-  props: PageProps<'/events/[id]/recap'>,
-): Promise<Metadata> {
+export async function generateMetadata(props: PageProps<'/events/[id]/recap'>): Promise<Metadata> {
   const { id } = await props.params;
   const recap = await getEventRecap(id);
 

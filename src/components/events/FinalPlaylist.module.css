@@ -19,11 +19,7 @@
   left: 24px;
   right: 24px;
   height: 1px;
-  background: repeating-linear-gradient(
-    90deg,
-    oklch(0.85 0.012 60) 0 8px,
-    transparent 8px 16px
-  );
+  background: repeating-linear-gradient(90deg, oklch(0.85 0.012 60) 0 8px, transparent 8px 16px);
 }
 
 .ruleBottom {
