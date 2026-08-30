@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
+import { z } from 'zod';
 
 import { requireUser, getProfile } from '@/lib/auth/dal';
 import { getEventDetail } from '@/lib/events/detailDal';
@@ -28,9 +29,17 @@ export const metadata: Metadata = {
  * for enumerating event ids (design §2.5). It throws, so nothing here may wrap
  * it in a try/catch, and it is awaited in the page body rather than inside a
  * <Suspense> child, which would produce a soft 404 (HTTP 200) instead.
+ *
+ * `id` is checked against the uuid shape BEFORE it ever reaches getEventDetail:
+ * a non-uuid segment (e.g. the sidebar's still-present /events/upcoming link,
+ * or a crawler) would otherwise reach Postgres and fail with `22P02 invalid
+ * input syntax for type uuid`, logged as if it were a genuine DB failure. The
+ * 404 is identical either way; this just keeps that path quiet.
  */
 export default async function EventPage({ params }: PageProps<'/events/[id]'>) {
   const { id } = await params;
+
+  if (!z.uuid().safeParse(id).success) notFound();
 
   const user = await requireUser();
   const profile = await getProfile();
