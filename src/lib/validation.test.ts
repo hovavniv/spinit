@@ -10,6 +10,8 @@ import {
   blocklistAddSchema,
   rowRefSchema,
   eventDetailsSchema,
+  privateNotesSchema,
+  sharedNotesSchema,
 } from './validation';
 
 function toFormData(values: Record<string, string>): FormData {
@@ -444,18 +446,33 @@ describe('rowRefSchema', () => {
 });
 
 describe('eventDetailsSchema', () => {
-  test('turns empty notes into null rather than an empty string', () => {
-    // An event nobody has written notes for has NO notes, which is not the
-    // same fact as an empty string (design §5.1).
-    const result = eventDetailsSchema.safeParse({ eventId: A_UUID, notes: '   ' });
+  test('no longer carries notes', () => {
+    // Notes left `events` for their own two tables with their own policies
+    // (design §3, §5.2), so this schema validates the event id alone.
+    expect('notes' in eventDetailsSchema.shape).toBe(false);
+  });
+});
 
-    expect(result.success).toBe(true);
-    expect(result.data?.notes).toBeNull();
+describe('privateNotesSchema', () => {
+  test('accepts an empty body', () => {
+    // '' is the column default and the state of every event the migration
+    // backfills, so it must parse rather than read as a missing field.
+    expect(privateNotesSchema.safeParse({ eventId: A_UUID, body: '' }).success).toBe(true);
   });
 
-  test('rejects notes over 2000 characters', () => {
-    const result = eventDetailsSchema.safeParse({ eventId: A_UUID, notes: 'x'.repeat(2001) });
+  test('rejects a body over 2000 characters, matching the check constraint', () => {
+    const result = privateNotesSchema.safeParse({ eventId: A_UUID, body: 'x'.repeat(2001) });
 
     expect(result.success).toBe(false);
+  });
+
+  test('rejects a non-uuid event id before it reaches Postgres', () => {
+    expect(privateNotesSchema.safeParse({ eventId: 'nope', body: '' }).success).toBe(false);
+  });
+});
+
+describe('sharedNotesSchema', () => {
+  test('has the same shape as the private one', () => {
+    expect(sharedNotesSchema.safeParse({ eventId: A_UUID, body: 'hi' }).success).toBe(true);
   });
 });

@@ -177,8 +177,26 @@ export const rowRefSchema = z.object({
 
 export const eventDetailsSchema = z.object({
   eventId: eventIdField,
-  notes: optionalText(2000, 'Notes must be at most 2000 characters.'),
 });
+
+/**
+ * The two note bodies (design §3, §5.2). Notes left `events` for two tables
+ * with two different policies -- private is the DJ's alone, shared is everyone
+ * on the event -- so they are validated apart from the event's own details.
+ *
+ * 2000 is the check constraint's number, said again here so the user sees a
+ * field error rather than a generic failure from Postgres. The body is NOT
+ * `optionalText`: '' is the column default and a real value meaning "cleared",
+ * not the absence of a note, and the write is an upsert either way.
+ */
+const notesBody = z.string().max(2000, 'Keep notes under 2000 characters.');
+
+export const privateNotesSchema = z.object({
+  eventId: eventIdField,
+  body: notesBody,
+});
+
+export const sharedNotesSchema = privateNotesSchema;
 
 /**
  * One ceremony slot. A BLANK TITLE IS LEGAL and means "clear this slot"
