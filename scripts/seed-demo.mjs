@@ -18,13 +18,17 @@
    Targets whatever .env.local points at -- hosted project or a local stack.
 
    Idempotent for ADDITIONS and EDITS, not for REMOVALS. Every write is an
-   upsert on a derived id, so re-running converges. But for `events` and
-   `played_songs` this slice grants no delete and defines no delete policy, so
-   if you shorten a `songs` array and re-run, the rows you removed stay in the
-   database forever and the counts in Task 6 Step 5 stop matching. Removing
-   seeded data from those two tables is a manual job until a delete policy
-   exists. `event_must_play` and `event_blocklist` are not affected -- they do
-   have a delete policy and grant, so the seed converges on removals for them.
+   upsert on a derived id -- this script issues no delete anywhere -- so
+   re-running converges only on additions and edits. If you shorten a
+   `songs` array, or a fixture's `mustPlay`/`blocklist` array, and re-run,
+   the rows you removed stay in the database; for `events` and
+   `played_songs` this also means the counts in Task 6 Step 5 stop matching.
+   Removing seeded data from any of the four tables (`events`,
+   `played_songs`, `event_must_play`, `event_blocklist`) is a manual job
+   until this script implements a delete pass. `event_must_play` and
+   `event_blocklist` do have a delete policy and grant, unlike the other
+   two, but that only means a delete is possible for them, not that this
+   script performs one.
    --------------------------------------------------------------------------- */
 
 import { createHash } from 'node:crypto';
