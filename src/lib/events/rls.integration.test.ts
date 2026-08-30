@@ -245,5 +245,77 @@ describe.skipIf(!hasSupabaseConfig || !hasTestUsers)(
       expect(error).toBeNull();
       expect(data).toEqual([]);
     });
+
+    // --- The queries getEventRecap issues (design §4, §10) -----------------
+
+    test('A reads their own completed event through the recap filters', async () => {
+      const { data, error } = await clientA
+        .from('events')
+        .select('id, couple_names, venue, event_date')
+        .eq('id', anEventOfA)
+        .eq('dj_id', userAId)
+        .eq('status', 'completed')
+        .maybeSingle();
+
+      expect(error).toBeNull();
+      expect(data).not.toBeNull();
+      expect(data!.couple_names).toBe('Noa & Eitan');
+    });
+
+    test('B reads zero rows through the same filters', async () => {
+      const { data, error } = await clientB
+        .from('events')
+        .select('id')
+        .eq('id', anEventOfA)
+        .eq('status', 'completed')
+        .maybeSingle();
+
+      // maybeSingle() on zero rows is null data and no error, which is the
+      // behaviour getEventRecap turns into notFound(). If this ever starts
+      // erroring instead, the DAL's `if (eventError) throw` would turn a
+      // wrong-owner request into a 500 and leak that the id exists.
+      expect(error).toBeNull();
+      expect(data).toBeNull();
+    });
+
+    // The playlist query carries no dj_id predicate of its own. This is the
+    // test that says it does not need one.
+    test("A's playlist comes back ordered by position", async () => {
+      const { data, error } = await clientA
+        .from('played_songs')
+        .select('position, title, artist, suggested_by')
+        .eq('event_id', anEventOfA)
+        .order('position', { ascending: true });
+
+      expect(error).toBeNull();
+      expect(data!.length).toBe(10);
+      expect(data!.map((row) => row.position)).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
+      // The seed's first song for this event, so this pins the ORDER and not
+      // merely that ten rows came back in some sequence.
+      expect(data![0].title).toBe('At Last');
+    });
+
+    test('a cancelled event is unreachable through the recap filters, even by its owner', async () => {
+      const { data: cancelled } = await clientA
+        .from('events')
+        .select('id')
+        .eq('couple_names', 'Lena & Mark')
+        .limit(1);
+
+      if (!cancelled || cancelled.length === 0) {
+        throw new Error("No 'Lena & Mark' event for user A. Run `npm run seed:demo` first.");
+      }
+
+      const { data, error } = await clientA
+        .from('events')
+        .select('id')
+        .eq('id', cancelled[0].id)
+        .eq('dj_id', userAId)
+        .eq('status', 'completed')
+        .maybeSingle();
+
+      expect(error).toBeNull();
+      expect(data).toBeNull();
+    });
   },
 );
