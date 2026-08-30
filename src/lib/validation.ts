@@ -101,6 +101,24 @@ export const profileSchema = z.object({
   phone: phoneField,
 });
 
+/**
+ * Is this string a UUID? Used to reject a path segment BEFORE it reaches
+ * Postgres: `select ... where id = 'banana'` raises 22P02, which surfaces as
+ * a 500, and a bad URL should be a 404 (design §4.1).
+ *
+ * `z.uuid()` is zod 4's top-level form; `z.string().uuid()` is the v3 spelling
+ * and this repo is on 4.5.2. It is STRICTER than Postgres's `uuid` type — it
+ * enforces the RFC 4122 version and variant nibbles, so it rejects a handful
+ * of strings (the nil UUID among them) that Postgres would accept and simply
+ * return no rows for. Harmless here: every id this app can hold comes from
+ * `gen_random_uuid()` or the seed's `derivedId`, which stamps version 5 and
+ * the variant explicitly. `z.guid()` is the permissive alternative if that
+ * ever stops being true.
+ */
+export function isUuid(value: string): boolean {
+  return z.uuid().safeParse(value).success;
+}
+
 /* ---------------------------------------------------------------------------
    The event page (docs/specs/2026-08-30-event-detail-design.md §8.1).
 

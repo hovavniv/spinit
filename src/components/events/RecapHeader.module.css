@@ -1,0 +1,66 @@
+/* Measurements read from design/artboards/Spinit Event Recap.dc.html — the
+   back link and the header row. */
+
+.back {
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--text-subtle);
+}
+
+/* globals.css's a:hover (specificity (0,1,1)) would otherwise outrank this
+   class's color and turn the link pink on hover — the artboard does not do
+   this (its <a> carries the color inline, which outranks a:hover there too).
+   Same trap as DashboardSidebar.module.css and PastEventsList.module.css. */
+.back:hover {
+  color: var(--text-subtle);
+}
+
+.row {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  margin: 20px 0 8px;
+  gap: 20px;
+  flex-wrap: wrap;
+}
+
+.eyebrow {
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--accent-deep);
+  margin-bottom: 8px;
+}
+
+/* 34px, not the 32px of the Past events h1. Both are read from their own
+   artboard; this is not a typo to normalise. */
+.title {
+  font-family: var(--font-sora), sans-serif;
+  font-size: 34px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  margin: 0;
+}
+
+.subtitle {
+  font-size: 14.5px;
+  color: var(--text-muted);
+  margin-top: 6px;
+}
+
+.send {
+  background: var(--accent);
+  color: white;
+  border: none;
+  padding: 12px 22px;
+  border-radius: var(--radius-pill);
+  font-family: var(--font-inter), sans-serif;
+  font-weight: 700;
+  font-size: 14px;
+  white-space: nowrap;
+  /* The button is aria-disabled, not disabled, so it still takes a cursor and
+     still focuses. These two say "not yet" without changing its geometry. */
+  cursor: not-allowed;
+  opacity: 0.55;
+}

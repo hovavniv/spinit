@@ -609,3 +609,31 @@ doesn't reset since that fixture's `notes` is `null`) was cleared back to `null`
 **Result: all nine checks passed.** No app defects found. The only issues encountered were in
 the throwaway test script itself (selector ambiguity), not in the product, and were fixed
 before drawing conclusions rather than worked around.
+
+---
+
+## Event recap (/events/[id]/recap)
+
+1. Sign in as the seeded DJ, go to **Past events**, click **View recap →** on
+   _Noa & Eitan_. The recap opens with the couple as the heading,
+   `July 18, 2026 · Franklin Hall` beneath it, `10` in the Songs played tile,
+   and ten playlist rows numbered 1–10 starting with _At Last_.
+2. Rows suggested by a guest read `requested by <name>`; the two unattributed
+   ones read `DJ pick`.
+3. Party length, Closed, and Most requested song each show a grey em-dash.
+   Hovering one shows a tooltip explaining why.
+4. Open _Ruth & Adam_. The Final playlist card still renders, with
+   `No songs were logged for this event.` and both dotted rules.
+5. Visit `/events/banana/recap` — the styled 404, not an error page. Visit a
+   well-formed but unused UUID, e.g.
+   `/events/00000000-0000-4000-8000-000000000001/recap` — also the 404.
+6. **Accessibility, not covered by the suite.** Tab to **Send to couple**. It
+   must take focus, and a screen reader must announce both that it is disabled
+   and the "Coming soon" explanation. Then, using a screen reader's
+   browse/virtual cursor (not Tab — nothing in the stat grid is focusable),
+   confirm the pending reasons are reachable. (jsdom applies no CSS, so a
+   broken `.srOnly` passes every automated assertion.)
+7. Put the screen side by side with `design/artboards/Spinit Event Recap.dc.html`
+   at 1280px. Check the header row, the 3-column stat grid with the wide
+   bottom-right tile, and the card's two dotted perforation rules.
+8. Narrow the window to ~700px and confirm nothing scrolls sideways.

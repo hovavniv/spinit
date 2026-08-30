@@ -1,9 +1,9 @@
 import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
-import { z } from 'zod';
 
 import { requireUser, getProfile } from '@/lib/auth/dal';
 import { getEventDetail } from '@/lib/events/detailDal';
+import { isUuid } from '@/lib/validation';
 import { AppShell } from '@/components/shell/AppShell';
 import { DashboardSidebar } from '@/components/dashboard/DashboardSidebar';
 import { EventDetailScreen } from '@/components/events/detail/EventDetailScreen';
@@ -34,12 +34,14 @@ export const metadata: Metadata = {
  * a non-uuid segment (e.g. the sidebar's still-present /events/upcoming link,
  * or a crawler) would otherwise reach Postgres and fail with `22P02 invalid
  * input syntax for type uuid`, logged as if it were a genuine DB failure. The
- * 404 is identical either way; this just keeps that path quiet.
+ * 404 is identical either way; this just keeps that path quiet. `isUuid`
+ * (`@/lib/validation`) is shared with `getEventRecap` in
+ * `@/lib/events/dal.ts`, which guards its own non-uuid ids the same way.
  */
 export default async function EventPage({ params }: PageProps<'/events/[id]'>) {
   const { id } = await params;
 
-  if (!z.uuid().safeParse(id).success) notFound();
+  if (!isUuid(id)) notFound();
 
   const user = await requireUser();
   const profile = await getProfile();

@@ -1,6 +1,7 @@
 import { describe, expect, it, test } from 'vitest';
 import {
   formDataToRecord,
+  isUuid,
   loginSchema,
   PHONE_PATTERN,
   profileSchema,
@@ -290,6 +291,32 @@ describe('profileSchema', () => {
       phone: 'not a phone',
     });
     expect(result.success).toBe(false);
+  });
+});
+
+describe('isUuid', () => {
+  test('accepts a gen_random_uuid()-shaped id', () => {
+    expect(isUuid('3f0c1a5e-8b2d-4f6a-9c1e-2d4b6a8c0e2f')).toBe(true);
+  });
+
+  test("accepts the seed's derived v5 ids", () => {
+    expect(isUuid('a1b2c3d4-e5f6-5789-8abc-def012345678')).toBe(true);
+  });
+
+  test('rejects a non-UUID path segment', () => {
+    expect(isUuid('banana')).toBe(false);
+  });
+
+  test('rejects the empty string', () => {
+    expect(isUuid('')).toBe(false);
+  });
+
+  test('rejects a 36-character string that is not a UUID', () => {
+    expect(isUuid('xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx')).toBe(false);
+  });
+
+  test('rejects a UUID with surrounding whitespace', () => {
+    expect(isUuid(' 3f0c1a5e-8b2d-4f6a-9c1e-2d4b6a8c0e2f ')).toBe(false);
   });
 });
 

@@ -43,3 +43,28 @@
     padding: 24px;
   }
 }
+
+/* --------------------------------------------------------------------------
+   The 'narrow' variant: design/artboards/Spinit Event Recap.dc.html, whose
+   main column is 56px on all sides around a 760px wrapper.
+
+   THESE RULES MUST STAY AT THE END OF THIS FILE. `.main` and `.mainNarrow`
+   are both single-class selectors, so specificity does not separate them and
+   source order is the only thing deciding which padding wins. In particular
+   the media query below must come AFTER the one above, or a phone gets the
+   desktop's 56px padding.
+   -------------------------------------------------------------------------- */
+
+.mainNarrow {
+  padding: 56px;
+}
+
+.contentNarrow {
+  max-width: 760px;
+}
+
+@media (max-width: 899px) {
+  .mainNarrow {
+    padding: 24px;
+  }
+}
