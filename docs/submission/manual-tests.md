@@ -496,3 +496,18 @@ RSC flight payload embedded in the same response; not a defect). The dev server 
 confirmed stopped (`pgrep -fl "next dev"` returned nothing). The temporary edit to
 `src/app/design/dashboard/page.tsx` was reverted; `git diff src/app/design/dashboard/page.tsx` showed
 no output, confirming an exact revert.
+
+## A note on why `npm run test`'s pass count is not a stable number, 2026-08-30
+
+Every full run of the suite executes `src/lib/auth/rls.integration.test.ts`'s `signUp` case against
+the live Supabase project. That project's built-in mailer is capped at 2 emails/hour, shared across
+signup and recovery, **project-wide, not per-user**. Each full run spends part of that budget; once
+it's exhausted, the `signUp` call itself 429s (`AuthApiError`, `over_email_send_rate_limit`), and that
+failure can cascade into whatever assertions in that same test file run after it. Four consecutive runs
+during this branch's own verification read 197/198, 196/198 (2 files failing), 199/200, and 200/200 at
+different points — not because anything regressed between them, but because of this budget.
+
+**If you re-run this suite and see a different failure count than the ones recorded above in this
+file, that is expected** and does not by itself mean something broke. Check the failure's own error
+text before concluding a regression: `over_email_send_rate_limit` (429) is the mailer cap, not an app
+or RLS defect. A failure with a different message is worth investigating; this one is not.
