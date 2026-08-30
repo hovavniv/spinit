@@ -1,11 +1,13 @@
 'use server';
 
 import { redirect } from 'next/navigation';
+import { revalidatePath } from 'next/cache';
 import type { ZodError } from 'zod';
 
 import { createClient } from '@/lib/supabase/server';
 import { requireUser } from '@/lib/auth/dal';
 import { mapAuthError, type ActionResult } from '@/lib/auth/errors';
+import { siteUrl } from '@/lib/auth/site-url';
 import { formDataToRecord, loginSchema, registerSchema, profileSchema, PHONE_PATTERN } from '@/lib/validation';
 
 /**
@@ -15,21 +17,6 @@ import { formDataToRecord, loginSchema, registerSchema, profileSchema, PHONE_PAT
  * deferred to a later phase"), tracked as GitHub issue #2. Every design/plan
  * passage describing `signInWithGoogle` is out of scope for this file.
  */
-
-/**
- * `SITE_URL`, never a request header — a forged `Host` / `X-Forwarded-Host`
- * header must not be able to influence a Supabase redirect URL (design 4.1,
- * design 4.3's open-redirect concern). This function does not read
- * `headers()` at all, which is itself the control: there is no code path
- * here that could be tricked into preferring a client-supplied origin.
- */
-function siteUrl(): string {
-  const url = process.env.SITE_URL;
-  if (!url) {
-    throw new Error('SITE_URL is not set');
-  }
-  return url;
-}
 
 /**
  * Zod's issues array can carry more than one error per field; only the first
@@ -91,7 +78,7 @@ export async function signUpWithPassword(
   });
 
   if (error) {
-    return mapAuthError(error, { event: 'signup' });
+    return mapAuthError(error, { event: 'signup', constraint: error.code });
   }
 
   // "check your email" — the caller/UI renders the copy for this state.
@@ -115,7 +102,7 @@ export async function signInWithPassword(
   });
 
   if (error) {
-    return mapAuthError(error, { event: 'login' });
+    return mapAuthError(error, { event: 'login', constraint: error.code });
   }
 
   // redirect() throws internally — expected Next behavior, not caught here.
@@ -177,6 +164,13 @@ export async function updateProfile(
     });
     return { ok: false, message: 'We could not save your profile. Please try again.' };
   }
+
+  // Per Next's server-actions docs, revalidatePath before returning causes
+  // the current route (`/dashboard`) to re-render server-side in the same
+  // response this action returns — `page.tsx` re-runs `getProfile()`, and
+  // `shouldPromptForProfile` correctly flips to `false`, swapping this form
+  // out for the read-only profile view without a manual reload (F8).
+  revalidatePath('/dashboard');
 
   return { ok: true };
 }
