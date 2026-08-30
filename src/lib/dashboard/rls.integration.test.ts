@@ -102,6 +102,15 @@ describe.skipIf(!hasSupabaseConfig || !hasTestUsers)(
     });
 
     test('DJ A can insert an event with the new columns', async () => {
+      // status: 'draft', not 'upcoming' — this insert has no teardown (public.events
+      // grants no delete and defines no delete policy, so a client-side cleanup
+      // cannot work regardless), so every run of this suite leaves this row in the
+      // live database permanently. 'draft' is invisible to every query this repo
+      // runs today (listActiveEvents only reads 'upcoming'/'live';
+      // past_events_with_counts only carries 'completed'), so the leak no longer
+      // renders as a phantom card on a real DJ's dashboard. It does not fix the
+      // accumulation itself — that needs a delete policy, a decision recorded as
+      // open in the ledger, not made here.
       const { data, error } = await clientA
         .from('events')
         .insert({
@@ -109,7 +118,7 @@ describe.skipIf(!hasSupabaseConfig || !hasTestUsers)(
           couple_names: 'RLS Test A',
           venue: 'Test Venue',
           event_date: '2026-12-01',
-          status: 'upcoming',
+          status: 'draft',
           phase: 'dinner',
           start_time: '19:30:00',
           couple_status: 'streaming-connected',
