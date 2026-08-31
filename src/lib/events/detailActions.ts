@@ -141,7 +141,10 @@ export async function addBlocklistEntry(
     });
 
   if (error) {
-    // 23505 is the unique index on (event_id, segment, entry_type, lower(value)).
+    // 23505 is one of the two partial unique indexes on event_blocklist:
+    //   event_blocklist_spotify_idx  (event_id, segment, entry_type, spotify_id)
+    //   event_blocklist_genre_idx    (event_id, segment, lower(value))
+    // -- two identity schemes for two genuinely different kinds of entry.
     // Detected by code rather than by a pre-flight select, which would be a race.
     // A cross-tenant probe cannot reach this: with check is evaluated before
     // index insertion, so it raises 42501 first.
