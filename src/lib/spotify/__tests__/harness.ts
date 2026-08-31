@@ -20,8 +20,8 @@ export const markConnectionFailed = vi.fn(async () => undefined);
 export const partnerOwner = vi.fn(async () => 'user-partner-1');
 
 /** oauth.ts, mocked for task 5's connectionDal test and task 8's sync test. */
-export const refreshAccessToken = vi.fn(async () => ({ accessToken: 'A', refreshToken: 'R' }));
-export const exchangeCode       = vi.fn(async () => ({ accessToken: 'A', refreshToken: 'R' }));
+export const refreshAccessToken = vi.fn(async () => ({ accessToken: 'ACCESS', refreshToken: 'REFRESH' }));
+export const exchangeCode       = vi.fn(async () => ({ accessToken: 'ACCESS', refreshToken: 'REFRESH' }));
 
 /** client.ts (slice B), mocked for task 7's callback test and task 8's sync test. */
 export const spotifyFetch = vi.fn(async () => ({ items: [] }));

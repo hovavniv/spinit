@@ -66,7 +66,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   requireUser.mockResolvedValue({ id: 'user-partner-1' });
   partnerOwnerMock.mockResolvedValue('user-partner-1');
-  exchangeCodeMock.mockResolvedValue({ accessToken: 'A', refreshToken: 'R', expiresIn: 3600 });
+  exchangeCodeMock.mockResolvedValue({ accessToken: 'ACCESS', refreshToken: 'REFRESH', expiresIn: 3600 });
   spotifyFetchMock.mockResolvedValue({ id: 'spotify-user' });
   storeConnectionMock.mockResolvedValue(undefined);
   markConnectionFailedMock.mockResolvedValue(undefined);
@@ -116,24 +116,39 @@ describe('pasteCode', () => {
     async () => {
       spotifyFetch.mockRejectedValue(new SpotifyError('forbidden', 403, '/me'));
       await pasteCode(pasteForm('p1', 'AQD-x'));
-      expect(markConnectionFailed).toHaveBeenCalledWith('p1', expect.any(String));
+      expect(markConnectionFailed).toHaveBeenCalledWith('p1', 'not_allowlisted');
       expect(storeConnection).not.toHaveBeenCalled();
     });
+
+  it('lets a non-403 SpotifyError propagate rather than recording not_allowlisted', async () => {
+    spotifyFetch.mockRejectedValue(new SpotifyError('unavailable', 500, '/me'));
+    await expect(pasteCode(pasteForm('p1', 'AQD-x'))).rejects.toThrow();
+    expect(markConnectionFailed).not.toHaveBeenCalled();
+  });
 
   it('stores the connection and calls syncTasteProfile on success', async () => {
     await pasteCode(pasteForm('p1', 'http://127.0.0.1:3000/api/spotify/callback?code=AQD-x'));
     expect(exchangeCode).toHaveBeenCalledWith('AQD-x');
     expect(storeConnection).toHaveBeenCalledWith(
-      expect.objectContaining({ partnerId: 'p1' }),
+      { partnerId: 'p1', spotifyUserId: 'spotify-user', refreshToken: 'REFRESH' },
     );
     expect(syncTasteProfile).toHaveBeenCalledWith('p1');
   });
 
-  it('never logs the pasted code, the refresh token or the client secret', async () => {
+  // Client secret is deliberately NOT asserted here: `exchangeCode` (the only
+  // thing in the real module that ever touches SPOTIFY_CLIENT_SECRET) is
+  // fully mocked in this file, so no client-secret value ever flows through
+  // this test's scope -- an assertion "the client secret is never logged"
+  // would pass unconditionally no matter what the action actually did with
+  // one, which is exactly the vacuous-test trap. No other test file in this
+  // repo currently pins that guard either; it would need to exercise the
+  // real (unmocked) `exchangeCode`/`oauth.ts` to be meaningful.
+  it('never logs the pasted code or the refresh token', async () => {
     const log = vi.spyOn(console, 'log').mockImplementation(() => {});
     const errLog = vi.spyOn(console, 'error').mockImplementation(() => {});
     await pasteCode(pasteForm('p1', 'AQD-secret-code'));
     const printed = [...log.mock.calls, ...errLog.mock.calls].flat().join(' ');
     expect(printed).not.toContain('AQD-secret-code');
+    expect(printed).not.toContain('REFRESH');
   });
 });
