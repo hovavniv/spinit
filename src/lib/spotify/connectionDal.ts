@@ -55,7 +55,7 @@ export async function markConnectionFailed(partnerId: string, reason: string): P
   const supabase = await createClient();
 
   await supabase.from('spotify_connections').upsert(
-    { partner_id: partnerId, status: 'failed', failure_reason: reason },
+    { partner_id: partnerId, status: 'failed', last_error: reason },
     { onConflict: 'partner_id' },
   );
 }
