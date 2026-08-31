@@ -3,6 +3,15 @@ import type { NextConfig } from "next";
 const nextConfig: NextConfig = {
   /* config options here */
 
+  // Next blocks cross-origin requests to dev-only assets/HMR by default,
+  // allowing only the hostname the dev server started on (localhost). This
+  // slice's Spotify OAuth flow requires browsing at the 127.0.0.1 loopback
+  // literal specifically (the registered redirect URI), which is a
+  // different origin to the browser even though both resolve to loopback --
+  // without this, every JS chunk and the HMR websocket 403s and the page
+  // never becomes interactive.
+  allowedDevOrigins: ["127.0.0.1"],
+
   // Design 2.4: Next verifies the Origin header against Host on every server
   // action invocation as CSRF protection, but this check requires explicit
   // configuration when the app runs behind a reverse proxy/CDN (Vercel).
@@ -10,7 +19,7 @@ const nextConfig: NextConfig = {
   // origin here once deployed.
   experimental: {
     serverActions: {
-      allowedOrigins: ["localhost:3000"],
+      allowedOrigins: ["localhost:3000", "127.0.0.1:3000"],
     },
   },
 
