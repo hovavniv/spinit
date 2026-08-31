@@ -27,9 +27,12 @@ import { syncTasteProfile } from '@/lib/spotify/sync';
  * (checked once in `connectSpotify`, Task 6) may have expired by the time
  * Spotify redirects back here. So this route re-checks BOTH identity
  * (`requireUser`) and ownership (`partnerOwner`, shared with Task 6) before
- * doing anything else. Every failure path below -- missing/bad cookie, state
- * mismatch, ownership mismatch, or the `/me` probe 403 -- returns its own
- * redirect and never reaches the success redirect at the end.
+ * doing anything else. Every failure path below -- missing cookie, bad
+ * (unparseable) cookie, state mismatch, ownership mismatch, the couple
+ * declining consent on Spotify's screen (or any other OAuth error Spotify
+ * reports via `?error=`), the `/me` probe 403 (not on the app's allowlist),
+ * or the event lookup coming back empty -- returns its own redirect and
+ * never reaches the success redirect at the end.
  *
  * A development-mode Spotify app's OAuth handshake succeeds even for a user
  * who is NOT on the app's allowlist -- Spotify only rejects them (403) on the
@@ -48,6 +51,7 @@ export async function GET(request: Request): Promise<Response> {
   const query = new URL(request.url).searchParams;
   const queryState = query.get('state') ?? '';
   const code = query.get('code') ?? '';
+  const oauthError = query.get('error');
 
   const cookieStore = await cookies();
   const raw = cookieStore.get('spotify_oauth');
@@ -84,6 +88,14 @@ export async function GET(request: Request): Promise<Response> {
   const ownerId = await partnerOwner(partnerId);
   if (ownerId !== user.id) {
     return errorRedirect(request, 'not_authorized');
+  }
+
+  // Spotify echoes `state` back on every redirect, including a decline, so
+  // this check only runs after the CSRF/state comparison and ownership
+  // check above have both passed -- a forged `error` param on an otherwise
+  // invalid request is still rejected by those checks first.
+  if (oauthError) {
+    return errorRedirect(request, oauthError === 'access_denied' ? 'declined' : 'oauth_error');
   }
 
   const tokens = await exchangeCode(code);

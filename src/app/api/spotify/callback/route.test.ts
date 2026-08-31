@@ -106,6 +106,18 @@ it('takes partnerId from the COOKIE, never from the query', async () => {
   expect(storeConnectionMock.mock.calls[0][0].partnerId).toBe('p1');
 });
 
+it(
+  'redirects to the DECLINED error state when the couple cancels on Spotify\'s consent ' +
+    'screen (error=access_denied, no code) — exchangeCode must never be called',
+  async () => {
+    const res = await GET(
+      req({ error: 'access_denied', state: 'S' }, { state: 'S', partnerId: 'p1' }),
+    );
+    expect(exchangeCodeMock).not.toHaveBeenCalled();
+    expect(res.headers.get('location')).toContain('spotify_error=declined');
+  },
+);
+
 it('refuses when the query state does not match the cookie', async () => {
   await GET(req({ code: 'C', state: 'WRONG' }, { state: 'S', partnerId: 'p1' }));
   expect(exchangeCodeMock).not.toHaveBeenCalled();
