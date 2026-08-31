@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, fireEvent } from '@testing-library/react';
 
 vi.mock('@/lib/spotify/actions', () => ({
   connectSpotify: vi.fn(),
@@ -7,6 +7,7 @@ vi.mock('@/lib/spotify/actions', () => ({
   disconnectSpotify: vi.fn(),
 }));
 
+import { connectSpotify, resyncSpotify } from '@/lib/spotify/actions';
 import { StreamingSection } from './StreamingSection';
 import type { PartnerRow } from '@/lib/events/detailTypes';
 
@@ -80,5 +81,54 @@ describe('StreamingSection', () => {
     );
     const label = screen.getByRole('button', { name: /re-?sync/i }).textContent ?? '';
     expect(label).not.toMatch(/latest|recent|new listening/i);
+  });
+
+  it("wires the Connect form's hidden partnerId to the viewing partner, not left blank", () => {
+    // Without this hidden input, the real connectSpotify action would receive
+    // no partnerId at all -- partnerOwner('') resolves to null and the
+    // server-side ownership check throws. Every real Connect click would
+    // fail while this whole test suite stayed green.
+    render(
+      <StreamingSection
+        partners={partners}
+        connections={{ p1: null, p2: null }}
+        viewer={{ role: 'partner', partnerId: 'p2' }}
+      />,
+    );
+    const form = screen.getByRole('button', { name: /connect/i }).closest('form')!;
+    expect(form.querySelector('input[name="partnerId"]')).toHaveValue('p2');
+  });
+
+  it('binds the Connect button to connectSpotify and the Re-sync button to resyncSpotify, not swapped', () => {
+    // Each row is its own <form action={...}>. If the two action bindings
+    // were ever swapped at the component (:70/:85), submitting either form
+    // would call the WRONG server action -- a re-sync click firing a fresh
+    // OAuth connect flow, or a connect click silently no-op'ing a re-sync on
+    // a partner who has never connected. Neither the form-count assertions
+    // nor the partnerId test above touch which action a given form submits.
+    const { unmount } = render(
+      <StreamingSection
+        partners={partners}
+        connections={{ p1: null, p2: null }}
+        viewer={{ role: 'partner', partnerId: 'p2' }}
+      />,
+    );
+    fireEvent.click(screen.getByRole('button', { name: /connect/i }));
+    expect(connectSpotify).toHaveBeenCalledTimes(1);
+    expect(resyncSpotify).not.toHaveBeenCalled();
+    unmount();
+
+    vi.clearAllMocks();
+
+    render(
+      <StreamingSection
+        partners={partners}
+        connections={connections}
+        viewer={{ role: 'partner', partnerId: 'p1' }}
+      />,
+    );
+    fireEvent.click(screen.getByRole('button', { name: /re-?sync/i }));
+    expect(resyncSpotify).toHaveBeenCalledTimes(1);
+    expect(connectSpotify).not.toHaveBeenCalled();
   });
 });

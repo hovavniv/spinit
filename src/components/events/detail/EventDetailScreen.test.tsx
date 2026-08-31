@@ -182,7 +182,15 @@ describe('EventDetailScreen', () => {
 
     assertNoFormIsNestedInAnotherForm(container);
     // Not just "no failure" -- StreamingSection must actually have RENDERED a
-    // form here, or the assertion above is vacuous.
-    expect(container.querySelectorAll('form').length).toBeGreaterThan(2);
+    // form here, or the assertion above is vacuous. A raw form COUNT cannot
+    // pin this: CeremonySongs, MustPlaySection (x2), BlocklistSection (x2),
+    // SharedNotesSection and EventDetailsForm alone put well over two forms
+    // on the tree regardless of what StreamingSection does -- confirmed by
+    // making StreamingSection return null and watching `length > 2` still
+    // hold. Asserting the Connect button itself is present is the only check
+    // that actually depends on StreamingSection having rendered its form.
+    expect(
+      screen.getByRole('button', { name: /connect .*spotify/i }),
+    ).toBeInTheDocument();
   });
 });

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import { TasteProfile } from './TasteProfile';
 import type { TasteProfile as TasteProfileType } from '@/lib/spotify/tasteTypes';
 
@@ -85,5 +85,32 @@ describe('TasteProfile', () => {
     expect(screen.getByText(/chris also loves/i)).toBeInTheDocument();
     expect(screen.getByText('Artist a')).toBeInTheDocument();
     expect(screen.getByText('Artist c')).toBeInTheDocument();
+  });
+
+  it('scopes each artist to the correct partner\'s "also loves" list, not just present somewhere on the page', () => {
+    // The heading and its list are SIBLINGS in TasteProfile.tsx (the <h4> is
+    // immediately followed by the <ArtistList>'s rendered element, both
+    // direct children of the same wrapping section) -- not a heading nested
+    // inside its own panel. An unscoped screen.getByText would still pass if
+    // partner1Loves/partner2Loves were swapped, since both lists live in the
+    // same document regardless of which name they're rendered under. Scoping
+    // to each heading's next sibling is what actually pins WHICH partner's
+    // heading a given artist renders under.
+    render(
+      <TasteProfile
+        partner1={{ name: 'Maya', profile: profile(['a', 'b']) }}
+        partner2={{ name: 'Chris', profile: profile(['b', 'c']) }}
+      />,
+    );
+
+    const mayaHeading = screen.getByRole('heading', { name: /maya also loves/i });
+    const mayaList = mayaHeading.nextElementSibling as HTMLElement;
+    expect(within(mayaList).getByText('Artist a')).toBeInTheDocument();
+    expect(within(mayaList).queryByText('Artist c')).not.toBeInTheDocument();
+
+    const chrisHeading = screen.getByRole('heading', { name: /chris also loves/i });
+    const chrisList = chrisHeading.nextElementSibling as HTMLElement;
+    expect(within(chrisList).getByText('Artist c')).toBeInTheDocument();
+    expect(within(chrisList).queryByText('Artist a')).not.toBeInTheDocument();
   });
 });
