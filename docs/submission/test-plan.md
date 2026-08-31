@@ -48,7 +48,7 @@ run passed. A suite that passes every other time is worse than one that fails ho
 | Migrations | `npm run db:replica` | that SQL parses, applies in order, and produces the grants and policies it claims | anything about PostgREST |
 | Manual | documented walkthroughs | that it works for a person | regressions, repeatably |
 
-38 test files, growing as the Spotify work lands. One test in
+46 test files as of slice B's merge, growing as the Spotify work lands. One test in
 `auth/rls.integration.test.ts` fails, and **the reason took a day to establish properly** —
 which is itself the most useful thing in this section.
 
