@@ -80,18 +80,32 @@ export async function markConnectionFailed(partnerId: string, reason: string): P
   }
 }
 
+/**
+ * PRECONDITION: the caller has already established that the signed-in user
+ * owns `partnerId`. Like the rest of this file, `disconnect` does not
+ * re-check -- `disconnectSpotify` in actions.ts is the authorization
+ * boundary.
+ *
+ * That precondition is what makes the zero-row delete below safe to ignore:
+ * with ownership already established, removing no token row can only mean
+ * it was already gone (disconnect is idempotent), never that RLS filtered a
+ * mismatched caller. A caller that skips the ownership check silently
+ * inverts that reading. Add one and you must add the check too.
+ */
 export async function disconnect(partnerId: string): Promise<void> {
   const supabase = await createClient();
 
-  // .select() on the delete so a zero-row delete (e.g. another partner's
-  // row under RLS) is detectable by a caller, rather than a silent no-op
-  // reported as success.
+  // .select() on the delete so a real failure (`del.error`) is still
+  // detectable. A zero-row delete is NOT treated as a failure here: by the
+  // time `disconnect` runs, the caller (disconnectSpotify, Task 7b) has
+  // already verified ownership of `partnerId` via `partnerOwner`, so a
+  // zero-row delete can only mean "already disconnected" -- deleting an
+  // already-absent token is idempotent, not an error. (Contrast with the
+  // upsert below: an admitted-zero-rows write there has no benign reading,
+  // so it still throws.)
   const del = await supabase.from('spotify_tokens').delete().eq('partner_id', partnerId).select();
   if (del.error) {
     throw new Error(`spotify_tokens delete failed: ${del.error.code}`);
-  }
-  if (!del.data?.length) {
-    throw new Error(`spotify_tokens delete removed no row for partner ${partnerId}`);
   }
 
   const conn = await supabase.from('spotify_connections').upsert(

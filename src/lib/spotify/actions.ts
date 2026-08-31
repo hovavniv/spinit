@@ -7,7 +7,8 @@ import { redirect } from 'next/navigation';
 
 import { requireUser } from '@/lib/auth/dal';
 import { authorizeUrl } from './oauth';
-import { partnerOwner } from './connectionDal';
+import { disconnect, partnerOwner } from './connectionDal';
+import { syncTasteProfile } from './sync';
 
 /**
  * Kicks off the Spotify Authorization Code flow for one partner
@@ -55,4 +56,50 @@ export async function connectSpotify(formData: FormData): Promise<void> {
   });
 
   redirect(authorizeUrl(state));
+}
+
+/**
+ * Re-runs the taste-profile sync (sync.ts, Task 8) for an already-connected
+ * partner. Same defense-in-depth ownership check as `connectSpotify`: a
+ * `partnerId` arriving in a form is caller-supplied and must never be
+ * trusted alone.
+ */
+export async function resyncSpotify(formData: FormData): Promise<void> {
+  const user = await requireUser();
+
+  const partnerId = String(formData.get('partnerId') ?? '');
+
+  const ownerId = await partnerOwner(partnerId);
+
+  if (ownerId !== user.id) {
+    throw new Error('Not authorized to resync this partner with Spotify.');
+  }
+
+  await syncTasteProfile(partnerId);
+}
+
+/**
+ * Disconnects a partner's Spotify account: deletes the stored refresh token
+ * and returns the connection to `invited` (connectionDal.ts's `disconnect`).
+ * Same ownership check as `connectSpotify` -- and ownership is checked HERE,
+ * before `disconnect` runs, which is exactly what lets `disconnect` treat a
+ * zero-row token delete as idempotent success (already disconnected) rather
+ * than an error: the ambiguity a bare zero-row delete would otherwise carry
+ * (RLS-filtered vs. genuinely nothing there) is already resolved by this
+ * ownership check by the time `disconnect` sees it. A real DB failure inside
+ * `disconnect` is not caught here -- it propagates, same as `connectSpotify`.
+ */
+export async function disconnectSpotify(formData: FormData): Promise<{ ok: boolean }> {
+  const user = await requireUser();
+
+  const partnerId = String(formData.get('partnerId') ?? '');
+
+  const ownerId = await partnerOwner(partnerId);
+
+  if (ownerId !== user.id) {
+    throw new Error('Not authorized to disconnect this partner from Spotify.');
+  }
+
+  await disconnect(partnerId);
+  return { ok: true };
 }

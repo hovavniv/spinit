@@ -225,11 +225,13 @@ describe('unchecked-write fail-closed paths', () => {
   });
 
   it(
-    'disconnect throws when the spotify_tokens delete removes zero rows -- e.g. another ' +
-      "partner's row under RLS",
+    'disconnect treats a zero-row delete as idempotent success -- ownership is already ' +
+      'verified by the caller before disconnect() runs, so nothing to delete just means ' +
+      'already disconnected',
     async () => {
       tokenDeleteSelect.mockResolvedValueOnce({ data: [], error: null });
-      await expect(disconnect('p1')).rejects.toThrow(/spotify_tokens delete removed no row/);
+      await expect(disconnect('p1')).resolves.not.toThrow();
+      expect(connUpsert.mock.calls[0][0]).toMatchObject({ status: 'invited' });
     },
   );
 
