@@ -41,8 +41,28 @@ import { syncTasteProfile } from '@/lib/spotify/sync';
  * alone.
  */
 
+/**
+ * `request.url`'s host cannot be trusted to match what the browser actually
+ * connected to: this route's dev server sits behind Next 16's internal
+ * request proxy, which reports `request.url` using its own internal target
+ * host (observed as `localhost`) even when the client's real request came in
+ * on a different host (`127.0.0.1`, this project's registered Spotify
+ * redirect literal) -- confirmed live, DevTools' own Request URL/Remote
+ * Address showed `127.0.0.1:3000` for a request whose Location header this
+ * function then built as `localhost:3000`, silently sending the browser to a
+ * different origin than the one it was on (which drops the just-cleared
+ * OAuth cookie's replacement, or any other origin-scoped state). The `Host`
+ * header is what the client actually sent, so use that instead, falling back
+ * to `request.url`'s host only if the header is somehow absent.
+ */
+function originFrom(request: Request): string {
+  const host = request.headers.get('host') ?? new URL(request.url).host;
+  const protocol = request.headers.get('x-forwarded-proto') ?? new URL(request.url).protocol.replace(':', '');
+  return `${protocol}://${host}`;
+}
+
 function errorRedirect(request: Request, reason: string): Response {
-  const url = new URL('/', request.url);
+  const url = new URL('/', originFrom(request));
   url.searchParams.set('spotify_error', reason);
   return NextResponse.redirect(url);
 }
@@ -138,5 +158,5 @@ export async function GET(request: Request): Promise<Response> {
   }
 
   const eventId = (partner as { event_id: string }).event_id;
-  return NextResponse.redirect(new URL(`/events/${eventId}`, request.url));
+  return NextResponse.redirect(new URL(`/events/${eventId}`, originFrom(request)));
 }
