@@ -582,7 +582,7 @@ describe.skipIf(!hasSupabaseConfig || !hasTestUsers || !hasPartnerUser)(
       // is what stops us shortcutting the claim below.
       const { data: slot, error: slotError } = await clientA
         .from('event_partners')
-        .select('id, invite_email')
+        .select('id, invite_email, display_name')
         .eq('event_id', linkedEvent)
         .eq('slot', 1)
         .maybeSingle();
@@ -592,14 +592,34 @@ describe.skipIf(!hasSupabaseConfig || !hasTestUsers || !hasPartnerUser)(
             'Run `npm run seed:demo` after the migration.',
         );
       }
-      claimedPartnerId = slot.id;
       originalInviteEmail = slot.invite_email;
 
-      const { error: inviteError } = await clientA
+      // Reset the slot to a KNOWN UNCLAIMED state rather than assuming it is
+      // already one. user_id cannot be un-set through PostgREST -- that is the
+      // point of the column grant -- so "unclaim" means delete and re-insert.
+      //
+      // Without this the suite depends on the state a previous run, a manual
+      // walkthrough or a demo left behind: if anything already claimed this
+      // slot, claim_partner_slot correctly refuses, beforeAll throws, and the
+      // whole block fails for a reason that has nothing to do with the policies
+      // it exists to test. It then SELF-HEALS on the next run because afterAll
+      // restores the row -- a test that passes only every other time is worse
+      // than one that fails honestly.
+      await clientA.from('event_partners').delete().eq('id', slot.id);
+      const { data: fresh, error: reinsertError } = await clientA
         .from('event_partners')
-        .update({ invite_email: C_EMAIL! })
-        .eq('id', claimedPartnerId);
-      if (inviteError) throw new Error(`could not set the invitation: ${inviteError.message}`);
+        .insert({
+          event_id: linkedEvent,
+          slot: 1,
+          display_name: slot.display_name,
+          invite_email: C_EMAIL!,
+        })
+        .select('id')
+        .single();
+      if (reinsertError || !fresh) {
+        throw new Error(`could not reset the partner slot: ${reinsertError?.message}`);
+      }
+      claimedPartnerId = fresh.id;
 
       // The claim itself, through the function -- the ONLY path that writes
       // user_id, because no PostgREST role holds a grant on that column.
