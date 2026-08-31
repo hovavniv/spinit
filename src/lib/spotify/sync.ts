@@ -27,6 +27,10 @@ interface TopArtistsResponse {
  * must never write `events.couple_status` (that write is a silent no-op
  * under the partner's own session -- see design review) or seed
  * `enrichment_queue` (nothing drains it yet).
+ *
+ * PRECONDITION: the caller has verified that the signed-in user owns
+ * `partnerId` (requireUser + partnerOwner), as connectSpotify, resyncSpotify
+ * and the callback route all do. This function does not re-check.
  */
 export async function syncTasteProfile(partnerId: string): Promise<void> {
   await withUserToken(partnerId, async (accessToken) => {

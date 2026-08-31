@@ -117,3 +117,13 @@ it('does not seed enrichment_queue — that is C2', async () => {
   await syncTasteProfile('p1');
   expect(fromMock).not.toHaveBeenCalledWith('enrichment_queue');
 });
+
+it('throws when the taste_profiles upsert errors', async () => {
+  profileUpsertSelect.mockResolvedValue({ data: null, error: { code: '42501' } });
+  await expect(syncTasteProfile('p1')).rejects.toThrow(/taste_profiles upsert failed/);
+});
+
+it('throws when the taste_profiles upsert admits zero rows', async () => {
+  profileUpsertSelect.mockResolvedValue({ data: [], error: null });
+  await expect(syncTasteProfile('p1')).rejects.toThrow(/taste_profiles upsert wrote no row/);
+});
