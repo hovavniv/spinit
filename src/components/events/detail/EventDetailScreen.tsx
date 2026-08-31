@@ -55,7 +55,7 @@ export function EventDetailScreen({ event, viewer }: EventDetailScreenProps) {
       <StepHeader />
 
       <div className={styles.card}>
-        <StreamingSection coupleStatus={event.couple_status} />
+        <StreamingSection partners={event.partners} connections={{}} viewer={viewer} />
 
         <CeremonySongs rows={mustPlay.ceremony} />
 
