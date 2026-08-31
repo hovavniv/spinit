@@ -3,8 +3,9 @@ import type { Mock } from 'vitest';
 
 import {
   from, cookieSet, cookieDelete, cookieGet,
-  storeConnection, markConnectionFailed,
+  storeConnection, markConnectionFailed, partnerOwner,
   refreshAccessToken, exchangeCode, spotifyFetch, syncTasteProfile,
+  requireUser,
   req,
 } from '@/lib/spotify/__tests__/harness';
 
@@ -29,6 +30,8 @@ const markConnectionFailedMock = markConnectionFailed as unknown as
 const spotifyFetchMock = spotifyFetch as unknown as
   Mock<(endpoint: string, token: string, init?: RequestInit) => Promise<{ id: string }>>;
 const syncTasteProfileMock = syncTasteProfile as unknown as Mock<(partnerId: string) => Promise<void>>;
+const requireUserMock = requireUser as unknown as Mock<() => Promise<{ id: string }>>;
+const partnerOwnerMock = partnerOwner as unknown as Mock<(partnerId: string) => Promise<string | null>>;
 
 vi.mock('next/headers', () => ({
   cookies: async () => ({
@@ -48,6 +51,11 @@ vi.mock('@/lib/spotify/connectionDal', () => ({
     storeConnectionMock(input),
   markConnectionFailed: (partnerId: string, reason: string) =>
     markConnectionFailedMock(partnerId, reason),
+  partnerOwner: (partnerId: string) => partnerOwnerMock(partnerId),
+}));
+
+vi.mock('@/lib/auth/dal', () => ({
+  requireUser: () => requireUserMock(),
 }));
 
 // Keep the real SpotifyError class -- the route does `instanceof SpotifyError`
@@ -81,6 +89,8 @@ beforeEach(() => {
   vi.clearAllMocks();
   storeConnectionMock.mockResolvedValue(undefined);
   markConnectionFailedMock.mockResolvedValue(undefined);
+  requireUserMock.mockResolvedValue({ id: 'user-partner-1' });
+  partnerOwnerMock.mockResolvedValue('user-partner-1');
   exchangeCodeMock.mockResolvedValue({ accessToken: 'A', refreshToken: 'R', expiresIn: 3600 });
   spotifyFetchMock.mockResolvedValue({ id: 'spotify-user' });
   syncTasteProfileMock.mockResolvedValue(undefined);
@@ -110,6 +120,20 @@ it('clears the cookie before doing anything else', async () => {
   await GET(req({ code: 'C', state: 'S' }, { state: 'S', partnerId: 'p1' }));
   expect(cookieDelete).toHaveBeenCalledWith('spotify_oauth');
 });
+
+it(
+  'refuses when the caller does not own partnerId, even with a valid cookie and state ' +
+    '(session may have expired mid-flow) -- does NOT store a connection or reach the ' +
+    'success redirect',
+  async () => {
+    partnerOwnerMock.mockResolvedValue('someone-else');
+    const res = await GET(req({ code: 'C', state: 'S' }, { state: 'S', partnerId: 'p1' }));
+    expect(storeConnectionMock).not.toHaveBeenCalled();
+    expect(exchangeCodeMock).not.toHaveBeenCalled();
+    expect(res.headers.get('location')).not.toContain('/events/');
+    expect(res.headers.get('location')).toContain('spotify_error=');
+  },
+);
 
 it('PROBES GET /me and stores failed on a 403 — the allowlist case', async () => {
   spotifyFetchMock.mockRejectedValue(new SpotifyError('forbidden', 403, '/me'));

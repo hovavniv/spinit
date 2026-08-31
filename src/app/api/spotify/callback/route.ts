@@ -2,8 +2,9 @@ import { NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
 
 import { createClient } from '@/lib/supabase/server';
+import { requireUser } from '@/lib/auth/dal';
 import { exchangeCode } from '@/lib/spotify/oauth';
-import { storeConnection, markConnectionFailed } from '@/lib/spotify/connectionDal';
+import { storeConnection, markConnectionFailed, partnerOwner } from '@/lib/spotify/connectionDal';
 import { spotifyFetch, SpotifyError } from '@/lib/spotify/client';
 import { syncTasteProfile } from '@/lib/spotify/sync';
 
@@ -21,6 +22,14 @@ import { syncTasteProfile } from '@/lib/spotify/sync';
  * The cookie is cleared immediately once it has been read and validated,
  * before any network call -- a one-time-use value that outlives its one use
  * is a bug waiting to happen, not a convenience.
+ *
+ * The OAuth round trip has unbounded duration -- the session that started it
+ * (checked once in `connectSpotify`, Task 6) may have expired by the time
+ * Spotify redirects back here. So this route re-checks BOTH identity
+ * (`requireUser`) and ownership (`partnerOwner`, shared with Task 6) before
+ * doing anything else. Every failure path below -- missing/bad cookie, state
+ * mismatch, ownership mismatch, or the `/me` probe 403 -- returns its own
+ * redirect and never reaches the success redirect at the end.
  *
  * A development-mode Spotify app's OAuth handshake succeeds even for a user
  * who is NOT on the app's allowlist -- Spotify only rejects them (403) on the
@@ -65,6 +74,17 @@ export async function GET(request: Request): Promise<Response> {
   // Clear the cookie now -- before the token exchange or any other network
   // call -- on every path past this point, including success.
   cookieStore.delete('spotify_oauth');
+
+  // requireUser() alone only proves someone is signed in -- it says nothing
+  // about whether they own THIS partnerId. The session that started this
+  // flow may also have expired mid-flow, so this re-checks ownership rather
+  // than trusting the cookie's mere presence. On a mismatch, do NOT call
+  // storeConnection or any other write.
+  const user = await requireUser();
+  const ownerId = await partnerOwner(partnerId);
+  if (ownerId !== user.id) {
+    return errorRedirect(request, 'not_authorized');
+  }
 
   const tokens = await exchangeCode(code);
 

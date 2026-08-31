@@ -26,7 +26,7 @@ export async function storeConnection(
 ): Promise<void> {
   const supabase = await createClient();
 
-  await supabase.from('spotify_connections').upsert(
+  const conn = await supabase.from('spotify_connections').upsert(
     {
       partner_id: partnerId,
       spotify_user_id: spotifyUserId,
@@ -34,16 +34,30 @@ export async function storeConnection(
       connected_at: new Date().toISOString(),
     },
     { onConflict: 'partner_id' },
-  );
+  ).select();
+  if (conn.error) {
+    throw new Error(`spotify_connections upsert failed: ${conn.error.code}`);
+  }
+  if (!conn.data?.length) {
+    throw new Error(`spotify_connections upsert wrote no row for partner ${partnerId}`);
+  }
 
-  await supabase.from('spotify_tokens').upsert(
+  // This write carries the refresh token itself -- a silent failure here
+  // would report the OAuth flow as successful with no credential stored.
+  const tok = await supabase.from('spotify_tokens').upsert(
     {
       partner_id: partnerId,
       refresh_token: encryptToken(refreshToken),
       updated_at: new Date().toISOString(),
     },
     { onConflict: 'partner_id' },
-  );
+  ).select();
+  if (tok.error) {
+    throw new Error(`spotify_tokens upsert failed: ${tok.error.code}`);
+  }
+  if (!tok.data?.length) {
+    throw new Error(`spotify_tokens upsert wrote no row for partner ${partnerId}`);
+  }
 }
 
 /**
@@ -54,10 +68,16 @@ export async function storeConnection(
 export async function markConnectionFailed(partnerId: string, reason: string): Promise<void> {
   const supabase = await createClient();
 
-  await supabase.from('spotify_connections').upsert(
+  const conn = await supabase.from('spotify_connections').upsert(
     { partner_id: partnerId, status: 'failed', last_error: reason },
     { onConflict: 'partner_id' },
-  );
+  ).select();
+  if (conn.error) {
+    throw new Error(`spotify_connections upsert failed: ${conn.error.code}`);
+  }
+  if (!conn.data?.length) {
+    throw new Error(`spotify_connections upsert wrote no row for partner ${partnerId}`);
+  }
 }
 
 export async function disconnect(partnerId: string): Promise<void> {
@@ -66,12 +86,24 @@ export async function disconnect(partnerId: string): Promise<void> {
   // .select() on the delete so a zero-row delete (e.g. another partner's
   // row under RLS) is detectable by a caller, rather than a silent no-op
   // reported as success.
-  await supabase.from('spotify_tokens').delete().eq('partner_id', partnerId).select();
+  const del = await supabase.from('spotify_tokens').delete().eq('partner_id', partnerId).select();
+  if (del.error) {
+    throw new Error(`spotify_tokens delete failed: ${del.error.code}`);
+  }
+  if (!del.data?.length) {
+    throw new Error(`spotify_tokens delete removed no row for partner ${partnerId}`);
+  }
 
-  await supabase.from('spotify_connections').upsert(
+  const conn = await supabase.from('spotify_connections').upsert(
     { partner_id: partnerId, status: 'invited' },
     { onConflict: 'partner_id' },
-  );
+  ).select();
+  if (conn.error) {
+    throw new Error(`spotify_connections upsert failed: ${conn.error.code}`);
+  }
+  if (!conn.data?.length) {
+    throw new Error(`spotify_connections upsert wrote no row for partner ${partnerId}`);
+  }
 }
 
 /**
@@ -102,15 +134,49 @@ export async function withUserToken<T>(
   const result = await fn(accessToken);
 
   if (newRefreshToken !== storedRefreshToken) {
-    await supabase.from('spotify_tokens').upsert(
+    // Spotify has already rotated the token by the time this runs, so the
+    // old refresh token is invalid regardless of whether this write lands.
+    // A silently-swallowed failure here would leave the stored (now-dead)
+    // token permanently unrecoverable without a full reconnect -- throw,
+    // do not let the caller's work look like it succeeded.
+    const rot = await supabase.from('spotify_tokens').upsert(
       {
         partner_id: partnerId,
         refresh_token: encryptToken(newRefreshToken),
         updated_at: new Date().toISOString(),
       },
       { onConflict: 'partner_id' },
-    );
+    ).select();
+    if (rot.error) {
+      throw new Error(`spotify_tokens rotation upsert failed: ${rot.error.code}`);
+    }
+    if (!rot.data?.length) {
+      throw new Error(`spotify_tokens rotation upsert wrote no row for partner ${partnerId}`);
+    }
   }
 
   return result;
+}
+
+/**
+ * Looks up who owns an `event_partners` row -- the same ownership check
+ * `connectSpotify` (Task 6) needs before starting the OAuth flow, and the
+ * callback route needs again on the way back (Task 7), since the session
+ * that started the flow may have expired by the time Spotify redirects
+ * back. One implementation, both call sites, so the check can't drift.
+ */
+export async function partnerOwner(partnerId: string): Promise<string | null> {
+  const supabase = await createClient();
+
+  const { data, error } = await supabase
+    .from('event_partners')
+    .select('user_id')
+    .eq('id', partnerId)
+    .single();
+
+  if (error || !data) {
+    return null;
+  }
+
+  return (data as { user_id: string }).user_id;
 }

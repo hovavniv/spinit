@@ -14,6 +14,10 @@ export const tokenSelect         = vi.fn(async () => ({ data: null, error: null 
 export const profileUpsert       = vi.fn(async () => ({ data: [{}], error: null }));
 export const storeConnection     = vi.fn(async () => undefined);
 export const markConnectionFailed = vi.fn(async () => undefined);
+/** connectionDal.ts's shared ownership lookup (task 6/7 fix wave). Defaults
+ *  to the same id `requireUser` resolves, so existing happy-path tests that
+ *  never set this explicitly still pass an ownership check. */
+export const partnerOwner = vi.fn(async () => 'user-partner-1');
 
 /** oauth.ts, mocked for task 5's connectionDal test and task 8's sync test. */
 export const refreshAccessToken = vi.fn(async () => ({ accessToken: 'A', refreshToken: 'R' }));
