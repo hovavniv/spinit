@@ -12,6 +12,7 @@ function row(overrides: Partial<BlocklistRow> = {}): BlocklistRow {
     segment: 'party',
     entry_type: 'artist',
     value: 'Nickelback',
+    spotify_id: 'bbbbbbbbbbbbbbbbbbbbbb',
     created_at: '2026-08-30T10:00:00Z',
     ...overrides,
   };

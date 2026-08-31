@@ -46,8 +46,8 @@ export const getEventDetail = cache(async (eventId: string): Promise<EventDetail
        event_partners (id, slot, display_name, user_id),
        event_private_notes (body),
        event_shared_notes (body),
-       event_must_play (id, segment, title, artist, moment, created_at),
-       event_blocklist (id, segment, entry_type, value, created_at)`,
+       event_must_play (id, segment, title, artist, moment, spotify_track_id, spotify_artist_id, created_at),
+       event_blocklist (id, segment, entry_type, value, spotify_id, created_at)`,
     )
     .eq('id', eventId)
     .order('slot', { referencedTable: 'event_partners', ascending: true })

@@ -13,6 +13,8 @@ function row(overrides: Partial<MustPlayRow> = {}): MustPlayRow {
     title: 'September',
     artist: 'Earth, Wind & Fire',
     moment: null,
+    spotify_track_id: 'aaaaaaaaaaaaaaaaaaaaaa',
+    spotify_artist_id: 'bbbbbbbbbbbbbbbbbbbbbb',
     created_at: '2026-08-30T10:00:00Z',
     ...overrides,
   };

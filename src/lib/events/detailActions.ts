@@ -63,11 +63,19 @@ export async function addMustPlay(
   const parsed = mustPlayAddSchema.safeParse(formDataToRecord(formData));
   if (!parsed.success) return { ok: false, formErrors: firstFieldErrors(parsed.error.issues) };
 
-  const { eventId, segment, title, artist, moment } = parsed.data;
+  const { eventId, segment, title, artist, moment, spotifyTrackId, spotifyArtistId } = parsed.data;
   const supabase = await createClient();
   const { error } = await supabase
     .from('event_must_play')
-    .insert({ event_id: eventId, segment, title, artist, moment });
+    .insert({
+      event_id: eventId,
+      segment,
+      title,
+      artist,
+      moment,
+      spotify_track_id: spotifyTrackId,
+      spotify_artist_id: spotifyArtistId ? spotifyArtistId : null,
+    });
 
   if (error) return failure('addMustPlay', eventId, error);
 
@@ -75,30 +83,37 @@ export async function addMustPlay(
   return { ok: true };
 }
 
-export async function removeMustPlay(formData: FormData): Promise<void> {
+export async function removeMustPlay(formData: FormData): Promise<ActionResult> {
   await requireUser();
 
   const parsed = rowRefSchema.safeParse(formDataToRecord(formData));
   // A malformed remove is not worth a message the user cannot act on: the row
   // is still on screen, and the page re-renders unchanged.
-  if (!parsed.success) return;
+  if (!parsed.success) return { ok: false, message: GENERIC_FAILURE };
 
   const { id, eventId } = parsed.data;
   const supabase = await createClient();
   // Scoped by event_id as well as id: a row id from another of this DJ's own
   // events matches nothing. RLS already stops another DJ's ids.
-  const { error } = await supabase
+  //
+  // .select() turns this back into a row check: a policy-filtered or
+  // nonexistent id/eventId match still returns success having deleted
+  // nothing -- the repo's documented silent-zero-row shape (see CLAUDE.md;
+  // saveEventDetails' own delete branch already guards against exactly this).
+  const { data: deleted, error } = await supabase
     .from('event_must_play')
     .delete()
     .eq('id', id)
-    .eq('event_id', eventId);
+    .eq('event_id', eventId)
+    .select();
 
-  if (error) {
-    console.error('removeMustPlay: database error', { eventId, message: error.message });
-    return;
+  if (error) return failure('removeMustPlay', eventId, error);
+  if (!deleted || deleted.length === 0) {
+    return failure('removeMustPlay', eventId, { message: 'delete matched zero rows' });
   }
 
   revalidatePath(`/events/${eventId}`);
+  return { ok: true };
 }
 
 export async function addBlocklistEntry(
@@ -110,11 +125,20 @@ export async function addBlocklistEntry(
   const parsed = blocklistAddSchema.safeParse(formDataToRecord(formData));
   if (!parsed.success) return { ok: false, formErrors: firstFieldErrors(parsed.error.issues) };
 
-  const { eventId, segment, entryType, value } = parsed.data;
+  const { eventId, segment, entryType, value, spotifyId } = parsed.data;
   const supabase = await createClient();
   const { error } = await supabase
     .from('event_blocklist')
-    .insert({ event_id: eventId, segment, entry_type: entryType, value });
+    .insert({
+      event_id: eventId,
+      segment,
+      entry_type: entryType,
+      value,
+      // Mirrors the database's blocklist_id_matches_type check constraint:
+      // a genre entry has no Spotify identity, an artist or song always does
+      // (the schema already refused this combination if it were otherwise).
+      spotify_id: entryType === 'genre' ? null : (spotifyId ?? null),
+    });
 
   if (error) {
     // 23505 is the unique index on (event_id, segment, entry_type, lower(value)).
@@ -131,26 +155,31 @@ export async function addBlocklistEntry(
   return { ok: true };
 }
 
-export async function removeBlocklistEntry(formData: FormData): Promise<void> {
+export async function removeBlocklistEntry(formData: FormData): Promise<ActionResult> {
   await requireUser();
 
   const parsed = rowRefSchema.safeParse(formDataToRecord(formData));
-  if (!parsed.success) return;
+  if (!parsed.success) return { ok: false, message: GENERIC_FAILURE };
 
   const { id, eventId } = parsed.data;
   const supabase = await createClient();
-  const { error } = await supabase
+  // Same silent-zero-row guard as removeMustPlay, and for the same reason:
+  // a policy-filtered or nonexistent delete otherwise returns success having
+  // deleted nothing.
+  const { data: deleted, error } = await supabase
     .from('event_blocklist')
     .delete()
     .eq('id', id)
-    .eq('event_id', eventId);
+    .eq('event_id', eventId)
+    .select();
 
-  if (error) {
-    console.error('removeBlocklistEntry: database error', { eventId, message: error.message });
-    return;
+  if (error) return failure('removeBlocklistEntry', eventId, error);
+  if (!deleted || deleted.length === 0) {
+    return failure('removeBlocklistEntry', eventId, { message: 'delete matched zero rows' });
   }
 
   revalidatePath(`/events/${eventId}`);
+  return { ok: true };
 }
 
 /**
@@ -187,21 +216,35 @@ export async function saveEventDetails(
       id: record[`ceremony-${index}-id`] ?? '',
       title: record[`ceremony-${index}-title`] ?? '',
       artist: record[`ceremony-${index}-artist`] ?? '',
+      spotifyTrackId: record[`ceremony-${index}-spotifyTrackId`] ?? '',
+      spotifyArtistId: record[`ceremony-${index}-spotifyArtistId`] ?? '',
     });
     if (!slotParsed.success) {
       return { ok: false, formErrors: firstFieldErrors(slotParsed.error.issues) };
     }
 
-    const { id, title, artist } = slotParsed.data;
+    const { id, title, artist, spotifyTrackId, spotifyArtistId } = slotParsed.data;
+    const spotifyArtistIdOrNull = spotifyArtistId ? spotifyArtistId : null;
 
     if (id && title) {
       // .select() turns this back into a row check: a policy-filtered or
       // nonexistent id/eventId/segment combination would otherwise match zero
       // rows and Postgres would still report success -- the repo's documented
       // silent-zero-row shape (see CLAUDE.md).
+      //
+      // spotify_track_id/spotify_artist_id are written on this branch too, not
+      // just title/artist: leaving them out would let a DJ pick a different
+      // song here and have the title change while the id stays pointed at the
+      // ORIGINAL pick -- display text and identity silently diverging, with
+      // the decision engine later reasoning about a track nobody chose.
       const { data: updated, error } = await supabase
         .from('event_must_play')
-        .update({ title, artist })
+        .update({
+          title,
+          artist,
+          spotify_track_id: spotifyTrackId,
+          spotify_artist_id: spotifyArtistIdOrNull,
+        })
         .eq('id', id)
         .eq('event_id', eventId)
         .eq('segment', 'ceremony')
@@ -233,6 +276,8 @@ export async function saveEventDetails(
         moment: slot.moment,
         title,
         artist,
+        spotify_track_id: spotifyTrackId,
+        spotify_artist_id: spotifyArtistIdOrNull,
       });
       if (error) return failure('saveEventDetails', eventId, error);
     }

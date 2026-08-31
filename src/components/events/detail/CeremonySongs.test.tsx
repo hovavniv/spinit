@@ -5,7 +5,16 @@ import { CeremonySongs } from './CeremonySongs';
 import type { MustPlayRow } from '@/lib/events/detailTypes';
 
 function ceremonyRow(moment: string, title: string, id: string): MustPlayRow {
-  return { id, segment: 'ceremony', title, artist: 'Traditional', moment, created_at: '2026-08-30T10:00:00Z' };
+  return {
+    id,
+    segment: 'ceremony',
+    title,
+    artist: 'Traditional',
+    moment,
+    spotify_track_id: 'aaaaaaaaaaaaaaaaaaaaaa',
+    spotify_artist_id: null,
+    created_at: '2026-08-30T10:00:00Z',
+  };
 }
 
 describe('CeremonySongs', () => {

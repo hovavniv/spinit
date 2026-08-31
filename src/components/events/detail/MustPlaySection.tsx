@@ -12,7 +12,7 @@ interface MustPlaySectionProps {
   blurb: string;
   rows: MustPlayRow[];
   addAction: (prevState: DetailActionState, formData: FormData) => Promise<ActionResult>;
-  removeAction: (formData: FormData) => Promise<void>;
+  removeAction: (formData: FormData) => Promise<ActionResult>;
 }
 
 /**
@@ -58,7 +58,16 @@ export function MustPlaySection({
                 </div>
                 {row.moment && <div className={styles.rowMoment}>{row.moment}</div>}
               </div>
-              <form action={removeAction}>
+              <form
+                action={(rowFormData: FormData) => {
+                  // React's <form action> DOM typing wants void | Promise<void>;
+                  // removeAction returns Promise<ActionResult> so the caller can
+                  // observe a silent-zero-row failure (see detailActions.ts).
+                  // Discarding it here, not in removeAction's signature, keeps
+                  // that signature honest for the caller that DOES want it.
+                  void removeAction(rowFormData);
+                }}
+              >
                 <input type="hidden" name="id" value={row.id} />
                 <input type="hidden" name="eventId" value={eventId} />
                 <button type="submit" className={styles.remove} aria-label={`Remove ${row.title}`}>

@@ -12,7 +12,7 @@ interface BlocklistSectionProps {
   blurb: string;
   rows: BlocklistRow[];
   addAction: (prevState: DetailActionState, formData: FormData) => Promise<ActionResult>;
-  removeAction: (formData: FormData) => Promise<void>;
+  removeAction: (formData: FormData) => Promise<ActionResult>;
 }
 
 /**
@@ -49,7 +49,13 @@ export function BlocklistSection({
                 <span className={styles.pill}>{row.entry_type}</span>
                 <span className={styles.value}>{row.value}</span>
               </div>
-              <form action={removeAction}>
+              <form
+                action={(rowFormData: FormData) => {
+                  // See MustPlaySection for why this wraps rather than passes
+                  // removeAction directly: the DOM action prop wants void.
+                  void removeAction(rowFormData);
+                }}
+              >
                 <input type="hidden" name="id" value={row.id} />
                 <input type="hidden" name="eventId" value={eventId} />
                 <button type="submit" className={styles.remove} aria-label={`Remove ${row.value}`}>

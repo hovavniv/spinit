@@ -12,11 +12,18 @@ import {
   addMustPlay,
   removeMustPlay,
   addBlocklistEntry,
+  removeBlocklistEntry,
   saveEventDetails,
 } from './detailActions';
 
 const EVENT_ID = '11111111-2222-4333-8444-555555555555';
 const ROW_ID = '99999999-2222-4333-8444-555555555555';
+
+/** Real Spotify ids are 22 base62 characters. Distinct per fixture on purpose. */
+const TRACK_ID_A = 'aaaaaaaaaaaaaaaaaaaaaa';
+const ARTIST_ID_A = 'bbbbbbbbbbbbbbbbbbbbbb';
+const TRACK_ID_B = 'cccccccccccccccccccccc';
+const ARTIST_ID_B = 'dddddddddddddddddddddd';
 
 function formData(fields: Record<string, string>): FormData {
   const data = new FormData();
@@ -68,6 +75,8 @@ describe('addMustPlay', () => {
       title: '  September  ',
       artist: 'Earth, Wind & Fire',
       moment: '',
+      spotifyTrackId: TRACK_ID_A,
+      spotifyArtistId: ARTIST_ID_A,
     }));
 
     expect(result).toEqual({ ok: true });
@@ -78,9 +87,29 @@ describe('addMustPlay', () => {
       title: 'September',
       artist: 'Earth, Wind & Fire',
       moment: null,
+      spotify_track_id: TRACK_ID_A,
+      spotify_artist_id: ARTIST_ID_A,
     });
     // The literal path, never '/events/[id]' — that form silently no-ops.
     expect(revalidatePath).toHaveBeenCalledWith(`/events/${EVENT_ID}`);
+  });
+
+  test('inserts null, not empty string, when no artist id was picked', async () => {
+    const table = tableDouble({ error: null });
+    from.mockReturnValue(table);
+
+    await addMustPlay(null, formData({
+      eventId: EVENT_ID,
+      segment: 'party',
+      title: 'September',
+      artist: '',
+      moment: '',
+      spotifyTrackId: TRACK_ID_A,
+    }));
+
+    expect(table.insert).toHaveBeenCalledWith(
+      expect.objectContaining({ spotify_artist_id: null }),
+    );
   });
 
   test('returns a field error and writes nothing when the title is blank', async () => {
@@ -93,11 +122,28 @@ describe('addMustPlay', () => {
       title: '   ',
       artist: '',
       moment: '',
+      spotifyTrackId: TRACK_ID_A,
     }));
 
     expect(result.ok).toBe(false);
     expect(table.insert).not.toHaveBeenCalled();
     expect(revalidatePath).not.toHaveBeenCalled();
+  });
+
+  test('returns a field error and writes nothing when no track was picked', async () => {
+    const table = tableDouble({ error: null });
+    from.mockReturnValue(table);
+
+    const result = await addMustPlay(null, formData({
+      eventId: EVENT_ID,
+      segment: 'party',
+      title: 'September',
+      artist: '',
+      moment: '',
+    }));
+
+    expect(result.ok).toBe(false);
+    expect(table.insert).not.toHaveBeenCalled();
   });
 
   test('requires a user before it parses anything', async () => {
@@ -118,6 +164,7 @@ describe('addMustPlay', () => {
       title: 'September',
       artist: '',
       moment: '',
+      spotifyTrackId: TRACK_ID_A,
     }));
 
     expect(result).toEqual({ ok: false, message: 'Could not save that. Try again.' });
@@ -133,12 +180,62 @@ describe('addBlocklistEntry', () => {
       segment: 'party',
       entryType: 'artist',
       value: 'nickelback',
+      spotifyId: ARTIST_ID_A,
     }));
 
     expect(result).toEqual({
       ok: false,
       formErrors: { value: 'Already on the do-not-play list.' },
     });
+  });
+
+  test('writes the picked id for an artist entry', async () => {
+    const table = tableDouble({ error: null });
+    from.mockReturnValue(table);
+
+    await addBlocklistEntry(null, formData({
+      eventId: EVENT_ID,
+      segment: 'party',
+      entryType: 'artist',
+      value: 'Nickelback',
+      spotifyId: ARTIST_ID_A,
+    }));
+
+    expect(table.insert).toHaveBeenCalledWith(
+      expect.objectContaining({ entry_type: 'artist', spotify_id: ARTIST_ID_A }),
+    );
+  });
+
+  test('writes null spotify_id for a genre entry even if one was somehow sent', async () => {
+    const table = tableDouble({ error: null });
+    from.mockReturnValue(table);
+
+    const result = await addBlocklistEntry(null, formData({
+      eventId: EVENT_ID,
+      segment: 'party',
+      entryType: 'genre',
+      value: 'disco',
+    }));
+
+    expect(result).toEqual({ ok: true });
+    expect(table.insert).toHaveBeenCalledWith(
+      expect.objectContaining({ entry_type: 'genre', spotify_id: null }),
+    );
+  });
+
+  test('rejects an artist entry with no spotify id before it reaches the database', async () => {
+    const table = tableDouble({ error: null });
+    from.mockReturnValue(table);
+
+    const result = await addBlocklistEntry(null, formData({
+      eventId: EVENT_ID,
+      segment: 'party',
+      entryType: 'artist',
+      value: 'Nickelback',
+    }));
+
+    expect(result.ok).toBe(false);
+    expect(table.insert).not.toHaveBeenCalled();
   });
 });
 
@@ -147,12 +244,62 @@ describe('removeMustPlay', () => {
     const table = tableDouble({ error: null });
     from.mockReturnValue(table);
 
-    await removeMustPlay(formData({ id: ROW_ID, eventId: EVENT_ID }));
+    const result = await removeMustPlay(formData({ id: ROW_ID, eventId: EVENT_ID }));
 
     expect(table.delete).toHaveBeenCalled();
+    expect(table.select).toHaveBeenCalled();
     expect(table.eq).toHaveBeenCalledWith('id', ROW_ID);
     expect(table.eq).toHaveBeenCalledWith('event_id', EVENT_ID);
     expect(revalidatePath).toHaveBeenCalledWith(`/events/${EVENT_ID}`);
+    expect(result).toEqual({ ok: true });
+  });
+
+  test('reports a failure, rather than success, when the delete matches no row', async () => {
+    // The repo's documented silent-zero-row shape: a policy-filtered or
+    // nonexistent id/eventId still returns success having deleted nothing
+    // without the .select() check below.
+    const table = tableDouble({ error: null, data: [] });
+    from.mockReturnValue(table);
+
+    const result = await removeMustPlay(formData({ id: ROW_ID, eventId: EVENT_ID }));
+
+    expect(result).toEqual({ ok: false, message: 'Could not save that. Try again.' });
+    expect(revalidatePath).not.toHaveBeenCalled();
+  });
+
+  test('succeeds when exactly one row is deleted', async () => {
+    const table = tableDouble({ error: null, data: [{ id: ROW_ID }] });
+    from.mockReturnValue(table);
+
+    await expect(removeMustPlay(formData({ id: ROW_ID, eventId: EVENT_ID }))).resolves.toEqual({
+      ok: true,
+    });
+  });
+});
+
+describe('removeBlocklistEntry', () => {
+  test('deletes by id scoped to the event, then revalidates', async () => {
+    const table = tableDouble({ error: null });
+    from.mockReturnValue(table);
+
+    const result = await removeBlocklistEntry(formData({ id: ROW_ID, eventId: EVENT_ID }));
+
+    expect(table.delete).toHaveBeenCalled();
+    expect(table.select).toHaveBeenCalled();
+    expect(table.eq).toHaveBeenCalledWith('id', ROW_ID);
+    expect(table.eq).toHaveBeenCalledWith('event_id', EVENT_ID);
+    expect(revalidatePath).toHaveBeenCalledWith(`/events/${EVENT_ID}`);
+    expect(result).toEqual({ ok: true });
+  });
+
+  test('reports a failure, rather than success, when the delete matches no row', async () => {
+    const table = tableDouble({ error: null, data: [] });
+    from.mockReturnValue(table);
+
+    const result = await removeBlocklistEntry(formData({ id: ROW_ID, eventId: EVENT_ID }));
+
+    expect(result).toEqual({ ok: false, message: 'Could not save that. Try again.' });
+    expect(revalidatePath).not.toHaveBeenCalled();
   });
 });
 
@@ -166,6 +313,8 @@ describe('saveEventDetails', () => {
       'ceremony-0-id': ROW_ID,
       'ceremony-0-title': 'A Thousand Years',
       'ceremony-0-artist': 'Christina Perri',
+      'ceremony-0-spotifyTrackId': TRACK_ID_A,
+      'ceremony-0-spotifyArtistId': ARTIST_ID_A,
       'ceremony-1-id': '',
       'ceremony-1-title': '',
       'ceremony-1-artist': '',
@@ -179,6 +328,34 @@ describe('saveEventDetails', () => {
     expect(table.update).toHaveBeenCalled();
     // Slot 1 is empty and has no row: nothing is inserted for it.
     expect(table.insert).not.toHaveBeenCalled();
+  });
+
+  test('the ceremony UPDATE branch carries the track id, not just the title', async () => {
+    // The quieter half of the split: today it would write only { title,
+    // artist }. A DJ picking a different song must not leave the title
+    // changed while the id still points at the ORIGINAL pick.
+    const table = tableDouble({ error: null });
+    from.mockReturnValue(table);
+
+    await saveEventDetails(null, formData({
+      eventId: EVENT_ID,
+      'ceremony-0-id': ROW_ID,
+      'ceremony-0-title': 'Track B',
+      'ceremony-0-artist': 'Artist B',
+      'ceremony-0-spotifyTrackId': TRACK_ID_B,
+      'ceremony-0-spotifyArtistId': ARTIST_ID_B,
+      'ceremony-1-id': '',
+      'ceremony-1-title': '',
+      'ceremony-1-artist': '',
+    }));
+
+    expect(table.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        title: 'Track B',
+        spotify_track_id: TRACK_ID_B,
+        spotify_artist_id: ARTIST_ID_B,
+      }),
+    );
   });
 
   test('deletes a slot cleared to empty', async () => {
@@ -207,6 +384,7 @@ describe('saveEventDetails', () => {
       'ceremony-0-id': '',
       'ceremony-0-title': 'Hava Nagila',
       'ceremony-0-artist': 'Traditional',
+      'ceremony-0-spotifyTrackId': TRACK_ID_A,
       'ceremony-1-id': '',
       'ceremony-1-title': '',
       'ceremony-1-artist': '',
@@ -218,7 +396,47 @@ describe('saveEventDetails', () => {
       moment: 'Walking down the aisle',
       title: 'Hava Nagila',
       artist: 'Traditional',
+      spotify_track_id: TRACK_ID_A,
+      spotify_artist_id: null,
     });
+  });
+
+  test('the ceremony insert branch carries the track id', async () => {
+    const table = tableDouble({ error: null });
+    from.mockReturnValue(table);
+
+    await saveEventDetails(null, formData({
+      eventId: EVENT_ID,
+      'ceremony-0-id': '',
+      'ceremony-0-title': 'Hava Nagila',
+      'ceremony-0-artist': 'Traditional',
+      'ceremony-0-spotifyTrackId': TRACK_ID_A,
+      'ceremony-1-id': '',
+      'ceremony-1-title': '',
+      'ceremony-1-artist': '',
+    }));
+
+    expect(table.insert).toHaveBeenCalledWith(
+      expect.objectContaining({ spotify_track_id: TRACK_ID_A }),
+    );
+  });
+
+  test('rejects a filled ceremony slot with no track id, before writing anything', async () => {
+    const table = tableDouble({ error: null });
+    from.mockReturnValue(table);
+
+    const result = await saveEventDetails(null, formData({
+      eventId: EVENT_ID,
+      'ceremony-0-id': '',
+      'ceremony-0-title': 'Hava Nagila',
+      'ceremony-0-artist': 'Traditional',
+      'ceremony-1-id': '',
+      'ceremony-1-title': '',
+      'ceremony-1-artist': '',
+    }));
+
+    expect(result.ok).toBe(false);
+    expect(table.insert).not.toHaveBeenCalled();
   });
 
   test('returns { ok: true } and writes nothing when every ceremony slot is empty', async () => {
@@ -251,6 +469,7 @@ describe('saveEventDetails', () => {
       'ceremony-0-id': ROW_ID,
       'ceremony-0-title': 'A Thousand Years',
       'ceremony-0-artist': 'Christina Perri',
+      'ceremony-0-spotifyTrackId': TRACK_ID_A,
       'ceremony-1-id': '',
       'ceremony-1-title': '',
       'ceremony-1-artist': '',

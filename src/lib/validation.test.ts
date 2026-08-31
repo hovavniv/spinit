@@ -8,11 +8,16 @@ import {
   registerSchema,
   mustPlayAddSchema,
   blocklistAddSchema,
+  ceremonySlotSchema,
   rowRefSchema,
   eventDetailsSchema,
   privateNotesSchema,
   sharedNotesSchema,
 } from './validation';
+
+/** A real Spotify id is 22 base62 characters. Distinct per fixture on purpose. */
+const TRACK_ID = 'aaaaaaaaaaaaaaaaaaaaaa';
+const ARTIST_ID = 'bbbbbbbbbbbbbbbbbbbbbb';
 
 function toFormData(values: Record<string, string>): FormData {
   const formData = new FormData();
@@ -347,6 +352,7 @@ describe('mustPlayAddSchema', () => {
       title: '   ',
       artist: '',
       moment: '',
+      spotifyTrackId: TRACK_ID,
     });
 
     expect(result.success).toBe(false);
@@ -359,6 +365,7 @@ describe('mustPlayAddSchema', () => {
       title: '  September  ',
       artist: '',
       moment: '',
+      spotifyTrackId: TRACK_ID,
     });
 
     expect(result.success).toBe(true);
@@ -372,6 +379,7 @@ describe('mustPlayAddSchema', () => {
       title: 'Hava Nagila',
       artist: '',
       moment: '',
+      spotifyTrackId: TRACK_ID,
     });
 
     expect(result.success).toBe(false);
@@ -384,6 +392,7 @@ describe('mustPlayAddSchema', () => {
       title: 'x'.repeat(201),
       artist: '',
       moment: '',
+      spotifyTrackId: TRACK_ID,
     });
 
     expect(result.success).toBe(false);
@@ -396,6 +405,73 @@ describe('mustPlayAddSchema', () => {
       title: 'September',
       artist: '',
       moment: '',
+      spotifyTrackId: TRACK_ID,
+    });
+
+    expect(result.success).toBe(false);
+  });
+
+  test('rejects a 21-character spotify id', () => {
+    const result = mustPlayAddSchema.safeParse({
+      eventId: A_UUID,
+      segment: 'party',
+      title: 'September',
+      artist: '',
+      moment: '',
+      spotifyTrackId: TRACK_ID.slice(0, 21),
+    });
+
+    expect(result.success).toBe(false);
+  });
+
+  test('rejects a 23-character spotify id', () => {
+    const result = mustPlayAddSchema.safeParse({
+      eventId: A_UUID,
+      segment: 'party',
+      title: 'September',
+      artist: '',
+      moment: '',
+      spotifyTrackId: `${TRACK_ID}x`,
+    });
+
+    expect(result.success).toBe(false);
+  });
+
+  test('rejects a must-play with no track id', () => {
+    const result = mustPlayAddSchema.safeParse({
+      eventId: A_UUID,
+      segment: 'party',
+      title: 'September',
+      artist: '',
+      moment: '',
+    });
+
+    expect(result.success).toBe(false);
+  });
+
+  test('accepts a must-play with a track id and no artist id', () => {
+    const result = mustPlayAddSchema.safeParse({
+      eventId: A_UUID,
+      segment: 'party',
+      title: 'September',
+      artist: '',
+      moment: '',
+      spotifyTrackId: TRACK_ID,
+    });
+
+    expect(result.success).toBe(true);
+    expect(result.data?.spotifyArtistId).toBeUndefined();
+  });
+
+  test('rejects a malformed (but present) artist id even though it is optional', () => {
+    const result = mustPlayAddSchema.safeParse({
+      eventId: A_UUID,
+      segment: 'party',
+      title: 'September',
+      artist: '',
+      moment: '',
+      spotifyTrackId: TRACK_ID,
+      spotifyArtistId: 'too-short',
     });
 
     expect(result.success).toBe(false);
@@ -404,16 +480,25 @@ describe('mustPlayAddSchema', () => {
 
 describe('blocklistAddSchema', () => {
   test('accepts the three entry types and nothing else', () => {
-    for (const entryType of ['artist', 'song', 'genre']) {
+    for (const entryType of ['artist', 'song']) {
       expect(
         blocklistAddSchema.safeParse({
           eventId: A_UUID,
           segment: 'party',
           entryType,
           value: 'Nickelback',
+          spotifyId: entryType === 'artist' ? ARTIST_ID : TRACK_ID,
         }).success,
       ).toBe(true);
     }
+    expect(
+      blocklistAddSchema.safeParse({
+        eventId: A_UUID,
+        segment: 'party',
+        entryType: 'genre',
+        value: 'disco',
+      }).success,
+    ).toBe(true);
 
     expect(
       blocklistAddSchema.safeParse({
@@ -431,9 +516,59 @@ describe('blocklistAddSchema', () => {
       segment: 'party',
       entryType: 'artist',
       value: '  ',
+      spotifyId: ARTIST_ID,
     });
 
     expect(result.success).toBe(false);
+  });
+
+  test('rejects a blocklist genre entry that carries a spotify id', () => {
+    const result = blocklistAddSchema.safeParse({
+      eventId: A_UUID,
+      segment: 'party',
+      entryType: 'genre',
+      value: 'metal',
+      spotifyId: TRACK_ID,
+    });
+
+    expect(result.success).toBe(false);
+    expect(result.error?.issues[0]?.path).toEqual(['spotifyId']);
+  });
+
+  test('rejects a blocklist artist entry with no spotify id', () => {
+    const result = blocklistAddSchema.safeParse({
+      eventId: A_UUID,
+      segment: 'party',
+      entryType: 'artist',
+      value: 'Nickelback',
+    });
+
+    expect(result.success).toBe(false);
+    expect(result.error?.issues[0]?.path).toEqual(['spotifyId']);
+  });
+});
+
+describe('ceremonySlotSchema', () => {
+  test('a blank title needs no track id — clearing a slot', () => {
+    expect(ceremonySlotSchema.safeParse({ id: A_UUID, title: '', artist: '' }).success).toBe(true);
+  });
+
+  test('rejects a ceremony slot with a title and no track id', () => {
+    const result = ceremonySlotSchema.safeParse({ id: '', title: 'Hava Nagila', artist: '' });
+
+    expect(result.success).toBe(false);
+    expect(result.error?.issues[0]?.path).toEqual(['spotifyTrackId']);
+  });
+
+  test('accepts a filled slot carrying a track id', () => {
+    const result = ceremonySlotSchema.safeParse({
+      id: '',
+      title: 'Hava Nagila',
+      artist: 'Traditional',
+      spotifyTrackId: TRACK_ID,
+    });
+
+    expect(result.success).toBe(true);
   });
 });
 
