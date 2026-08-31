@@ -7,6 +7,7 @@ import { exchangeCode } from '@/lib/spotify/oauth';
 import { spotifyFetch, SpotifyError } from '@/lib/spotify/client';
 import { storeConnection, markConnectionFailed, partnerOwner } from '@/lib/spotify/connectionDal';
 import { syncTasteProfile } from '@/lib/spotify/sync';
+import { codeFrom } from '@/lib/spotify/pastedCode';
 
 /**
  * `/dev/paste-code` -- closes the redirect gap for a partner who is NOT on
@@ -27,16 +28,6 @@ import { syncTasteProfile } from '@/lib/spotify/sync';
  * live credential handoff, so neither this action nor the page it backs may
  * ever log it.
  */
-
-export function codeFrom(pasted: string): string {
-  try {
-    const code = new URL(pasted).searchParams.get('code');
-    if (code) return code;
-  } catch {
-    // Not a URL -- treat the whole string as a bare code.
-  }
-  return pasted.trim();
-}
 
 export async function pasteCode(formData: FormData): Promise<{ ok: boolean }> {
   // A plain Error, not notFound() -- notFound()'s thrown digest carries no
@@ -84,4 +75,11 @@ export async function pasteCode(formData: FormData): Promise<{ ok: boolean }> {
   await syncTasteProfile(partnerId).catch(() => undefined);
 
   return { ok: true };
+}
+
+/** Void-returning wrapper for `<form action={...}>` in a SERVER component, where
+ *  an inline closure cannot cross the RSC boundary and a non-void return fails
+ *  typecheck. `pasteCode` keeps its real signature for callers that want it. */
+export async function pasteCodeForm(formData: FormData): Promise<void> {
+  await pasteCode(formData);
 }

@@ -56,7 +56,8 @@ vi.mock('@/lib/spotify/sync', () => ({
 }));
 
 import { SpotifyError } from '@/lib/spotify/client';
-import { codeFrom, pasteCode } from './actions';
+import { codeFrom } from '@/lib/spotify/pastedCode';
+import { pasteCode } from './actions';
 
 // requireUser here resolves to the PARTNER's own session -- the developer,
 // signed in as that partner -- not the DJ's, unlike task 9's insert step.

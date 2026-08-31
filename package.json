@@ -13,7 +13,8 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "seed:demo": "node scripts/seed-demo.mjs",
-    "db:replica": "scripts/dev/pg-replica.sh"
+    "db:replica": "scripts/dev/pg-replica.sh",
+    "gate": "npm run lint && npm run typecheck && npm run build && npm test"
   },
   "dependencies": {
     "@supabase/ssr": "0.12.5",

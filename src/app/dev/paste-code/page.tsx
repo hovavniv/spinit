@@ -1,6 +1,6 @@
 import { notFound } from 'next/navigation';
 
-import { pasteCode } from './actions';
+import { pasteCodeForm } from './actions';
 
 /**
  * `/dev/paste-code` -- development-only tool (Spotify connect plan, Task 9b).
@@ -29,7 +29,7 @@ export default function PasteCodePage() {
         URL.
       </p>
 
-      <form action={(fd) => { void pasteCode(fd); }}>
+      <form action={pasteCodeForm}>
         <label htmlFor="partnerId">
           Partner id
           <input id="partnerId" type="text" name="partnerId" required />
