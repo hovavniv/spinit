@@ -12,7 +12,8 @@
     "test:watch": "vitest",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "seed:demo": "node scripts/seed-demo.mjs"
+    "seed:demo": "node scripts/seed-demo.mjs",
+    "db:replica": "scripts/dev/pg-replica.sh"
   },
   "dependencies": {
     "@supabase/ssr": "0.12.5",
