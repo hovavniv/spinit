@@ -514,9 +514,17 @@ Once resolved, a genre stays cached. `fetched_at` is recorded so a future slice 
 out; nothing reads it today. A staleness limit rather than a security one — the write path is
 closed (§7.5) — but a wrong genre is permanent.
 
-### 8.8 Built-in SMTP, 2 emails/hour project-wide
+### 8.8 Built-in SMTP, 2 emails/hour project-wide — and a test defect hiding behind it
 
-Adequate for one controlled demo, fragile otherwise. Also the reason confirmation links are
+Adequate for one controlled demo, fragile otherwise.
+
+**One failing test was attributed to this cap for a day and was only half explained by it.**
+The same test also produced `Email address "…@example.com" is invalid` — a validation
+rejection, not a quota, because it generates addresses at the RFC 2606 reserved domain,
+which Supabase rejects under some configurations. Two distinct failures under one label.
+Recorded here as well as in the test plan because the mistake is the interesting part: an
+explanation that fits the first observation stops the investigation.
+ Also the reason confirmation links are
 single-browser and single-signup-at-a-time: template customisation is unavailable on the free
 tier, so the flow relies on Supabase's stock link and one fixed PKCE cookie name. Fix: custom
 SMTP, which lifts both.
