@@ -37,6 +37,7 @@ DB="spinit_replica_$$"
 KEEP=0
 SEED=0
 SEEDED=0
+SEEDED_SONGS=0
 for arg in "$@"; do
   case "$arg" in
     --keep) KEEP=1 ;;
@@ -151,6 +152,65 @@ SQL
   echo "    [seeded 4 users, 54 events -- later migrations now run against them]"
 }
 
+# Seeded MID-RUN as well, as soon as event_must_play/event_blocklist exist --
+# same reasoning as seed_if_ready above, one migration later. The Spotify
+# song-id-required migration (20260831180000) DELETES rows with no id; an
+# empty table proves nothing about that delete. This mirrors the live mixed
+# shape measured right before that migration was authored: some rows already
+# carry a real id (post-picker), some do not (written before the picker
+# existed), plus one genre entry, which never carries an id and must survive
+# untouched. Removed by 20260831180000's own delete once it runs -- there
+# was no earlier point in the migration sequence to seed with a real
+# spotify_track_id, since the column does not exist until 20260831140000.
+seed_song_lists_if_ready() {
+  [ "$SEED" -eq 1 ] || return 0
+  [ "$SEEDED_SONGS" -eq 0 ] || return 0
+  local has_column
+  has_column=$(psql -tAq -d "$DB" -c \
+    "select to_regclass('public.event_must_play') is not null
+       and exists (select 1 from information_schema.columns
+                    where table_name='event_must_play'
+                      and column_name='spotify_track_id')" 2>/dev/null || echo f)
+  [ "$has_column" = "t" ] || return 0
+  psql -q -v ON_ERROR_STOP=1 -d "$DB" <<'SQL'
+with target as (select id from public.events where couple_names = 'Priya & Alex')
+insert into public.event_must_play
+  (event_id, segment, title, artist, moment, spotify_track_id, spotify_artist_id)
+select id, 'ceremony'::public.event_segment, 'A Thousand Years', 'Christina Perri',
+       'Walking down the aisle', '6z5Yh7kOKeLjqIsNdokIpU', null from target
+union all
+select id, 'ceremony'::public.event_segment, 'Hava Nagila', 'Traditional',
+       'Breaking the glass', '7Ihr8qtzuseTCJ7OmpxW5g', null from target
+union all
+select id, 'reception'::public.event_segment, 'Can''t Help Falling in Love - Remastered', 'Elvis Presley',
+       'First dance', '7lCnb68Q8EGlC1Hkd7Nqsv', null from target
+union all
+select id, 'party'::public.event_segment, 'September', 'Earth, Wind & Fire',
+       'Guaranteed dance-floor filler', '2grjqo0Frpf2okIBiifQKs', null from target
+union all
+-- Written before the picker existed: no id. This is what the delete removes.
+select id, 'party'::public.event_segment, 'Fast', 'Demi Lovato', null, null, null from target;
+
+with target as (select id from public.events where couple_names = 'Priya & Alex')
+insert into public.event_blocklist (event_id, segment, entry_type, value, spotify_id)
+select id, 'party'::public.event_segment, 'artist'::public.blocklist_entry_type,
+       'Nickelback', '6deZN1bslXzeGvOLaLMOIF' from target
+union all
+-- Written before the picker existed: no id. This is what the delete removes.
+select id, 'party'::public.event_segment, 'artist'::public.blocklist_entry_type,
+       'Demi Lovato', null from target
+union all
+select id, 'party'::public.event_segment, 'song'::public.blocklist_entry_type,
+       'Cha Cha Slide - Radio Edit — DJ Casper', '6DrfHG3wfZ64xIzpzuZxbf' from target
+union all
+-- A genre entry never carries an id and must survive the delete untouched.
+select id, 'party'::public.event_segment, 'genre'::public.blocklist_entry_type,
+       'disco', null from target;
+SQL
+  SEEDED_SONGS=1
+  echo "    [seeded mixed-id must-play/blocklist rows for the delete migration to prove itself against]"
+}
+
 echo "==> applying migrations"
 shopt -s nullglob
 FILES=("$MIGRATIONS"/*.sql)
@@ -167,6 +227,7 @@ for f in $(printf '%s\n' "${FILES[@]}" | sort); do
   if psql -q -v ON_ERROR_STOP=1 -d "$DB" -f "$f" >/dev/null 2>/tmp/pg-replica-err.$$; then
     echo "ok"
     seed_if_ready
+    seed_song_lists_if_ready
   else
     echo "FAILED"
     echo ""
@@ -189,6 +250,14 @@ select '    security definer functions with empty search_path: '||count(*)
 select '    tables anon can still TRUNCATE: '||count(*)
   from information_schema.role_table_grants
  where grantee='anon' and privilege_type='TRUNCATE';
+select '    event_must_play: '||count(*)||' rows, '
+       ||count(*) filter (where spotify_track_id is null)||' with no track id'
+  from public.event_must_play;
+select '    event_blocklist: '||count(*)||' rows, '
+       ||count(*) filter (where entry_type in ('artist','song') and spotify_id is null)
+       ||' artist/song with no id, '
+       ||count(*) filter (where entry_type = 'genre')||' genre'
+  from public.event_blocklist;
 SQL
 
 echo ""
