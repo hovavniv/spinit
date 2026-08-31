@@ -4,10 +4,10 @@ Deliverable 8. How Spinit authenticates people, decides what they may reach, val
 what they send, protects its keys — and what is still open.
 
 **Status of this document.** Everything in §1–§6 describes code that is merged and running
-unless marked otherwise. §7 describes the Spotify integration, which is designed and
-partly built on `feat/spotify` but **not merged**; it is included because its security
-model is the most considered part of the project and its design is settled. §8 is the
-honest list of what is still wrong.
+unless marked otherwise. §7 describes the Spotify integration's authorization layer, which
+is **applied to the live database and verified against it** (§7.7); the application code
+above it is on `feat/spotify` and not yet merged. §8 is the honest list of what is still
+wrong.
 
 ---
 
@@ -293,7 +293,8 @@ update public.event_partners set user_id = (select auth.uid())
 ```
 
 **And the column is writable by no PostgREST role at all** — the grant lists both verbs
-explicitly:
+explicitly. This is the part worth dwelling on: *no policy could have achieved it.* RLS is
+per-row; the column had to be closed by grant.
 
 ```sql
 grant insert (event_id, slot, display_name, invite_email) on public.event_partners to authenticated;
@@ -302,6 +303,18 @@ grant update (slot, display_name, invite_email)           on public.event_partne
 
 `user_id` appears in neither. That took two attempts: the first fix column-scoped UPDATE and
 left INSERT at table level, so a DJ could still `POST` a row with an arbitrary `user_id`.
+
+The evidence is one query, which is why this is the example worth showing:
+
+```sql
+select grantee, privilege_type, column_name
+  from information_schema.column_privileges
+ where table_name = 'event_partners';
+```
+
+Live result: `user_id` appears under **SELECT only**. It is absent from INSERT and from
+UPDATE. A reviewer does not have to read the policies to check this control — they read one
+table.
 
 ### 7.3 Token storage
 
@@ -350,7 +363,58 @@ definition of done — the key appears in exactly one module, that module is ser
 is never imported by a Client Component, and the RLS test suites continue to use the anon key
 exclusively so their guarantees are unchanged.
 
-### 7.6 Verifying the boundary, not the fix
+### 7.6 A control that is correct and still produces a wrong number
+
+`past_events_with_counts` is `security_invoker = on`, so widening `events` SELECT propagated
+into it: a partner on a **completed** event now sees that row, with `songs_played` always 0 —
+because `played_songs` was deliberately *not* widened, so the left join is filtered to
+nothing.
+
+Nothing leaks. The recap stays closed, which is the correct outcome. But the count reads
+zero rather than being absent, which looks like a bug and is instead two correct controls
+meeting. It is unreachable through the interface today — partners only reach
+`/events/[id]` — and it is recorded rather than patched, because fixing it means deciding
+whether a partner may see `played_songs` at all, which is a product question and not a
+schema one.
+
+Worth stating because it is the honest shape of layered authorization: the layers do not
+always compose into something that *looks* right.
+
+### 7.7 What is verified, and how
+
+The authorization layer described in §7.1–§7.6 is not a design on paper. Before it was
+applied, the migration was run against a **local replica** — a stubbed `auth` schema, all six
+prior migrations in order, and live-shaped data — and every control was exercised, not
+inspected. It was then applied to the live project and re-verified there.
+
+| Control | Live result |
+|---|---|
+| RLS enabled on all eight new tables | 8/8 |
+| `user_id` writable on either verb | never — SELECT only |
+| `artist_genres` write grants to `authenticated` | 0, table **and** RPC |
+| `upsert_artist_genres` grantees | `service_role` only |
+| Definer functions with empty `search_path` | 4/4 |
+| `anon` grants on the new tables | 0 |
+| Superseded policies left behind | 0 |
+| `events` INSERT/UPDATE policies | untouched; no DELETE policy exists |
+
+Seven escalation attempts were run and all seven were refused: a DJ patching `user_id`; a DJ
+inserting an explicit `user_id`; `authenticated` writing `artist_genres` directly;
+`authenticated` calling the RPC; a partner re-pointing her token row at her partner's;
+`authenticated` inserting into the enrichment queue; `anon` reading anything.
+
+Two further behaviours were proven rather than assumed, because both were open questions:
+the purge trigger **does** fire on the foreign key's `on delete set null`, and two concurrent
+slot claims produce exactly one winner — the loser's row lock re-evaluates the predicate,
+updates zero rows and raises `42501`.
+
+**A note on trusting this table.** Two of the first test attempts passed for the wrong
+reasons — one "refused" result was actually the event id resolving to `NULL` because RLS
+correctly hid the row from a user who was not yet a partner, so the test was reading its own
+fixture through the policy it was testing. The numbers above are post-correction. A green
+result that cannot be explained is not evidence.
+
+### 7.8 Verifying the boundary, not the fix
 
 The most useful thing learned across four reviews was about **testing**, not about policies.
 

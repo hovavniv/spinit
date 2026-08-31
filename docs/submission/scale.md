@@ -64,6 +64,15 @@ with its **owner's** rights and bypass RLS entirely — a scale optimisation tha
 becomes an authorisation hole. It is the one place in the project where a performance
 decision and a security decision are the same decision.
 
+It also has a consequence worth recording, now live on the project. Widening `events` SELECT
+so the couple can read their own event propagates into this view, because `security_invoker`
+means it runs with the *caller's* rights. A partner on a completed event now sees that row
+with `songs_played` always **0** — `played_songs` was deliberately not widened, so the left
+join is filtered to nothing. Nothing leaks; the count is simply wrong rather than absent.
+Two correct controls meeting and producing a number that looks like a bug. Unreachable
+through the interface today, and recorded rather than patched because fixing it means
+deciding whether a partner may see `played_songs` at all.
+
 The honest caveat: grouping forces a sort above the aggregate, so
 `events_dj_status_date_idx` does not serve the ordering when read through the view. At a few
 hundred rows per DJ that is irrelevant. At a hundred thousand it would need a materialised
