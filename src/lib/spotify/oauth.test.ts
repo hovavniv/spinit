@@ -43,6 +43,15 @@ describe('exchangeCode', () => {
     expect(init.body as string).toContain('grant_type=authorization_code');
   });
 
+  it('throws when the token exchange response omits refresh_token', async () => {
+    vi.stubGlobal('fetch', vi.fn(async (_i: RequestInfo | URL, _init?: RequestInit) =>
+      new Response(JSON.stringify({ access_token: 'A', expires_in: 3600 }), { status: 200 })));
+
+    await expect(exchangeCode('CODE')).rejects.toThrow(
+      /did not return a refresh token/,
+    );
+  });
+
   it('throws on a non-200 WITHOUT leaking the response body', async () => {
     vi.stubGlobal('fetch', vi.fn(async (_i: RequestInfo | URL, _init?: RequestInit) =>
       new Response('{"error_description":"secret detail"}', { status: 400 })));

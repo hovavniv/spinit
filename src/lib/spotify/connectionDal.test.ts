@@ -149,6 +149,14 @@ describe('withUserToken', () => {
     expect(tokenUpsert.mock.calls[0][0]).toHaveProperty('updated_at');
   });
 
+  it('throws a specific "no stored token" error when no token row is found', async () => {
+    tokenSelect.mockResolvedValue({ data: null, error: null });
+
+    await expect(withUserToken('p1', async () => undefined)).rejects.toThrow(
+      /no stored spotify token for partner p1/,
+    );
+  });
+
   it('passes the fresh access token to the callback and returns its result', async () => {
     tokenSelect.mockResolvedValue({
       data: { refresh_token: encryptToken('OLD') },

@@ -17,9 +17,11 @@ interface DevConnectPageProps {
  * is capped at 2 emails/hour project-wide) and without a second physical
  * device for the common case.
  *
- * Never reachable in production -- both this page and every action it calls
- * (`createPartnerSlots`, `claimSlot` in `connectActions.ts`, and
- * `connectSpotify` in `spotify/actions.ts`) check `NODE_ENV` independently.
+ * Never reachable in production -- both this page and the dev-only actions it
+ * calls (`createPartnerSlots`, `claimSlot` in `connectActions.ts`) check
+ * `NODE_ENV` independently. `connectSpotify` (in `spotify/actions.ts`) is
+ * deliberately NOT gated on `NODE_ENV` -- it is the real, production-reachable
+ * connect action; this page just happens to be one of its callers.
  *
  * Two separate steps, not one combined submission (Task 9's own review
  * finding): inserting both `event_partners` rows happens once, under the
