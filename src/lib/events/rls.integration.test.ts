@@ -643,9 +643,9 @@ describe.skipIf(!hasSupabaseConfig || !hasTestUsers || !hasPartnerUser)(
     });
 
     test('the fixture linked C to exactly one of the two events', async () => {
-      // A smoke test for the scaffolding itself, not a security assertion.
-      // If the claim silently did nothing, every later "C can read this"
-      // test would fail in a way that looks like a policy bug.
+      // A smoke test for the scaffolding, not a security assertion. If the
+      // claim silently did nothing, every later "C can read this" test would
+      // fail in a way that looks like a policy bug.
       const { data, error } = await clientC
         .from('event_partners')
         .select('id, event_id, user_id')
@@ -656,8 +656,203 @@ describe.skipIf(!hasSupabaseConfig || !hasTestUsers || !hasPartnerUser)(
       expect(data).not.toBeNull();
       expect(data!.user_id).toBe(userCId);
       expect(data!.event_id).toBe(linkedEvent);
-      expect(unlinkedEvent).not.toBe(linkedEvent);
-      expect(clientB).toBeDefined();
+    });
+
+    /* --- what a partner MAY do ------------------------------------------ */
+
+    test('a partner reads the event they are linked to', async () => {
+      const { data } = await clientC.from('events').select('id').eq('id', linkedEvent);
+      expect(data).toHaveLength(1);
+    });
+
+    // THE NEGATIVE CONTROL, and deliberately against the SAME DJ's other
+    // event rather than a stranger's. "C cannot read B's event" would pass
+    // even if the link leaked across everything A owns; this cannot.
+    test('a partner cannot read another event of the SAME dj', async () => {
+      const { data } = await clientC.from('events').select('id').eq('id', unlinkedEvent);
+      expect(data ?? []).toHaveLength(0);
+    });
+
+    test('an unrelated signed-in dj still sees neither event', async () => {
+      const { data: one } = await clientB.from('events').select('id').eq('id', linkedEvent);
+      const { data: two } = await clientB.from('events').select('id').eq('id', unlinkedEvent);
+      expect(one ?? []).toHaveLength(0);
+      expect(two ?? []).toHaveLength(0);
+    });
+
+    test('a partner can add and remove song-list rows', async () => {
+      const ins = await clientC
+        .from('event_blocklist')
+        .insert({ event_id: linkedEvent, segment: 'party', entry_type: 'genre', value: 'polka' })
+        .select();
+      expect(ins.error).toBeNull();
+      expect(ins.data).toHaveLength(1);
+
+      const del = await clientC
+        .from('event_blocklist')
+        .delete()
+        .eq('id', ins.data![0].id)
+        .select();
+      expect(del.data).toHaveLength(1);
+    });
+
+    test('a partner cannot read private notes but can read and write shared notes', async () => {
+      const priv = await clientC
+        .from('event_private_notes')
+        .select('body')
+        .eq('event_id', linkedEvent);
+      expect(priv.data ?? []).toHaveLength(0);
+
+      const shared = await clientC
+        .from('event_shared_notes')
+        .upsert({ event_id: linkedEvent, body: 'from the couple' }, { onConflict: 'event_id' })
+        .select();
+      expect(shared.error).toBeNull();
+      expect(shared.data).toHaveLength(1);
+    });
+
+    /* --- what a partner MAY NOT do -------------------------------------- */
+
+    test('a partner cannot cancel the event', async () => {
+      // events UPDATE was deliberately NOT widened: reading widens, writing
+      // does not. A partner editing song lists must not be able to cancel a
+      // wedding.
+      const { data } = await clientC
+        .from('events')
+        .update({ status: 'cancelled' })
+        .eq('id', linkedEvent)
+        .select();
+      expect(data ?? []).toHaveLength(0);
+    });
+
+    test('a partner cannot read the other partner\'s spotify token', async () => {
+      const { data } = await clientC.from('spotify_tokens').select('partner_id');
+      expect(data ?? []).toHaveLength(0);
+    });
+
+    /* --- the anti-regression set ----------------------------------------
+       Each control is asserted as a CAPABILITY, not as one verb. Three
+       consecutive reviews found the same shape: a correct fix, a test
+       pinning only the case already found, and the hole intact one surface
+       over. Do not split these "for clarity" -- splitting them is exactly
+       how one gets fixed and the other does not.
+       -------------------------------------------------------------------- */
+
+    test('user_id cannot be forged: not by PATCH on an unclaimed row, not by the dj, not on INSERT', async () => {
+      // 1. a signed-in user PATCHing any unclaimed slot
+      const patchUnclaimed = await clientC
+        .from('event_partners')
+        .update({ user_id: userCId })
+        .is('user_id', null)
+        .select();
+      expect(patchUnclaimed.data ?? []).toHaveLength(0);
+
+      // 2. the DJ PATCHing user_id on their OWN event's row -- the hole the
+      //    column-scoped UPDATE grant exists to close
+      const patchAsDj = await clientA
+        .from('event_partners')
+        .update({ user_id: userCId })
+        .eq('id', claimedPartnerId)
+        .select();
+      expect(patchAsDj.data ?? []).toHaveLength(0);
+
+      // 3. the DJ POSTing a row with an explicit user_id -- the adjacent verb
+      //    review 3 found still open after review 2's fix
+      const insertWithUserId = await clientA.from('event_partners').insert({
+        event_id: linkedEvent,
+        slot: 2,
+        display_name: 'forged',
+        invite_email: 'x@example.com',
+        user_id: userCId,
+      });
+      expect(insertWithUserId.error?.code).toBe('42501');
+    });
+
+    test('no authenticated path writes artist_genres -- table OR routine', async () => {
+      // Both paths in ONE test, deliberately. Review 3 found the table grant,
+      // the fix routed writes through a definer function, and review 4 found
+      // the function granted to `authenticated` and reachable at
+      // POST /rest/v1/rpc/ -- the hole had MOVED, not closed.
+      const direct = await clientA
+        .from('artist_genres')
+        .insert({ spotify_artist_id: '0LcJLqbBmaGUft1e9Mm8HV', artist_name: 'x' });
+      expect(direct.error?.code).toBe('42501');
+
+      const viaRpc = await clientA.rpc('upsert_artist_genres', {
+        p_spotify_id: '0LcJLqbBmaGUft1e9Mm8HV',
+        p_name: 'x',
+        p_mb_id: null,
+        p_mb_name: null,
+        p_genres: { 'death metal': 100 },
+        p_origins: {},
+        p_eras: {},
+        p_status: 'resolved',
+        p_via: 'mbid',
+      });
+      expect(viaRpc.error).toBeTruthy();
+    });
+
+    test('claim_partner_slot refuses a caller who was not invited, and says nothing', async () => {
+      // B is signed in and the slot is unclaimed, but the invitation is not
+      // addressed to B. 42501 for every failure mode, so the caller cannot
+      // tell "no such event" from "already claimed" from "not yours".
+      const { error } = await clientB.rpc('claim_partner_slot', {
+        p_event: linkedEvent,
+        p_slot: 2,
+      });
+      expect(error).toBeTruthy();
+      expect(error!.code).toBe('42501');
+    });
+
+    test('a partner cannot re-parent a song-list row onto an event they do not participate in', async () => {
+      const ins = await clientC
+        .from('event_blocklist')
+        .insert({ event_id: linkedEvent, segment: 'party', entry_type: 'genre', value: 'ska' })
+        .select();
+      expect(ins.data).toHaveLength(1);
+
+      // The same predicate sits in BOTH `using` and `with check`, which is
+      // what stops the row moving to an event the writer is not on.
+      const moved = await clientC
+        .from('event_blocklist')
+        .update({ event_id: unlinkedEvent })
+        .eq('id', ins.data![0].id)
+        .select();
+      expect(moved.data ?? []).toHaveLength(0);
+
+      await clientC.from('event_blocklist').delete().eq('id', ins.data![0].id);
+    });
+
+    /* --- the dj is not locked out by any of this ------------------------ */
+
+    test('the dj still reads their own private notes', async () => {
+      const { data } = await clientA
+        .from('event_private_notes')
+        .select('body')
+        .eq('event_id', linkedEvent);
+      expect(data).toHaveLength(1);
+    });
+
+    test('writing notes on an event that had none persists -- the upsert path', async () => {
+      // An update against a missing row returns success having written
+      // nothing. The migration backfills a row per event so this works today;
+      // the upsert is what keeps it working for an event created later.
+      const target = unlinkedEvent;
+      const write = await clientA
+        .from('event_private_notes')
+        .upsert({ event_id: target, body: 'written later' }, { onConflict: 'event_id' })
+        .select();
+      expect(write.error).toBeNull();
+
+      const { data } = await clientA
+        .from('event_private_notes')
+        .select('body')
+        .eq('event_id', target);
+      expect(data?.[0]?.body).toBe('written later');
+
+      await clientA
+        .from('event_private_notes')
+        .upsert({ event_id: target, body: '' }, { onConflict: 'event_id' });
     });
   },
 );
