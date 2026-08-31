@@ -7,6 +7,7 @@ import type { ZodError } from 'zod';
 import { createClient } from '@/lib/supabase/server';
 import { requireUser } from '@/lib/auth/dal';
 import { mapAuthError, type ActionResult } from '@/lib/auth/errors';
+import { postLoginPath } from '@/lib/auth/redirects';
 import { siteUrl } from '@/lib/auth/site-url';
 import { formDataToRecord, loginSchema, registerSchema, profileSchema, PHONE_PATTERN } from '@/lib/validation';
 
@@ -85,7 +86,14 @@ export async function signUpWithPassword(
   return { ok: true };
 }
 
-/** design 4.2. Re-parses via `loginSchema`; redirects to /dashboard on success. */
+/**
+ * design 4.2. Re-parses via `loginSchema`; redirects to `postLoginPath`'s
+ * destination on success (plan task 14 step 4) -- `/dashboard` for a DJ,
+ * `/my-event` for a partner who owns no events of their own.
+ *
+ * The two existence checks run in parallel and each `.limit(1)`: this only
+ * needs to know whether either set is non-empty, not how large it is.
+ */
 export async function signInWithPassword(
   _prevState: ActionResult,
   formData: FormData,
@@ -96,7 +104,7 @@ export async function signInWithPassword(
   }
 
   const supabase = await createClient();
-  const { error } = await supabase.auth.signInWithPassword({
+  const { data, error } = await supabase.auth.signInWithPassword({
     email: parsed.data.email,
     password: parsed.data.password,
   });
@@ -105,8 +113,19 @@ export async function signInWithPassword(
     return mapAuthError(error, { event: 'login', constraint: error.code });
   }
 
+  const userId = data.user.id;
+  const [ownedEvents, partnerLinks] = await Promise.all([
+    supabase.from('events').select('id').eq('dj_id', userId).limit(1),
+    supabase.from('event_partners').select('id').eq('user_id', userId).limit(1),
+  ]);
+
   // redirect() throws internally — expected Next behavior, not caught here.
-  redirect('/dashboard');
+  redirect(
+    postLoginPath({
+      ownsEvents: (ownedEvents.data?.length ?? 0) > 0,
+      isPartner: (partnerLinks.data?.length ?? 0) > 0,
+    }),
+  );
 }
 
 /**

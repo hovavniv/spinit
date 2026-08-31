@@ -8,12 +8,35 @@ import { describe, expect, it, vi, beforeEach } from 'vitest';
  * requireUser() are therefore fully test-doubled, never the live project.
  */
 
-const { signUp, signInWithPassword, signOut, updateEq, update, from, requireUser, redirect } = vi.hoisted(() => {
+const {
+  signUp,
+  signInWithPassword,
+  signOut,
+  updateEq,
+  update,
+  from,
+  eventsLimit,
+  partnersLimit,
+  requireUser,
+  redirect,
+} = vi.hoisted(() => {
   const updateEq = vi.fn();
   const update = vi.fn<(payload: Record<string, unknown>) => { eq: typeof updateEq }>(() => ({
     eq: updateEq,
   }));
-  const from = vi.fn(() => ({ update }));
+  // signInWithPassword also queries `events`/`event_partners` (existence
+  // checks for postLoginPath) via the same `from`. Keyed by table so a test
+  // can make the two checks disagree (owns no events, but is a partner).
+  const eventsLimit = vi.fn();
+  const partnersLimit = vi.fn();
+  const limitByTable: Record<string, typeof eventsLimit> = {
+    events: eventsLimit,
+    event_partners: partnersLimit,
+  };
+  const from = vi.fn((table: string) => ({
+    update,
+    select: vi.fn(() => ({ eq: vi.fn(() => ({ limit: limitByTable[table] })) })),
+  }));
   return {
     signUp: vi.fn(),
     signInWithPassword: vi.fn(),
@@ -21,6 +44,8 @@ const { signUp, signInWithPassword, signOut, updateEq, update, from, requireUser
     updateEq,
     update,
     from,
+    eventsLimit,
+    partnersLimit,
     requireUser: vi.fn(),
     redirect: vi.fn((path: string) => {
       throw new Error(`REDIRECT:${path}`);
@@ -117,11 +142,14 @@ beforeEach(() => {
   vi.clearAllMocks();
   process.env.SITE_URL = 'http://localhost:3000';
   update.mockImplementation(() => ({ eq: updateEq }));
-  from.mockImplementation(() => ({ update }));
   updateEq.mockResolvedValue({ error: null });
   signUp.mockResolvedValue({ data: {}, error: null });
-  signInWithPassword.mockResolvedValue({ data: {}, error: null });
+  signInWithPassword.mockResolvedValue({ data: { user: { id: 'session-user-id' } }, error: null });
   signOut.mockResolvedValue({ error: null });
+  // Default: signed-in user owns no events and links to no event. Individual
+  // signInWithPassword tests override one or both to exercise postLoginPath.
+  eventsLimit.mockResolvedValue({ data: [], error: null });
+  partnersLimit.mockResolvedValue({ data: [], error: null });
 });
 
 describe('updateProfile — IDOR guard', () => {
@@ -185,6 +213,34 @@ describe('signInWithPassword', () => {
       email: 'jordan@example.com',
       password: 'correct-horse-battery',
     });
+  });
+
+  it('sends a DJ (owns events) to /dashboard even if also a partner', async () => {
+    eventsLimit.mockResolvedValue({ data: [{ id: 'owned-1' }], error: null });
+    partnersLimit.mockResolvedValue({ data: [{ id: 'link-1' }], error: null });
+
+    await expect(signInAction({ ok: true }, loginFormData())).rejects.toThrow('REDIRECT:/dashboard');
+  });
+
+  it('sends a partner who owns no events to /my-event', async () => {
+    eventsLimit.mockResolvedValue({ data: [], error: null });
+    partnersLimit.mockResolvedValue({ data: [{ id: 'link-1' }], error: null });
+
+    await expect(signInAction({ ok: true }, loginFormData())).rejects.toThrow('REDIRECT:/my-event');
+  });
+
+  it('sends a user who is neither a DJ nor a partner to /dashboard', async () => {
+    eventsLimit.mockResolvedValue({ data: [], error: null });
+    partnersLimit.mockResolvedValue({ data: [], error: null });
+
+    await expect(signInAction({ ok: true }, loginFormData())).rejects.toThrow('REDIRECT:/dashboard');
+  });
+
+  it('scopes both existence checks to the signed-in user, not the form', async () => {
+    await expect(signInAction({ ok: true }, loginFormData())).rejects.toThrow();
+
+    expect(from).toHaveBeenCalledWith('events');
+    expect(from).toHaveBeenCalledWith('event_partners');
   });
 });
 
