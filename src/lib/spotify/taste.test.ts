@@ -46,6 +46,25 @@ describe('mergeRanges — design §2.12', () => {
       short_term: [], medium_term: [a('1', 'One')], long_term: [],
     })).not.toThrow();
   });
+
+  it('keeps the best score across ranges even when the LATER-processed range is lower', () => {
+    // RANGE_ORDER processes short_term before long_term. Artist '1' gets a
+    // HIGH contribution from the earlier-processed range and a LOWER
+    // contribution from the later-processed range -- the opposite ordering
+    // from the "scores by rangeWeight" test above (where the later range
+    // happened to also be the higher one, so `if (true)` would coincidentally
+    // pass it too). This is the only shape that can distinguish the correct
+    // `if (contribution > existing.score)` from a broken `if (true)`.
+    //   short_term rank 0 of 1: 1.0 * (1 - 0/1) = 1.0  (processed first)
+    //   long_term  rank 0 of 1: 0.6 * (1 - 0/1) = 0.6  (processed later, lower)
+    // Correct: keep 1.0 (0.6 is not > 1.0). Broken `if (true)`: overwritten to 0.6.
+    const [merged] = mergeRanges({
+      short_term: [a('1', 'One')],
+      medium_term: [],
+      long_term: [a('1', 'One')],
+    });
+    expect(merged.score).toBeCloseTo(1.0);
+  });
 });
 
 describe('combineTaste — artist-derived, per design §6.1', () => {
@@ -86,5 +105,32 @@ describe('combineTaste — artist-derived, per design §6.1', () => {
   it('is symmetric in matchPercent', () => {
     const x = p(['1', '2', '3']); const y = p(['2', '3', '4']);
     expect(combineTaste(x, y).matchPercent).toBe(combineTaste(y, x).matchPercent);
+  });
+
+  it('computes a partial overlap correctly, not just 0% and 100%', () => {
+    // p1: {1:1.0, 2:0.9}   p2: {2:1.0, 3:0.9}
+    // intersection = min(1.0,0) + min(0.9,1.0) + min(0,0.9) = 0 + 0.9 + 0 = 0.9
+    // union        = max(1.0,0) + max(0.9,1.0) + max(0,0.9) = 1.0 + 1.0 + 0.9 = 2.9
+    // matchPercent = round(100 * 0.9 / 2.9) = round(31.03...) = 31
+    expect(combineTaste(p(['1', '2']), p(['2', '3'])).matchPercent).toBe(31);
+  });
+
+  it('sorts sharedArtists by the SUM of both sides scores, not just one side', () => {
+    // Two shared artists with deliberately opposite per-side magnitudes, so
+    // that "sum of both sides" and "partner1's side alone" disagree on order:
+    //   x: partner1=0.5, partner2=0.9 -> combined 1.4
+    //   y: partner1=0.9, partner2=0.1 -> combined 1.0
+    // Correct (sum): x (1.4) before y (1.0).
+    // Broken (a1.score alone, dropping partner2's contribution): x's key
+    // becomes 0.5 and y's becomes 0.9, so the sort flips to y before x.
+    const partner1 = { topArtists: [
+      { id: 'x', name: 'X', score: 0.5, ranges: [] },
+      { id: 'y', name: 'Y', score: 0.9, ranges: [] },
+    ] };
+    const partner2 = { topArtists: [
+      { id: 'x', name: 'X', score: 0.9, ranges: [] },
+      { id: 'y', name: 'Y', score: 0.1, ranges: [] },
+    ] };
+    expect(combineTaste(partner1, partner2).sharedArtists.map((s) => s.id)).toEqual(['x', 'y']);
   });
 });
