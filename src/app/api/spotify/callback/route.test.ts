@@ -87,6 +87,7 @@ function eventPartnersTable(eventId = 'event-1') {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  process.env.SPOTIFY_REDIRECT_URI = 'http://127.0.0.1:3000/api/spotify/callback';
   storeConnectionMock.mockResolvedValue(undefined);
   markConnectionFailedMock.mockResolvedValue(undefined);
   requireUserMock.mockResolvedValue({ id: 'user-partner-1' });
@@ -164,19 +165,25 @@ it("redirects to the partner's event on success", async () => {
   expect(res.headers.get('location')).toContain('/events/');
 });
 
-it("redirects using the request's Host header, not request.url's host — Next's dev\n" +
-   "proxy reports request.url with its own internal host even when the client's\n" +
-   "real request came in on a different one", async () => {
-  cookieGet.mockReturnValue({ value: JSON.stringify({ state: 'S', partnerId: 'p1' }) });
-  const u = new URL('http://internal-proxy-host:9999/api/spotify/callback');
-  u.searchParams.set('code', 'C');
-  u.searchParams.set('state', 'S');
-  const request = new Request(u, { headers: { host: '127.0.0.1:3000' } });
+it("redirects using SPOTIFY_REDIRECT_URI's origin, ignoring BOTH request.url's host\n" +
+   "(Next's dev proxy reports its own internal target, not the client-facing host) AND\n" +
+   "the request's Host header (client-supplied -- trusting it for a redirect Location\n" +
+   "is host-header injection on the most security-sensitive route in this slice)",
+  async () => {
+    cookieGet.mockReturnValue({ value: JSON.stringify({ state: 'S', partnerId: 'p1' }) });
+    const u = new URL('http://internal-proxy-host:9999/api/spotify/callback');
+    u.searchParams.set('code', 'C');
+    u.searchParams.set('state', 'S');
+    // A malicious or merely-different Host header, deliberately distinct from
+    // both the URL's own host and the configured redirect origin -- three
+    // different values in play, and only one of them may legitimately win.
+    const request = new Request(u, { headers: { host: 'evil.example.com' } });
 
-  const res = await GET(request);
-  expect(res.headers.get('location')).toContain('127.0.0.1:3000');
-  expect(res.headers.get('location')).not.toContain('internal-proxy-host');
-});
+    const res = await GET(request);
+    expect(res.headers.get('location')).toContain('127.0.0.1:3000');
+    expect(res.headers.get('location')).not.toContain('internal-proxy-host');
+    expect(res.headers.get('location')).not.toContain('evil.example.com');
+  });
 
 it('CALLS syncTasteProfile after storing the connection', async () => {
   await GET(req({ code: 'C', state: 'S' }, { state: 'S', partnerId: 'p1' }));

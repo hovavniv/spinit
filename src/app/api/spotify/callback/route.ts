@@ -50,19 +50,30 @@ import { syncTasteProfile } from '@/lib/spotify/sync';
  * redirect literal) -- confirmed live, DevTools' own Request URL/Remote
  * Address showed `127.0.0.1:3000` for a request whose Location header this
  * function then built as `localhost:3000`, silently sending the browser to a
- * different origin than the one it was on (which drops the just-cleared
- * OAuth cookie's replacement, or any other origin-scoped state). The `Host`
- * header is what the client actually sent, so use that instead, falling back
- * to `request.url`'s host only if the header is somehow absent.
+ * different origin than the one it was on.
+ *
+ * The `Host` header is NOT the fix -- it's client-supplied, and building a
+ * redirect Location from it is host-header injection on the single most
+ * security-sensitive route in this slice (a request carrying `Host: evil.com`
+ * would redirect there). The app already knows its own origin as trusted
+ * config: the same `SPOTIFY_REDIRECT_URI` the authorize URL and the token
+ * exchange use. If the browser reached this callback at all, it arrived at
+ * that exact origin -- Spotify only redirects to the registered literal --
+ * so there is no case where the request's actual host is right and this is
+ * wrong. It's also already validated (oauth.ts throws if it's unset, and
+ * Spotify rejects a mismatch at authorize time, loudly, rather than this
+ * failing silently at redirect time), and it's what you want behind a
+ * production reverse proxy terminating a different hostname than the app's
+ * internal target, too.
  */
-function originFrom(request: Request): string {
-  const host = request.headers.get('host') ?? new URL(request.url).host;
-  const protocol = request.headers.get('x-forwarded-proto') ?? new URL(request.url).protocol.replace(':', '');
-  return `${protocol}://${host}`;
+function originFrom(): string {
+  const redirectUri = process.env.SPOTIFY_REDIRECT_URI;
+  if (!redirectUri) throw new Error('SPOTIFY_REDIRECT_URI is not set');
+  return new URL(redirectUri).origin;
 }
 
-function errorRedirect(request: Request, reason: string): Response {
-  const url = new URL('/', originFrom(request));
+function errorRedirect(reason: string): Response {
+  const url = new URL('/', originFrom());
   url.searchParams.set('spotify_error', reason);
   return NextResponse.redirect(url);
 }
@@ -77,7 +88,7 @@ export async function GET(request: Request): Promise<Response> {
   const raw = cookieStore.get('spotify_oauth');
 
   if (!raw) {
-    return errorRedirect(request, 'missing_cookie');
+    return errorRedirect('missing_cookie');
   }
 
   let cookiePayload: { state: string; partnerId: string };
@@ -85,12 +96,12 @@ export async function GET(request: Request): Promise<Response> {
     cookiePayload = JSON.parse(raw.value) as { state: string; partnerId: string };
   } catch {
     cookieStore.delete('spotify_oauth');
-    return errorRedirect(request, 'bad_cookie');
+    return errorRedirect('bad_cookie');
   }
 
   if (cookiePayload.state !== queryState) {
     cookieStore.delete('spotify_oauth');
-    return errorRedirect(request, 'state_mismatch');
+    return errorRedirect('state_mismatch');
   }
 
   const { partnerId } = cookiePayload;
@@ -107,7 +118,7 @@ export async function GET(request: Request): Promise<Response> {
   const user = await requireUser();
   const ownerId = await partnerOwner(partnerId);
   if (ownerId !== user.id) {
-    return errorRedirect(request, 'not_authorized');
+    return errorRedirect('not_authorized');
   }
 
   // Spotify echoes `state` back on every redirect, including a decline, so
@@ -115,7 +126,7 @@ export async function GET(request: Request): Promise<Response> {
   // check above have both passed -- a forged `error` param on an otherwise
   // invalid request is still rejected by those checks first.
   if (oauthError) {
-    return errorRedirect(request, oauthError === 'access_denied' ? 'declined' : 'oauth_error');
+    return errorRedirect(oauthError === 'access_denied' ? 'declined' : 'oauth_error');
   }
 
   const tokens = await exchangeCode(code);
@@ -127,7 +138,7 @@ export async function GET(request: Request): Promise<Response> {
     if (error instanceof SpotifyError && error.kind === 'forbidden') {
       // Application-level reason code only -- never the raw Spotify error text.
       await markConnectionFailed(partnerId, 'not_allowlisted');
-      return errorRedirect(request, 'not_allowlisted');
+      return errorRedirect('not_allowlisted');
     }
     throw error;
   }
@@ -154,9 +165,9 @@ export async function GET(request: Request): Promise<Response> {
     .single();
 
   if (lookupError || !partner) {
-    return errorRedirect(request, 'event_not_found');
+    return errorRedirect('event_not_found');
   }
 
   const eventId = (partner as { event_id: string }).event_id;
-  return NextResponse.redirect(new URL(`/events/${eventId}`, originFrom(request)));
+  return NextResponse.redirect(new URL(`/events/${eventId}`, originFrom()));
 }
