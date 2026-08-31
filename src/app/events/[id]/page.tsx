@@ -70,7 +70,7 @@ export default async function EventPage({ params }: PageProps<'/events/[id]'>) {
   };
 
   return (
-    <AppShell sidebar={<DashboardSidebar dj={dj} current="none" />}>
+    <AppShell sidebar={<DashboardSidebar dj={dj} current="none" hideNav={viewer.role === 'partner'} />}>
       <EventDetailScreen event={event} viewer={viewer} />
     </AppShell>
   );

@@ -81,8 +81,6 @@
   flex-wrap: wrap;
 }
 
-.inputTitle,
-.inputArtist,
 .inputMoment {
   padding: 11px 13px;
   border-radius: 10px;
@@ -92,22 +90,9 @@
   background: var(--surface);
   color: var(--ink-dark);
   min-width: 0;
-}
-
-.inputTitle {
-  flex: 1.4 1 120px;
-}
-
-.inputArtist {
-  flex: 1 1 100px;
-}
-
-.inputMoment {
   flex: 1 1 130px;
 }
 
-.inputTitle:focus,
-.inputArtist:focus,
 .inputMoment:focus {
   outline: none;
   border-color: var(--accent);

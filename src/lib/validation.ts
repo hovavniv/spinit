@@ -146,6 +146,30 @@ const optionalText = (max: number, message: string) =>
     .max(max, message)
     .transform((value) => (value === '' ? null : value));
 
+/**
+ * Every song and artist entry is PICKED from Spotify, never typed (design
+ * §2.2, §5.2): a participant holds table-level insert/update grants on both
+ * tables and can PATCH PostgREST directly, so this is a real control, not
+ * only a UX nicety — it mirrors the database's own shape constraints.
+ */
+const spotifyIdShape = /^[A-Za-z0-9]{22}$/;
+
+const requiredSpotifyId = (message: string) => z.string().trim().regex(spotifyIdShape, message);
+
+/**
+ * An optional Spotify id: absent, or present and shaped like one. A bare
+ * `.optional()` only excuses `undefined` — `formDataToRecord` turns a missing
+ * `FormData` field into nothing at all (not `''`), so both "field never sent"
+ * and "field sent empty" must be legal here, but a present-and-malformed
+ * value must still fail.
+ */
+const optionalSpotifyId = (message: string) =>
+  z
+    .string()
+    .trim()
+    .optional()
+    .refine((value) => value === undefined || value === '' || spotifyIdShape.test(value), message);
+
 export const mustPlayAddSchema = z.object({
   eventId: eventIdField,
   segment: addableSegmentField,
@@ -156,18 +180,44 @@ export const mustPlayAddSchema = z.object({
     .max(200, 'Song title must be at most 200 characters.'),
   artist: optionalText(200, 'Artist must be at most 200 characters.'),
   moment: optionalText(100, 'Moment must be at most 100 characters.'),
+  spotifyTrackId: requiredSpotifyId('Pick a song from the search results.'),
+  spotifyArtistId: optionalSpotifyId('Pick an artist from the search results.'),
 });
 
-export const blocklistAddSchema = z.object({
-  eventId: eventIdField,
-  segment: addableSegmentField,
-  entryType: z.enum(['artist', 'song', 'genre'], { message: 'Choose artist, song or genre.' }),
-  value: z
-    .string()
-    .trim()
-    .min(1, 'Enter an artist, song or genre.')
-    .max(100, 'Must be at most 100 characters.'),
-});
+export const blocklistAddSchema = z
+  .object({
+    eventId: eventIdField,
+    segment: addableSegmentField,
+    entryType: z.enum(['artist', 'song', 'genre'], { message: 'Choose artist, song or genre.' }),
+    value: z
+      .string()
+      .trim()
+      .min(1, 'Enter an artist, song or genre.')
+      .max(100, 'Must be at most 100 characters.'),
+    spotifyId: z.string().trim().optional(),
+  })
+  /**
+   * Mirrors the database's `blocklist_id_matches_type` check constraint
+   * (plan task 13): a genre has no Spotify identity, an artist or song is
+   * picked and always has one. Zod gives the user a field error; the
+   * constraint is the actual control, same reasoning as `spotifyIdShape`.
+   */
+  .superRefine((values, ctx) => {
+    const id = values.spotifyId ?? '';
+    if (values.entryType === 'genre') {
+      if (id !== '') {
+        ctx.addIssue({ code: 'custom', path: ['spotifyId'], message: 'A genre has no Spotify id.' });
+      }
+      return;
+    }
+    if (!spotifyIdShape.test(id)) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['spotifyId'],
+        message: 'Pick a result from the search list.',
+      });
+    }
+  });
 
 /** A remove: which row, and which event's page to revalidate. */
 export const rowRefSchema = z.object({
@@ -204,8 +254,34 @@ export const sharedNotesSchema = privateNotesSchema;
  * submits them together with the notes, so treating an empty title as a
  * validation error would mean a DJ who typed only notes loses the notes.
  */
-export const ceremonySlotSchema = z.object({
-  id: z.union([z.uuid(), z.literal('')]),
-  title: z.string().trim().max(200, 'Song title must be at most 200 characters.'),
-  artist: optionalText(200, 'Artist must be at most 200 characters.'),
+export const ceremonySlotSchema = z
+  .object({
+    id: z.union([z.uuid(), z.literal('')]),
+    title: z.string().trim().max(200, 'Song title must be at most 200 characters.'),
+    artist: optionalText(200, 'Artist must be at most 200 characters.'),
+    spotifyTrackId: optionalSpotifyId('Pick a song from the search results.'),
+    spotifyArtistId: optionalSpotifyId('Pick an artist from the search results.'),
+  })
+  /**
+   * The track id is required only once the title is — a blank title still
+   * means "clear this slot" (see the comment above), and clearing needs no
+   * id. A non-blank title is a pick, and a pick always carries an id.
+   */
+  .superRefine((values, ctx) => {
+    if (values.title !== '' && !values.spotifyTrackId) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['spotifyTrackId'],
+        message: 'Pick a song from the search results.',
+      });
+    }
+  });
+
+/* ---------------------------------------------------------------------------
+   Spotify search proxy (plan task 6). Backs the track/artist pickers.
+   --------------------------------------------------------------------------- */
+
+export const spotifySearchSchema = z.object({
+  q: z.string().trim().min(2, 'Type at least two characters.').max(100),
+  type: z.enum(['track', 'artist']),
 });

@@ -151,6 +151,43 @@ describe('getEventDetail', () => {
     expect(detail?.dj_id).toBe('dj-1');
   });
 
+  it('selects the Spotify identity columns on both list tables', async () => {
+    // The select list names columns explicitly and this repo has no generated
+    // Database type, so a column left off the string arrives `undefined` at
+    // runtime with `typecheck` still green -- this is the check that would
+    // have caught it.
+    maybeSingle.mockResolvedValue({ data: row(), error: null });
+
+    await getEventDetail(EVENT);
+
+    expect(select.mock.calls[0][0]).toMatch(/spotify_track_id/);
+    expect(select.mock.calls[0][0]).toMatch(/spotify_artist_id/);
+    expect(select.mock.calls[0][0]).toMatch(/spotify_id/);
+  });
+
+  it('maps the Spotify id fields through on must-play and blocklist rows', async () => {
+    maybeSingle.mockResolvedValue({
+      data: row({
+        event_must_play: [{
+          id: 'm1', segment: 'party', title: 'September', artist: 'Earth, Wind & Fire',
+          moment: null, spotify_track_id: 'aaaaaaaaaaaaaaaaaaaaaa',
+          spotify_artist_id: 'bbbbbbbbbbbbbbbbbbbbbb', created_at: '2026-01-01',
+        }],
+        event_blocklist: [{
+          id: 'b1', segment: 'party', entry_type: 'song', value: 'X — Y',
+          spotify_id: 'cccccccccccccccccccccc', created_at: '2026-01-01',
+        }],
+      }),
+      error: null,
+    });
+
+    const detail = await getEventDetail(EVENT);
+
+    expect(detail?.mustPlay[0].spotify_track_id).toBe('aaaaaaaaaaaaaaaaaaaaaa');
+    expect(detail?.mustPlay[0].spotify_artist_id).toBe('bbbbbbbbbbbbbbbbbbbbbb');
+    expect(detail?.blocklist[0].spotify_id).toBe('cccccccccccccccccccccc');
+  });
+
   it('does not select notes, a column the migration drops', async () => {
     // Leaving `notes` in the select returns 42703 once the column is gone; the
     // error branch below turns that into null and the page into notFound(), so

@@ -4,6 +4,7 @@ import { useActionState } from 'react';
 
 import type { ActionResult } from '@/lib/auth/errors';
 import type { AddableSegment, DetailActionState, MustPlayRow } from '@/lib/events/detailTypes';
+import { TrackPicker } from './TrackPicker';
 import styles from './MustPlaySection.module.css';
 
 interface MustPlaySectionProps {
@@ -12,7 +13,7 @@ interface MustPlaySectionProps {
   blurb: string;
   rows: MustPlayRow[];
   addAction: (prevState: DetailActionState, formData: FormData) => Promise<ActionResult>;
-  removeAction: (formData: FormData) => Promise<void>;
+  removeAction: (formData: FormData) => Promise<ActionResult>;
 }
 
 /**
@@ -58,7 +59,16 @@ export function MustPlaySection({
                 </div>
                 {row.moment && <div className={styles.rowMoment}>{row.moment}</div>}
               </div>
-              <form action={removeAction}>
+              <form
+                action={(rowFormData: FormData) => {
+                  // React's <form action> DOM typing wants void | Promise<void>;
+                  // removeAction returns Promise<ActionResult> so the caller can
+                  // observe a silent-zero-row failure (see detailActions.ts).
+                  // Discarding it here, not in removeAction's signature, keeps
+                  // that signature honest for the caller that DOES want it.
+                  void removeAction(rowFormData);
+                }}
+              >
                 <input type="hidden" name="id" value={row.id} />
                 <input type="hidden" name="eventId" value={eventId} />
                 <button type="submit" className={styles.remove} aria-label={`Remove ${row.title}`}>
@@ -73,23 +83,7 @@ export function MustPlaySection({
       <form action={formAction} className={styles.addRow}>
         <input type="hidden" name="eventId" value={eventId} />
         <input type="hidden" name="segment" value={segment} />
-        <input
-          type="text"
-          name="title"
-          placeholder="Song title"
-          required
-          maxLength={200}
-          className={styles.inputTitle}
-          aria-label="Song title"
-        />
-        <input
-          type="text"
-          name="artist"
-          placeholder="Artist"
-          maxLength={200}
-          className={styles.inputArtist}
-          aria-label="Artist"
-        />
+        <TrackPicker fields={{ kind: 'titleArtist', titleName: 'title', artistName: 'artist' }} />
         <input
           type="text"
           name="moment"

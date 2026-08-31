@@ -1,9 +1,11 @@
 'use client';
 
-import { useActionState } from 'react';
+import { useActionState, useState } from 'react';
 
 import type { ActionResult } from '@/lib/auth/errors';
-import type { AddableSegment, BlocklistRow, DetailActionState } from '@/lib/events/detailTypes';
+import type { AddableSegment, BlocklistEntryType, BlocklistRow, DetailActionState } from '@/lib/events/detailTypes';
+import { GenrePicker } from './GenrePicker';
+import { TrackPicker } from './TrackPicker';
 import styles from './BlocklistSection.module.css';
 
 interface BlocklistSectionProps {
@@ -12,7 +14,7 @@ interface BlocklistSectionProps {
   blurb: string;
   rows: BlocklistRow[];
   addAction: (prevState: DetailActionState, formData: FormData) => Promise<ActionResult>;
-  removeAction: (formData: FormData) => Promise<void>;
+  removeAction: (formData: FormData) => Promise<ActionResult>;
 }
 
 /**
@@ -35,6 +37,7 @@ export function BlocklistSection({
   const [state, formAction] = useActionState<DetailActionState, FormData>(addAction, null);
   const errors = state && !state.ok && 'formErrors' in state ? state.formErrors : null;
   const message = state && !state.ok && 'message' in state ? state.message : null;
+  const [entryType, setEntryType] = useState<BlocklistEntryType>('artist');
 
   return (
     <div className={styles.block}>
@@ -49,7 +52,13 @@ export function BlocklistSection({
                 <span className={styles.pill}>{row.entry_type}</span>
                 <span className={styles.value}>{row.value}</span>
               </div>
-              <form action={removeAction}>
+              <form
+                action={(rowFormData: FormData) => {
+                  // See MustPlaySection for why this wraps rather than passes
+                  // removeAction directly: the DOM action prop wants void.
+                  void removeAction(rowFormData);
+                }}
+              >
                 <input type="hidden" name="id" value={row.id} />
                 <input type="hidden" name="eventId" value={eventId} />
                 <button type="submit" className={styles.remove} aria-label={`Remove ${row.value}`}>
@@ -64,20 +73,24 @@ export function BlocklistSection({
       <form action={formAction} className={styles.addRow}>
         <input type="hidden" name="eventId" value={eventId} />
         <input type="hidden" name="segment" value={segment} />
-        <select name="entryType" defaultValue="artist" aria-label="Type" className={styles.select}>
+        <select
+          name="entryType"
+          value={entryType}
+          onChange={(event) => setEntryType(event.target.value as BlocklistEntryType)}
+          aria-label="Type"
+          className={styles.select}
+        >
           <option value="artist">Artist</option>
           <option value="song">Song</option>
           <option value="genre">Genre</option>
         </select>
-        <input
-          type="text"
-          name="value"
-          placeholder="e.g. Nickelback"
-          required
-          maxLength={100}
-          className={styles.input}
-          aria-label="Artist, song or genre"
-        />
+        {entryType === 'artist' && (
+          <TrackPicker key="artist" searchType="artist" fields={{ kind: 'singleValue', valueName: 'value' }} />
+        )}
+        {entryType === 'song' && (
+          <TrackPicker key="song" searchType="track" fields={{ kind: 'singleValue', valueName: 'value' }} />
+        )}
+        {entryType === 'genre' && <GenrePicker key="genre" valueName="value" />}
         <button type="submit" className={styles.add}>
           Add
         </button>

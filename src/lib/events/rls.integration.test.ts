@@ -252,7 +252,15 @@ describe.skipIf(!hasSupabaseConfig || !hasTestUsers)(
       beforeAll(async () => {
         const { data, error } = await clientA
           .from('event_must_play')
-          .insert({ event_id: anEventOfA, segment: 'party', title: 'Seeded by the RLS suite' })
+          // spotify_track_id is required (plan B13: must_play_track_id_shape,
+          // set not null) -- a plain shape-valid placeholder is enough here,
+          // this suite tests RLS, not Spotify identity.
+          .insert({
+            event_id: anEventOfA,
+            segment: 'party',
+            title: 'Seeded by the RLS suite',
+            spotify_track_id: 'aaaaaaaaaaaaaaaaaaaaaa',
+          })
           .select('id')
           .single();
         if (error || !data) throw new Error(`A could not insert a must-play: ${error?.message}`);
@@ -297,9 +305,20 @@ describe.skipIf(!hasSupabaseConfig || !hasTestUsers)(
       });
 
       test('B cannot insert against A event', async () => {
-        const { error } = await clientB
-          .from('event_must_play')
-          .insert({ event_id: anEventOfA, segment: 'party', title: 'Not mine' });
+        const { error } = await clientB.from('event_must_play').insert({
+          event_id: anEventOfA,
+          segment: 'party',
+          title: 'Not mine',
+          // Kept for shape-validity and consistency with the fixture above,
+          // not because it changes the outcome: a fresh-context review
+          // reproduced this schema and confirmed RLS's with-check is
+          // evaluated BEFORE ExecConstraints, so 42501 fires regardless of
+          // whether an id is present. An earlier version of this comment
+          // claimed the opposite (that a missing id would raise 23502 first)
+          // -- that claim was wrong and unverified; corrected here rather
+          // than left to mislead the next reader.
+          spotify_track_id: 'bbbbbbbbbbbbbbbbbbbbbb',
+        });
 
         // insert is refused by `with check`, which RAISES.
         expect(error?.code).toBe('42501');
@@ -353,6 +372,13 @@ describe.skipIf(!hasSupabaseConfig || !hasTestUsers)(
         // refuses as an ON CONFLICT target (42P10) — the page's Save button
         // would have been permanently broken behind a generic error message.
         const slots = ['Walking down the aisle', 'Breaking the glass'];
+        // spotify_track_id is required (plan B13). Distinct per moment, not
+        // that it matters functionally here, but a shared id can't reveal a
+        // slot being written to the wrong row the way a distinct one can.
+        const trackIdForMoment: Record<string, string> = {
+          'Walking down the aisle': 'cWalkingAisleTrackId01',
+          'Breaking the glass': 'cBreakingGlassTrackId1',
+        };
 
         for (let pass = 0; pass < 2; pass += 1) {
           for (const moment of slots) {
@@ -373,9 +399,13 @@ describe.skipIf(!hasSupabaseConfig || !hasTestUsers)(
                 .eq('segment', 'ceremony');
               expect(error).toBeNull();
             } else {
-              const { error } = await clientA
-                .from('event_must_play')
-                .insert({ event_id: anEventOfA, segment: 'ceremony', moment, title: `pass ${pass}` });
+              const { error } = await clientA.from('event_must_play').insert({
+                event_id: anEventOfA,
+                segment: 'ceremony',
+                moment,
+                title: `pass ${pass}`,
+                spotify_track_id: trackIdForMoment[moment],
+              });
               expect(error).toBeNull();
             }
           }

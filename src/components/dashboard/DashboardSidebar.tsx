@@ -22,6 +22,13 @@ interface DashboardSidebarProps {
    */
   current?: NavKey;
   /**
+   * A partner has none of Dashboard / Upcoming / Past — they own no events,
+   * so those links would 404 or show empty screens (plan task 14 step 5).
+   * Hides the nav entirely rather than rendering it disabled or filtered,
+   * since there is nothing in it that applies to a partner at all.
+   */
+  hideNav?: boolean;
+  /**
    * The `signOut` server action, passed in rather than imported: actions.ts
    * is 'use server' and pulls in dal.ts's `import 'server-only'`, neither
    * importable from jsdom. Optional — the design-preview route has no
@@ -42,6 +49,7 @@ interface DashboardSidebarProps {
 export function DashboardSidebar({
   dj,
   current = 'dashboard',
+  hideNav = false,
   signOutAction,
 }: DashboardSidebarProps) {
   return (
@@ -54,19 +62,21 @@ export function DashboardSidebar({
           <Logo tone="light" size="sm" />
         </div>
 
-        <nav aria-label="Main" className={styles.nav}>
-          {NAV_ITEMS.map((item) =>
-            item.key === current ? (
-              <span key={item.key} className={styles.navItemCurrent} aria-current="page">
-                {item.label}
-              </span>
-            ) : (
-              <Link key={item.key} href={item.href} className={styles.navItem}>
-                {item.label}
-              </Link>
-            ),
-          )}
-        </nav>
+        {!hideNav && (
+          <nav aria-label="Main" className={styles.nav}>
+            {NAV_ITEMS.map((item) =>
+              item.key === current ? (
+                <span key={item.key} className={styles.navItemCurrent} aria-current="page">
+                  {item.label}
+                </span>
+              ) : (
+                <Link key={item.key} href={item.href} className={styles.navItem}>
+                  {item.label}
+                </Link>
+              ),
+            )}
+          </nav>
+        )}
       </div>
 
       {signOutAction !== undefined && (

@@ -217,15 +217,19 @@ const EVENTS = [
     event_date: inDays(13),
     status: 'upcoming',
     songs: [],
+    // Every id below is a real Spotify id, looked up and verified against the
+    // live catalogue (search + oEmbed) rather than invented -- the shape
+    // constraint accepts an invented 22-character string just as happily as a
+    // real one, and the picker would never match it (plan task 12).
     mustPlay: [
-      ['ceremony', 'A Thousand Years', 'Christina Perri', 'Walking down the aisle'],
-      ['ceremony', 'Hava Nagila', 'Traditional', 'Breaking the glass'],
-      ['reception', "Can't Help Falling in Love", 'Elvis Presley', 'First dance'],
-      ['party', 'September', 'Earth, Wind & Fire', 'Guaranteed dance-floor filler'],
+      ['ceremony', 'A Thousand Years', 'Christina Perri', 'Walking down the aisle', '6z5Yh7kOKeLjqIsNdokIpU'],
+      ['ceremony', 'Hava Nagila', 'Traditional', 'Breaking the glass', '7Ihr8qtzuseTCJ7OmpxW5g'],
+      ['reception', "Can't Help Falling in Love - Remastered", 'Elvis Presley', 'First dance', '7lCnb68Q8EGlC1Hkd7Nqsv'],
+      ['party', 'September', 'Earth, Wind & Fire', 'Guaranteed dance-floor filler', '2grjqo0Frpf2okIBiifQKs'],
     ],
     blocklist: [
-      ['party', 'artist', 'Nickelback'],
-      ['party', 'song', 'Cha Cha Slide'],
+      ['party', 'artist', 'Nickelback', '6deZN1bslXzeGvOLaLMOIF'],
+      ['party', 'song', 'Cha Cha Slide - Radio Edit — DJ Casper', '6DrfHG3wfZ64xIzpzuZxbf'],
     ],
     notes: "Alex's dad wants to do a surprise speech around 9pm — leave room in the timeline.",
   },
@@ -353,13 +357,14 @@ async function main() {
     }
 
     if (event.mustPlay.length > 0) {
-      const rows = event.mustPlay.map(([segment, title, artist, moment], index) => ({
+      const rows = event.mustPlay.map(([segment, title, artist, moment, spotifyTrackId], index) => ({
         id: derivedId(djId, `${event.slug}:mustplay:${index + 1}`),
         event_id: eventId,
         segment,
         title,
         artist,
         moment,
+        spotify_track_id: spotifyTrackId,
       }));
       const { error } = await supabase.from('event_must_play').upsert(rows, { onConflict: 'id' });
       if (error) {
@@ -369,12 +374,15 @@ async function main() {
     }
 
     if (event.blocklist.length > 0) {
-      const rows = event.blocklist.map(([segment, entry_type, value], index) => ({
+      const rows = event.blocklist.map(([segment, entry_type, value, spotifyId], index) => ({
         id: derivedId(djId, `${event.slug}:blocklist:${index + 1}`),
         event_id: eventId,
         segment,
         entry_type,
         value,
+        // Genre entries carry no id (blocklist_id_matches_type, plan task 13);
+        // this seed has none yet, but ?? null keeps a future genre tuple safe.
+        spotify_id: spotifyId ?? null,
       }));
       const { error } = await supabase.from('event_blocklist').upsert(rows, { onConflict: 'id' });
       if (error) {

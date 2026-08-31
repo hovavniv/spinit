@@ -10,6 +10,8 @@ function row(id: string, segment: MustPlayRow['segment']): MustPlayRow {
     title: `title ${id}`,
     artist: null,
     moment: null,
+    spotify_track_id: null,
+    spotify_artist_id: null,
     created_at: '2026-08-30T10:00:00Z',
   };
 }

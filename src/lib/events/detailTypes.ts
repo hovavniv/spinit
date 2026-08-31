@@ -23,6 +23,9 @@ export interface MustPlayRow {
   title: string;
   artist: string | null;
   moment: string | null;
+  /** Null only for a row written before the picker existed (plan task 12/13 clears these). */
+  spotify_track_id: string | null;
+  spotify_artist_id: string | null;
   /** ISO instant. Used for ordering at the query, not rendered. */
   created_at: string;
 }
@@ -32,6 +35,8 @@ export interface BlocklistRow {
   segment: EventSegment;
   entry_type: BlocklistEntryType;
   value: string;
+  /** Null for a genre entry (design §5.6) or a pre-picker row; never null for artist/song. */
+  spotify_id: string | null;
   created_at: string;
 }
 

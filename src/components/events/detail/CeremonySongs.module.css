@@ -36,29 +36,3 @@
   gap: 8px;
   flex-wrap: wrap;
 }
-
-.title,
-.artist {
-  padding: 11px 13px;
-  border-radius: 10px;
-  border: 1.5px solid var(--border-input);
-  font-family: var(--font-inter), sans-serif;
-  font-size: 13.5px;
-  background: var(--surface);
-  color: var(--ink-dark);
-  min-width: 0;
-}
-
-.title {
-  flex: 1.4 1 140px;
-}
-
-.artist {
-  flex: 1 1 120px;
-}
-
-.title:focus,
-.artist:focus {
-  outline: none;
-  border-color: var(--accent);
-}
