@@ -344,43 +344,52 @@ Today it requires a session. That gate is honestly **necessary but not sufficien
 is open, so it turns "anyone can hammer this" into "anyone willing to register can." A
 per-user rate limit is not built (§8.4).
 
-### 7.5 One privileged path, why it exists, and what was rejected
+### 7.5 The elevated key this project does not have, and why it nearly did
 
-`SUPABASE_SERVICE_ROLE_KEY` is a deliberate departure from this repo's practice — every
-prior slice states it never touches that key, and all three RLS test suites say so in their
-headers. It was introduced knowingly, with the alternative on the table.
+This is the design decision I would most want to be asked about.
 
-It exists because the genre cache is a **control input**: the decision engine reads it to
-decide whether a suggested song violates a genre ban. Two successive designs left that cache
-writable by any registered account — first as a table grant, then, after that was "fixed",
-as a `security definer` function granted to `authenticated`, which PostgREST exposes at
+The genre cache is a **control input** — the decision engine reads it to decide whether a
+suggested song violates a genre ban. Two successive designs left it writable by any
+registered account: first as a table grant, then, after that was "fixed", as a
+`security definer` function granted to `authenticated`, which PostgREST exposes at
 `POST /rest/v1/rpc/…` and which took the genres **from the caller**. The hole had moved, not
 closed, and the design carried a comment asserting otherwise.
 
-**The alternative that was considered and rejected: a per-partner cache.** If
-`artist_genres` were keyed per partner rather than shared globally, a poisoned row would
-affect only the account that wrote it — no elevated key needed, and the "this project holds
-no service-role key" claim would have survived intact. It was rejected on cost: nothing
-would be shared across partners or events, so every couple would re-pay the full MusicBrainz
-and Last.fm enrichment for artists the project had already resolved, at 2 seconds per
-external call. The global cache is what makes per-artist cost payable **once across the
-whole project** rather than once per couple, and that is what makes the feature usable at
-all.
+The fix I proposed was a **service-role key** for those writes. It would have worked. It was
+also the wrong answer, and the argument I built for it is worth reproducing because the flaw
+in it is instructive:
 
-So the trade is explicit: a single narrow privileged path, in exchange for a cache that
-scales. The resolution is no write grant and no execute grant to `authenticated`; writes
-happen in one server-only module under a service-role client.
+> The cache is global, so per-artist enrichment cost is paid **once across the whole
+> project** rather than once per couple. Scoping it down would make every couple re-pay for
+> artists already resolved. A single narrow privileged path is the smaller cost.
 
-Six constraints, each checkable rather than asserted, and each in the definition of done:
+That reasoning is sound for a product with many couples. **This product is capped at five
+Spotify users, ever** — development mode, with extended quota unreachable (§7.1). Two
+couples, realistically. There was almost no cross-couple sharing to protect. I had priced
+the architecture for a user base Spotify does not permit, and then used that price to
+justify an elevated credential.
 
-1. the key appears in exactly one module
-2. that module is server-only
-3. it is never imported by a Client Component
-4. it never carries `NEXT_PUBLIC_`
-5. the RLS test suites continue to use the anon key exclusively, so their guarantees are unchanged
-6. **`execute` on `upsert_artist_genres` is granted to `service_role` only and revoked from
-   `authenticated`** — pinned by a test, not by a comment, because that exact grant is what
-   the fourth review found wrong
+**What was built instead:** the cache is scoped **per event**. Event scope rather than per
+partner is deliberate — the two partners of one couple genuinely overlap on top artists, so
+the sharing that matters is kept; the DJ can read it, which the genre-ban check needs; and
+the blast radius of a bad row is one wedding, written by one of its own participants. Self
+harm, not a control input for strangers.
+
+The second write that seemed to need elevation — a recompute that silently wrote zero rows
+when the DJ polled — needed only that the poll be authorized to the **owning partner**, so
+it always runs under the session that owns the row. Narrower than a key, and it makes the
+enrichment flow read correctly: the couple's own connection is enriched by the couple.
+
+So this project holds **no service-role key**, a claim it makes in `CLAUDE.md` and in three
+RLS test-file headers, and that claim is still true. An HMAC-signed payload verified by
+`pgcrypto` would also have worked and is recorded as considered — it is more machinery than
+the problem needs.
+
+**The process point matters more than the outcome.** The decision was reversed because
+someone asked "is it a must, or is it what you preferred?" — and those were different
+claims that I had presented as one. Nothing was built yet, so reversing cost nothing. The
+lesson I would carry: when a design asks for a privileged credential, the question to ask
+first is not "is this safe" but "what exactly forces it".
 
 ### 7.6 A control that is correct and still produces a wrong number
 
