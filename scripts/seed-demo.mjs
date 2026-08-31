@@ -280,15 +280,76 @@ async function main() {
       }
     }
 
-    if (event.notes) {
-      const { error: notesError } = await supabase
-        .from('events')
-        .update({ notes: event.notes })
-        .eq('id', eventId);
-      if (notesError) {
-        console.error(`seed-demo: failed to set notes for ${event.slug}: ${notesError.message}`);
-        process.exit(1);
-      }
+    // Notes left `events` for their own table (design §5.2), so this is an
+    // upsert into event_private_notes rather than an update on events -- the
+    // old write now fails with PGRST204, the column is gone.
+    //
+    // Unconditional, not `if (event.notes)`. The migration backfills a row per
+    // event, but an update against a missing row returns SUCCESS having
+    // written nothing, so the seed must not depend on the row being there.
+    const { error: notesError } = await supabase
+      .from('event_private_notes')
+      .upsert({ event_id: eventId, body: event.notes ?? '' }, { onConflict: 'event_id' });
+    if (notesError) {
+      console.error(`seed-demo: failed to set notes for ${event.slug}: ${notesError.message}`);
+      process.exit(1);
+    }
+
+    // Two partner slots per event, both UNCLAIMED (user_id null) -- the state
+    // the artboard draws as "Pending". The seed cannot claim them: user_id is
+    // writable by no PostgREST role, and claim_partner_slot matches the
+    // caller's own verified account email (design §2.6).
+    //
+    // ignoreDuplicates, so this is ON CONFLICT DO NOTHING. Two reasons, both
+    // load-bearing:
+    //   1. A real upsert's DO UPDATE SET would include event_id, which is NOT
+    //      in the column-scoped update grant (slot, display_name,
+    //      invite_email) -- the second seed run would fail with 42501.
+    //   2. Re-seeding must not wipe a user_id someone has already claimed,
+    //      which is exactly what a refresh would do mid-demo.
+    //
+    // @example.com addresses deliberately: these land in a database a grader
+    // may read, and RFC 2606 reserves that domain so none of them can reach a
+    // real inbox.
+    //
+    // Validated before use, not trusted: every current fixture is 'X & Y',
+    // but a fixture without ' & ' would leave secondPartner undefined and
+    // throw an uncaught TypeError at .toLowerCase() -- bypassing this
+    // script's own console.error + process.exit(1) handling, the same as
+    // every other failure below. localPart() also guards a multi-word name:
+    // an email address containing a space has no format constraint on
+    // event_partners to reject it, and claim_partner_slot's email match could
+    // never satisfy it.
+    const [firstPartner, secondPartner] = event.couple_names.split(' & ');
+    if (!firstPartner?.trim() || !secondPartner?.trim()) {
+      console.error(
+        `seed-demo: couple_names for ${event.slug} is not "X & Y" (got ${JSON.stringify(event.couple_names)}), cannot derive partner slots`,
+      );
+      process.exit(1);
+    }
+    const localPart = (name) => name.toLowerCase().replace(/[^a-z0-9]+/g, '.');
+    const { error: partnerError } = await supabase.from('event_partners').upsert(
+      [
+        {
+          event_id: eventId,
+          slot: 1,
+          display_name: firstPartner,
+          invite_email: `${localPart(firstPartner)}.${event.slug}@example.com`,
+        },
+        {
+          event_id: eventId,
+          slot: 2,
+          display_name: secondPartner,
+          invite_email: `${localPart(secondPartner)}.${event.slug}@example.com`,
+        },
+      ],
+      { onConflict: 'event_id,slot', ignoreDuplicates: true },
+    );
+    if (partnerError) {
+      console.error(
+        `seed-demo: failed to upsert partners for ${event.slug}: ${partnerError.message}`,
+      );
+      process.exit(1);
     }
 
     if (event.mustPlay.length > 0) {

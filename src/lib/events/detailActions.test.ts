@@ -24,16 +24,30 @@ function formData(fields: Record<string, string>): FormData {
   return data;
 }
 
-/** A `from()` double whose insert/update/delete resolve to `result`. */
-function tableDouble(result: { error: { code?: string; message: string } | null }) {
-  const insert = vi.fn().mockResolvedValue(result);
+/**
+ * A `from()` double whose insert/update/delete resolve to `result`.
+ *
+ * `data` defaults to a single placeholder row, not `[]`: `saveEventDetails`'s
+ * update/delete branches now call `.select()` and treat a zero-row result as
+ * a failure (the repo's documented silent-zero-row shape), so a double with
+ * no `data` at all would make every existing update/delete test fail for a
+ * reason unrelated to what it pins. Tests that specifically exercise the
+ * zero-row path pass `data: []` explicitly.
+ */
+function tableDouble(result: {
+  error: { code?: string; message: string } | null;
+  data?: unknown[] | null;
+}) {
+  const resolved = { data: result.data ?? [{ id: 'row-1' }], error: result.error };
+  const insert = vi.fn().mockResolvedValue(resolved);
   const eq = vi.fn().mockReturnThis();
   const builder = {
     insert,
     update: vi.fn().mockReturnThis(),
     delete: vi.fn().mockReturnThis(),
+    select: vi.fn().mockReturnThis(),
     eq,
-    then: (resolve: (value: unknown) => void) => resolve(result),
+    then: (resolve: (value: unknown) => void) => resolve(resolved),
   };
   return builder;
 }
@@ -143,13 +157,12 @@ describe('removeMustPlay', () => {
 });
 
 describe('saveEventDetails', () => {
-  test('updates a filled slot that already has a row, and writes notes', async () => {
+  test('updates a filled slot that already has a row', async () => {
     const table = tableDouble({ error: null });
     from.mockReturnValue(table);
 
     const result = await saveEventDetails(null, formData({
       eventId: EVENT_ID,
-      notes: 'Speech at 9pm',
       'ceremony-0-id': ROW_ID,
       'ceremony-0-title': 'A Thousand Years',
       'ceremony-0-artist': 'Christina Perri',
@@ -159,7 +172,9 @@ describe('saveEventDetails', () => {
     }));
 
     expect(result).toEqual({ ok: true });
-    expect(from).toHaveBeenCalledWith('events');
+    // `events` is NOT touched any more: notes left that table for their own
+    // two tables and their own two actions (design §3, §5.2).
+    expect(from).not.toHaveBeenCalledWith('events');
     expect(from).toHaveBeenCalledWith('event_must_play');
     expect(table.update).toHaveBeenCalled();
     // Slot 1 is empty and has no row: nothing is inserted for it.
@@ -172,7 +187,6 @@ describe('saveEventDetails', () => {
 
     await saveEventDetails(null, formData({
       eventId: EVENT_ID,
-      notes: '',
       'ceremony-0-id': ROW_ID,
       'ceremony-0-title': '   ',
       'ceremony-0-artist': '',
@@ -190,7 +204,6 @@ describe('saveEventDetails', () => {
 
     await saveEventDetails(null, formData({
       eventId: EVENT_ID,
-      notes: '',
       'ceremony-0-id': '',
       'ceremony-0-title': 'Hava Nagila',
       'ceremony-0-artist': 'Traditional',
@@ -206,5 +219,60 @@ describe('saveEventDetails', () => {
       title: 'Hava Nagila',
       artist: 'Traditional',
     });
+  });
+
+  test('returns { ok: true } and writes nothing when every ceremony slot is empty', async () => {
+    const table = tableDouble({ error: null });
+    from.mockReturnValue(table);
+
+    const result = await saveEventDetails(null, formData({
+      eventId: EVENT_ID,
+      'ceremony-0-id': '',
+      'ceremony-0-title': '',
+      'ceremony-0-artist': '',
+      'ceremony-1-id': '',
+      'ceremony-1-title': '',
+      'ceremony-1-artist': '',
+    }));
+
+    expect(result).toEqual({ ok: true });
+    expect(from).not.toHaveBeenCalled();
+  });
+
+  test('fails, rather than reporting success, when the update matches zero rows', async () => {
+    // A policy-filtered or nonexistent (id, eventId, segment) combination
+    // returns success having written nothing without the .select() check --
+    // the repo's documented silent-zero-row shape.
+    const table = tableDouble({ error: null, data: [] });
+    from.mockReturnValue(table);
+
+    const result = await saveEventDetails(null, formData({
+      eventId: EVENT_ID,
+      'ceremony-0-id': ROW_ID,
+      'ceremony-0-title': 'A Thousand Years',
+      'ceremony-0-artist': 'Christina Perri',
+      'ceremony-1-id': '',
+      'ceremony-1-title': '',
+      'ceremony-1-artist': '',
+    }));
+
+    expect(result).toEqual({ ok: false, message: 'Could not save that. Try again.' });
+  });
+
+  test('fails, rather than reporting success, when the delete matches zero rows', async () => {
+    const table = tableDouble({ error: null, data: [] });
+    from.mockReturnValue(table);
+
+    const result = await saveEventDetails(null, formData({
+      eventId: EVENT_ID,
+      'ceremony-0-id': ROW_ID,
+      'ceremony-0-title': '   ',
+      'ceremony-0-artist': '',
+      'ceremony-1-id': '',
+      'ceremony-1-title': '',
+      'ceremony-1-artist': '',
+    }));
+
+    expect(result).toEqual({ ok: false, message: 'Could not save that. Try again.' });
   });
 });

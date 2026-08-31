@@ -464,3 +464,415 @@ describe.skipIf(!hasSupabaseConfig || !hasTestUsers)(
     });
   },
 );
+
+/* ---------------------------------------------------------------------------
+   PARTNER ACCESS — plan A task 11.
+
+   SCAFFOLDING ONLY so far. The assertions are deliberately not written yet:
+   the migration that creates event_partners and the two note tables is
+   authored but UNREVIEWED and UNPUSHED, so every assertion here would be a
+   claim about policy behaviour that has never run. They land once the
+   migration review returns and the push is verified.
+
+   This block therefore fails loudly until then, which is correct -- it must
+   not go quietly green while testing nothing.
+
+   User A is the DJ. User C is the partner. B stays what it already is: an
+   unrelated second DJ, used as the "signed-in stranger" control.
+
+   THE NEGATIVE CONTROL IS PER-EVENT, NOT PER-DJ. A owns two events and C
+   claims a slot on only ONE of them. "C can read event 1 but not event 2,
+   both owned by the same DJ" is a sharper claim than "an unrelated DJ sees
+   nothing": it proves the partner link is scoped to the event rather than
+   leaking across everything its DJ owns.
+   --------------------------------------------------------------------------- */
+
+const C_EMAIL = process.env.TEST_USER_C_EMAIL;
+const C_PASSWORD = process.env.TEST_USER_C_PASSWORD;
+const hasPartnerUser = Boolean(C_EMAIL && C_PASSWORD);
+
+if (hasSupabaseConfig && hasTestUsers && !hasPartnerUser) {
+  describe('partner access (auth-gated)', () => {
+    test('TEST_USER_C_* must be set for the partner-role tests', () => {
+      throw new Error(
+        'NEXT_PUBLIC_SUPABASE_URL and TEST_USER_A/B are set but TEST_USER_C_EMAIL / ' +
+          'TEST_USER_C_PASSWORD are not. The partner role needs its own account: ' +
+          'claim_partner_slot matches the invitation against the CALLER\'S OWN verified ' +
+          'account email, so the partner cannot be impersonated by reusing A or B.',
+      );
+    });
+  });
+}
+
+describe.skipIf(!hasSupabaseConfig || !hasTestUsers || !hasPartnerUser)(
+  'partner access (auth-gated)',
+  { timeout: 30000 },
+  () => {
+    let clientA: SupabaseClient;
+    let clientB: SupabaseClient;
+    let clientC: SupabaseClient;
+    let userCId: string;
+
+    /** The event C claims a slot on. */
+    let linkedEvent: string;
+    /** Another event of the SAME DJ that C never claims. The negative control. */
+    let unlinkedEvent: string;
+    /** The partner row C claims, so afterAll can restore it to unclaimed. */
+    let claimedPartnerId: string;
+    let originalInviteEmail: string;
+
+    beforeAll(async () => {
+      // persistSession: false on EVERY client, for the reason the block above
+      // records at length: supabase-js derives its storage key from the
+      // project ref alone, so three clients would share one localStorage slot
+      // under jsdom and each sign-in would overwrite the last. Every
+      // "C cannot see this" assertion would then be running as whoever signed
+      // in last and passing for entirely the wrong reason.
+      clientA = createClient(SUPABASE_URL!, SUPABASE_ANON_KEY!, {
+        auth: { persistSession: false },
+      });
+      clientB = createClient(SUPABASE_URL!, SUPABASE_ANON_KEY!, {
+        auth: { persistSession: false },
+      });
+      clientC = createClient(SUPABASE_URL!, SUPABASE_ANON_KEY!, {
+        auth: { persistSession: false },
+      });
+
+      const a = await clientA.auth.signInWithPassword({ email: A_EMAIL!, password: A_PASSWORD! });
+      if (a.error) throw new Error(`sign in A failed: ${a.error.message}`);
+
+      const b = await clientB.auth.signInWithPassword({ email: B_EMAIL!, password: B_PASSWORD! });
+      if (b.error) throw new Error(`sign in B failed: ${b.error.message}`);
+
+      const c = await clientC.auth.signInWithPassword({ email: C_EMAIL!, password: C_PASSWORD! });
+      // An account created but never confirmed signs in with
+      // `email_not_confirmed`, which reads nothing like an RLS defect. Say so.
+      if (c.error || !c.data.user) {
+        throw new Error(
+          `sign in C failed: ${c.error?.message}. If this is email_not_confirmed, ` +
+            'the account exists but was never confirmed -- the project mailer caps at ' +
+            '2 emails/hour, so a confirmation may simply never have been sent.',
+        );
+      }
+      userCId = c.data.user.id;
+
+      // Two events of the SAME DJ. Named rather than "any two": the seed
+      // creates six and picking arbitrarily makes a failure message depend on
+      // whichever Postgres happened to return.
+      const pick = async (coupleNames: string) => {
+        const { data, error } = await clientA
+          .from('events')
+          .select('id')
+          .eq('couple_names', coupleNames)
+          .limit(1);
+        if (error) throw new Error(`could not read A's events: ${error.message}`);
+        if (!data || data.length === 0) {
+          throw new Error(`No '${coupleNames}' event for user A. Run \`npm run seed:demo\`.`);
+        }
+        return data[0].id as string;
+      };
+
+      linkedEvent = await pick('Priya & Alex');
+      unlinkedEvent = await pick('Noa & Eitan');
+
+      // The seed writes both partner slots with @example.com invitations, so
+      // point slot 1 of the linked event at C's real account email. A holds a
+      // COLUMN-SCOPED update grant covering invite_email, which is exactly
+      // what makes this legal -- and user_id is absent from that grant, which
+      // is what stops us shortcutting the claim below.
+      const { data: slot, error: slotError } = await clientA
+        .from('event_partners')
+        .select('id, invite_email, display_name')
+        .eq('event_id', linkedEvent)
+        .eq('slot', 1)
+        .maybeSingle();
+      if (slotError || !slot) {
+        throw new Error(
+          `No partner slot 1 on the linked event: ${slotError?.message ?? 'no row'}. ` +
+            'Run `npm run seed:demo` after the migration.',
+        );
+      }
+      originalInviteEmail = slot.invite_email;
+
+      // Reset the slot to a KNOWN UNCLAIMED state rather than assuming it is
+      // already one. user_id cannot be un-set through PostgREST -- that is the
+      // point of the column grant -- so "unclaim" means delete and re-insert.
+      //
+      // Without this the suite depends on the state a previous run, a manual
+      // walkthrough or a demo left behind: if anything already claimed this
+      // slot, claim_partner_slot correctly refuses, beforeAll throws, and the
+      // whole block fails for a reason that has nothing to do with the policies
+      // it exists to test. It then SELF-HEALS on the next run because afterAll
+      // restores the row -- a test that passes only every other time is worse
+      // than one that fails honestly.
+      await clientA.from('event_partners').delete().eq('id', slot.id);
+      const { data: fresh, error: reinsertError } = await clientA
+        .from('event_partners')
+        .insert({
+          event_id: linkedEvent,
+          slot: 1,
+          display_name: slot.display_name,
+          invite_email: C_EMAIL!,
+        })
+        .select('id')
+        .single();
+      if (reinsertError || !fresh) {
+        throw new Error(`could not reset the partner slot: ${reinsertError?.message}`);
+      }
+      claimedPartnerId = fresh.id;
+
+      // The claim itself, through the function -- the ONLY path that writes
+      // user_id, because no PostgREST role holds a grant on that column.
+      const { error: claimError } = await clientC.rpc('claim_partner_slot', {
+        p_event: linkedEvent,
+        p_slot: 1,
+      });
+      if (claimError) throw new Error(`C could not claim its slot: ${claimError.message}`);
+    });
+
+    afterAll(async () => {
+      // Every test cleans up the rows it writes. user_id cannot be un-set
+      // through PostgREST at all -- that is the point of the grant -- so
+      // restoring the slot to unclaimed means deleting the row and
+      // re-inserting it. The delete cascades to spotify_connections,
+      // spotify_tokens and taste_profiles, which is what we want: a re-claimed
+      // slot must start clean.
+      //
+      // Wrapped so a cleanup failure cannot THROW and mask the real reason a
+      // test failed. `claimedPartnerId` is captured before the invitation is
+      // rewritten, so this still restores the row if beforeAll threw partway
+      // through -- which is the case that would otherwise leave the seeded
+      // slot pointing at a real account email.
+      if (!claimedPartnerId) return;
+
+      try {
+        await clientA.from('event_partners').delete().eq('id', claimedPartnerId);
+        await clientA.from('event_partners').insert({
+          event_id: linkedEvent,
+          slot: 1,
+          display_name: 'Priya',
+          invite_email: originalInviteEmail,
+        });
+        // Leave the shared note as the seed had it.
+        await clientA
+          .from('event_shared_notes')
+          .upsert({ event_id: linkedEvent, body: '' }, { onConflict: 'event_id' });
+      } catch (cleanupError) {
+        console.error('partner access: cleanup failed, live rows may be left behind', cleanupError);
+      }
+    });
+
+    test('the fixture linked C to exactly one of the two events', async () => {
+      // A smoke test for the scaffolding, not a security assertion. If the
+      // claim silently did nothing, every later "C can read this" test would
+      // fail in a way that looks like a policy bug.
+      const { data, error } = await clientC
+        .from('event_partners')
+        .select('id, event_id, user_id')
+        .eq('id', claimedPartnerId)
+        .maybeSingle();
+
+      expect(error).toBeNull();
+      expect(data).not.toBeNull();
+      expect(data!.user_id).toBe(userCId);
+      expect(data!.event_id).toBe(linkedEvent);
+    });
+
+    /* --- what a partner MAY do ------------------------------------------ */
+
+    test('a partner reads the event they are linked to', async () => {
+      const { data } = await clientC.from('events').select('id').eq('id', linkedEvent);
+      expect(data).toHaveLength(1);
+    });
+
+    // THE NEGATIVE CONTROL, and deliberately against the SAME DJ's other
+    // event rather than a stranger's. "C cannot read B's event" would pass
+    // even if the link leaked across everything A owns; this cannot.
+    test('a partner cannot read another event of the SAME dj', async () => {
+      const { data } = await clientC.from('events').select('id').eq('id', unlinkedEvent);
+      expect(data ?? []).toHaveLength(0);
+    });
+
+    test('an unrelated signed-in dj still sees neither event', async () => {
+      const { data: one } = await clientB.from('events').select('id').eq('id', linkedEvent);
+      const { data: two } = await clientB.from('events').select('id').eq('id', unlinkedEvent);
+      expect(one ?? []).toHaveLength(0);
+      expect(two ?? []).toHaveLength(0);
+    });
+
+    test('a partner can add and remove song-list rows', async () => {
+      const ins = await clientC
+        .from('event_blocklist')
+        .insert({ event_id: linkedEvent, segment: 'party', entry_type: 'genre', value: 'polka' })
+        .select();
+      expect(ins.error).toBeNull();
+      expect(ins.data).toHaveLength(1);
+
+      const del = await clientC
+        .from('event_blocklist')
+        .delete()
+        .eq('id', ins.data![0].id)
+        .select();
+      expect(del.data).toHaveLength(1);
+    });
+
+    test('a partner cannot read private notes but can read and write shared notes', async () => {
+      const priv = await clientC
+        .from('event_private_notes')
+        .select('body')
+        .eq('event_id', linkedEvent);
+      expect(priv.data ?? []).toHaveLength(0);
+
+      const shared = await clientC
+        .from('event_shared_notes')
+        .upsert({ event_id: linkedEvent, body: 'from the couple' }, { onConflict: 'event_id' })
+        .select();
+      expect(shared.error).toBeNull();
+      expect(shared.data).toHaveLength(1);
+    });
+
+    /* --- what a partner MAY NOT do -------------------------------------- */
+
+    test('a partner cannot cancel the event', async () => {
+      // events UPDATE was deliberately NOT widened: reading widens, writing
+      // does not. A partner editing song lists must not be able to cancel a
+      // wedding.
+      const { data } = await clientC
+        .from('events')
+        .update({ status: 'cancelled' })
+        .eq('id', linkedEvent)
+        .select();
+      expect(data ?? []).toHaveLength(0);
+    });
+
+    test('a partner cannot read the other partner\'s spotify token', async () => {
+      const { data } = await clientC.from('spotify_tokens').select('partner_id');
+      expect(data ?? []).toHaveLength(0);
+    });
+
+    /* --- the anti-regression set ----------------------------------------
+       Each control is asserted as a CAPABILITY, not as one verb. Three
+       consecutive reviews found the same shape: a correct fix, a test
+       pinning only the case already found, and the hole intact one surface
+       over. Do not split these "for clarity" -- splitting them is exactly
+       how one gets fixed and the other does not.
+       -------------------------------------------------------------------- */
+
+    test('user_id cannot be forged: not by PATCH on an unclaimed row, not by the dj, not on INSERT', async () => {
+      // 1. a signed-in user PATCHing any unclaimed slot
+      const patchUnclaimed = await clientC
+        .from('event_partners')
+        .update({ user_id: userCId })
+        .is('user_id', null)
+        .select();
+      expect(patchUnclaimed.data ?? []).toHaveLength(0);
+
+      // 2. the DJ PATCHing user_id on their OWN event's row -- the hole the
+      //    column-scoped UPDATE grant exists to close
+      const patchAsDj = await clientA
+        .from('event_partners')
+        .update({ user_id: userCId })
+        .eq('id', claimedPartnerId)
+        .select();
+      expect(patchAsDj.data ?? []).toHaveLength(0);
+
+      // 3. the DJ POSTing a row with an explicit user_id -- the adjacent verb
+      //    review 3 found still open after review 2's fix
+      const insertWithUserId = await clientA.from('event_partners').insert({
+        event_id: linkedEvent,
+        slot: 2,
+        display_name: 'forged',
+        invite_email: 'x@example.com',
+        user_id: userCId,
+      });
+      expect(insertWithUserId.error?.code).toBe('42501');
+    });
+
+    test('no authenticated path writes artist_genres -- table OR routine', async () => {
+      // Both paths in ONE test, deliberately. Review 3 found the table grant,
+      // the fix routed writes through a definer function, and review 4 found
+      // the function granted to `authenticated` and reachable at
+      // POST /rest/v1/rpc/ -- the hole had MOVED, not closed.
+      const direct = await clientA
+        .from('artist_genres')
+        .insert({ spotify_artist_id: '0LcJLqbBmaGUft1e9Mm8HV', artist_name: 'x' });
+      expect(direct.error?.code).toBe('42501');
+
+      const viaRpc = await clientA.rpc('upsert_artist_genres', {
+        p_spotify_id: '0LcJLqbBmaGUft1e9Mm8HV',
+        p_name: 'x',
+        p_mb_id: null,
+        p_mb_name: null,
+        p_genres: { 'death metal': 100 },
+        p_origins: {},
+        p_eras: {},
+        p_status: 'resolved',
+        p_via: 'mbid',
+      });
+      expect(viaRpc.error).toBeTruthy();
+    });
+
+    test('claim_partner_slot refuses a caller who was not invited, and says nothing', async () => {
+      // B is signed in and the slot is unclaimed, but the invitation is not
+      // addressed to B. 42501 for every failure mode, so the caller cannot
+      // tell "no such event" from "already claimed" from "not yours".
+      const { error } = await clientB.rpc('claim_partner_slot', {
+        p_event: linkedEvent,
+        p_slot: 2,
+      });
+      expect(error).toBeTruthy();
+      expect(error!.code).toBe('42501');
+    });
+
+    test('a partner cannot re-parent a song-list row onto an event they do not participate in', async () => {
+      const ins = await clientC
+        .from('event_blocklist')
+        .insert({ event_id: linkedEvent, segment: 'party', entry_type: 'genre', value: 'ska' })
+        .select();
+      expect(ins.data).toHaveLength(1);
+
+      // The same predicate sits in BOTH `using` and `with check`, which is
+      // what stops the row moving to an event the writer is not on.
+      const moved = await clientC
+        .from('event_blocklist')
+        .update({ event_id: unlinkedEvent })
+        .eq('id', ins.data![0].id)
+        .select();
+      expect(moved.data ?? []).toHaveLength(0);
+
+      await clientC.from('event_blocklist').delete().eq('id', ins.data![0].id);
+    });
+
+    /* --- the dj is not locked out by any of this ------------------------ */
+
+    test('the dj still reads their own private notes', async () => {
+      const { data } = await clientA
+        .from('event_private_notes')
+        .select('body')
+        .eq('event_id', linkedEvent);
+      expect(data).toHaveLength(1);
+    });
+
+    test('writing notes on an event that had none persists -- the upsert path', async () => {
+      // An update against a missing row returns success having written
+      // nothing. The migration backfills a row per event so this works today;
+      // the upsert is what keeps it working for an event created later.
+      const target = unlinkedEvent;
+      const write = await clientA
+        .from('event_private_notes')
+        .upsert({ event_id: target, body: 'written later' }, { onConflict: 'event_id' })
+        .select();
+      expect(write.error).toBeNull();
+
+      const { data } = await clientA
+        .from('event_private_notes')
+        .select('body')
+        .eq('event_id', target);
+      expect(data?.[0]?.body).toBe('written later');
+
+      await clientA
+        .from('event_private_notes')
+        .upsert({ event_id: target, body: '' }, { onConflict: 'event_id' });
+    });
+  },
+);

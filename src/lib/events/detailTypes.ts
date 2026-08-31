@@ -47,11 +47,43 @@ export interface BlocklistRow {
  */
 export type DetailActionState = ActionResult | null;
 
+export interface PartnerRow {
+  id: string;
+  slot: 1 | 2;
+  display_name: string;
+  /** Null between the DJ sending the invite and the partner claiming the slot. */
+  user_id: string | null;
+}
+
+/**
+ * Who is looking at the event page (design §4). Resolved on the server in
+ * page.tsx and passed down; null means "neither", which the route turns into
+ * notFound() — never a 403, which would confirm the id is real and turn the
+ * route into an oracle for enumerating event ids.
+ */
+export type Viewer = { role: 'dj' } | { role: 'partner'; partnerId: string };
+
 export interface EventDetail {
   id: string;
+  /** The owner. The route needs it to resolve the viewer (design §4). */
+  dj_id: string;
   couple_names: string;
   couple_status: CoupleStatus;
-  notes: string | null;
+  /**
+   * The two note bodies (design §3, §5.2). Strings, never null: both tables
+   * default the body to '' and the migration backfills a row per event.
+   *
+   * Each note table's `event_id` is both primary key and foreign key, which
+   * is PostgREST's one-to-one detection condition, so the DAL reads the
+   * embed back as an OBJECT (`{ body }`), not an array — see
+   * `firstRow()` in detailDal.ts.
+   *
+   * `privateNotes` is '' for a partner because their read returns no row at
+   * all — the policy filters it. That is the boundary working, not an error.
+   */
+  privateNotes: string;
+  sharedNotes: string;
+  partners: PartnerRow[];
   mustPlay: MustPlayRow[];
   blocklist: BlocklistRow[];
 }
