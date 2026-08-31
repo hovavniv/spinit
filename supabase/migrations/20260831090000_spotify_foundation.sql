@@ -251,19 +251,37 @@ declare
   v_id    uuid;
   v_email text;
 begin
+  -- email_confirmed_at is checked HERE rather than relied on from project
+  -- settings. Confirmations are currently on, but that is a hosted dashboard
+  -- setting outside this repo -- nothing in version control would show it
+  -- being turned off. With it off, anyone could sign up as the invitee's
+  -- address and claim the slot. One clause makes the control self-contained.
   select lower(u.email) into v_email
-    from auth.users u where u.id = (select auth.uid());
+    from auth.users u
+   where u.id = (select auth.uid())
+     and u.email_confirmed_at is not null;
   if v_email is null then
     raise exception 'not authenticated' using errcode = '42501';
   end if;
 
-  update public.event_partners
-     set user_id = (select auth.uid())
-   where event_id = p_event
-     and slot     = p_slot
-     and user_id is null
-     and lower(invite_email) = v_email
-  returning id into v_id;
+  -- The unique_violation arm is not defensive padding. A couple sharing one
+  -- email address -- entirely ordinary -- means one address invited to BOTH
+  -- slots of one event, and event_partners_user_event_idx then fires on the
+  -- second claim BEFORE the `v_id is null` check below. Unwrapped, that
+  -- escapes as a raw 23505 whose DETAIL names an internal event_id and
+  -- user_id, through a function whose whole contract is that every failure is
+  -- indistinguishable.
+  begin
+    update public.event_partners
+       set user_id = (select auth.uid())
+     where event_id = p_event
+       and slot     = p_slot
+       and user_id is null
+       and lower(invite_email) = v_email
+    returning id into v_id;
+  exception when unique_violation then
+    raise exception 'no matching invitation' using errcode = '42501';
+  end;
 
   if v_id is null then
     raise exception 'no matching invitation' using errcode = '42501';
@@ -654,11 +672,27 @@ grant select on public.artist_genres to authenticated;
 -- SELECT only, for the progress counts. Every write is service-role.
 grant select on public.enrichment_queue to authenticated;
 
+-- service_role needs EXPLICIT DML. The hosted default ACL for a new public
+-- table is `service_role=Dxtm` -- TRUNCATE, REFERENCES, TRIGGER, MAINTAIN and
+-- NOT select/insert/update/delete. service_role carries rolbypassrls, but
+-- BYPASSRLS does not bypass TABLE PRIVILEGES: without these grants it would
+-- hold TRUNCATE on all eight tables and not SELECT, and §5.3's service-role
+-- writes (the queue seed, claim and settle; upsert_artist_genres; the
+-- taste_profiles recompute) would fail 42501.
+--
+-- Same omission class as the anon/authenticated hardening above, one role
+-- over: the grant surface was closed carefully for two roles and the ADJACENT
+-- role was never considered. Plan A itself uses no service-role client, so
+-- this is here to save a second hand-run push when Plan C lands.
+grant select, insert, update, delete
+  on public.enrichment_queue, public.artist_genres, public.taste_profiles
+  to service_role;
+
 revoke truncate, references, trigger, maintain
   on public.event_partners, public.spotify_connections, public.spotify_tokens,
      public.taste_profiles, public.artist_genres, public.enrichment_queue,
      public.event_private_notes, public.event_shared_notes
-  from anon, authenticated;
+  from anon, authenticated, service_role;
 
 revoke all on public.event_partners      from anon;
 revoke all on public.spotify_connections from anon;
