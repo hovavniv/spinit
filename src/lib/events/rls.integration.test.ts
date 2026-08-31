@@ -959,6 +959,20 @@ describe.skipIf(!hasSupabaseConfig || !hasTestUsers || !hasPartnerUser || !hasFo
     let slot2Original: { invite_email: string; display_name: string };
     let unlinkedSlot1Original: { invite_email: string; display_name: string };
 
+    // Every seeding write below goes through this rather than a bare
+    // `.upsert(...)` -- an unchecked upsert can silently write zero rows
+    // (wrong column, RLS misconfiguration, etc.) and the suite would stay
+    // green while the row it claims to have seeded never existed.
+    const seed = async (client: SupabaseClient, table: string, row: Record<string, unknown>) => {
+      const { data, error } = await client
+        .from(table)
+        .upsert(row, { onConflict: 'partner_id' })
+        .select();
+      if (error || !data?.length) {
+        throw new Error(`seeding ${table} for ${row.partner_id} failed: ${error?.message ?? 'zero rows'}`);
+      }
+    };
+
     beforeAll(async () => {
       // persistSession: false on EVERY client -- same reason as the two
       // describe blocks above: supabase-js keys localStorage by project ref
@@ -1041,43 +1055,42 @@ describe.skipIf(!hasSupabaseConfig || !hasTestUsers || !hasPartnerUser || !hasFo
         B_EMAIL!,
       ));
 
-      await clientC
-        .from('spotify_connections')
-        .upsert(
-          { partner_id: partnerC, status: 'connected', spotify_user_id: 'spotify-c' },
-          { onConflict: 'partner_id' },
-        );
-      await clientC
-        .from('spotify_tokens')
-        .upsert(
-          { partner_id: partnerC, refresh_token: 'v1.aaaa.bbbb.token-c' },
-          { onConflict: 'partner_id' },
-        );
-      await clientC
-        .from('taste_profiles')
-        .upsert(
-          { partner_id: partnerC, top_artists: [{ id: 'artist-c', name: 'Artist C', score: 1, ranges: [] }] },
-          { onConflict: 'partner_id' },
-        );
+      await seed(clientC, 'spotify_connections', {
+        partner_id: partnerC,
+        status: 'connected',
+        spotify_user_id: 'spotify-c',
+      });
+      await seed(clientC, 'spotify_tokens', {
+        partner_id: partnerC,
+        refresh_token: 'v1.aaaa.bbbb.token-c',
+      });
+      await seed(clientC, 'taste_profiles', {
+        partner_id: partnerC,
+        top_artists: [{ id: 'artist-c', name: 'Artist C', score: 1, ranges: [] }],
+      });
 
-      await clientD
-        .from('spotify_connections')
-        .upsert(
-          { partner_id: partnerD, status: 'connected', spotify_user_id: 'spotify-d' },
-          { onConflict: 'partner_id' },
-        );
-      await clientD
-        .from('spotify_tokens')
-        .upsert(
-          { partner_id: partnerD, refresh_token: 'v1.cccc.dddd.token-d' },
-          { onConflict: 'partner_id' },
-        );
-      await clientD
-        .from('taste_profiles')
-        .upsert(
-          { partner_id: partnerD, top_artists: [{ id: 'artist-d', name: 'Artist D', score: 1, ranges: [] }] },
-          { onConflict: 'partner_id' },
-        );
+      await seed(clientD, 'spotify_connections', {
+        partner_id: partnerD,
+        status: 'connected',
+        spotify_user_id: 'spotify-d',
+      });
+      await seed(clientD, 'spotify_tokens', {
+        partner_id: partnerD,
+        refresh_token: 'v1.cccc.dddd.token-d',
+      });
+      await seed(clientD, 'taste_profiles', {
+        partner_id: partnerD,
+        top_artists: [{ id: 'artist-d', name: 'Artist D', score: 1, ranges: [] }],
+      });
+
+      // Positive control for "a partner of event A reads no taste profile
+      // from event B" below -- without a seeded row here, that test's
+      // toHaveLength(0) is equally true because the row simply doesn't
+      // exist, and would pass with RLS disabled entirely.
+      await seed(clientB, 'taste_profiles', {
+        partner_id: partnerOnEventB,
+        top_artists: [{ id: 'artist-b', name: 'Artist B', score: 1, ranges: [] }],
+      });
     });
 
     afterAll(async () => {
@@ -1146,6 +1159,7 @@ describe.skipIf(!hasSupabaseConfig || !hasTestUsers || !hasPartnerUser || !hasFo
         .update({ refresh_token: 'v1.x.y.z' })
         .eq('partner_id', partnerC)
         .select();
+      expect(theirs.error).toBeNull();
       expect(theirs.data ?? []).toHaveLength(0);
     });
 
@@ -1166,6 +1180,7 @@ describe.skipIf(!hasSupabaseConfig || !hasTestUsers || !hasPartnerUser || !hasFo
         .update({ status: 'failed' })
         .eq('partner_id', partnerC)
         .select();
+      expect(theirs.error).toBeNull();
       expect(theirs.data ?? []).toHaveLength(0);
     });
 
@@ -1183,6 +1198,7 @@ describe.skipIf(!hasSupabaseConfig || !hasTestUsers || !hasPartnerUser || !hasFo
         .update({ top_artists: [] })
         .eq('partner_id', partnerC)
         .select();
+      expect(theirs.error).toBeNull();
       expect(theirs.data ?? []).toHaveLength(0);
     });
 
@@ -1208,10 +1224,20 @@ describe.skipIf(!hasSupabaseConfig || !hasTestUsers || !hasPartnerUser || !hasFo
     });
 
     test('a partner of event A reads no taste profile from event B', async () => {
-      const { data } = await clientC
+      // Positive control first: prove the row exists and its own owner can
+      // see it, so the zero-row assertion below can only mean "RLS blocked
+      // it" rather than "there was no row to find".
+      const control = await clientB
         .from('taste_profiles')
         .select('partner_id')
         .eq('partner_id', partnerOnEventB);
+      expect(control.data).toHaveLength(1);
+
+      const { data, error } = await clientC
+        .from('taste_profiles')
+        .select('partner_id')
+        .eq('partner_id', partnerOnEventB);
+      expect(error).toBeNull();
       expect(data ?? []).toHaveLength(0);
     });
   },
