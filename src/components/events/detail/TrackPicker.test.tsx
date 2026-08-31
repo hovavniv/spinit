@@ -140,20 +140,29 @@ describe('TrackPicker', () => {
     return r.container;
   }
 
-  it('writes title and artist separately for must-play', async () => {
+  it('writes title and artist separately for must-play, WITH the Spotify ids', async () => {
+    // The named fields (title/artist) are display text; spotifyTrackId and
+    // spotifyArtistId are the actual identity the decision engine reasons
+    // about. A fresh-context review found these hidden inputs completely
+    // unpinned -- the whole TrackPicker suite passed with spotifyTrackId
+    // forced to '' -- so these are asserted explicitly here, not left to be
+    // caught downstream by mustPlayAddSchema.
     const c = await pickFirst(
       <TrackPicker fields={{ kind: 'titleArtist', titleName: 'title', artistName: 'artist' }} />,
     );
     expect(c.querySelector('input[name="title"]')).toHaveValue('Dancing Queen');
     expect(c.querySelector('input[name="artist"]')).toHaveValue('ABBA');
+    expect(c.querySelector('input[name="spotifyTrackId"]')).toHaveValue(ABBA_RESULT.id);
+    expect(c.querySelector('input[name="spotifyArtistId"]')).toHaveValue(ABBA_RESULT.artistIds[0]);
   });
 
-  it('writes "<name> — <artist>" as a single value for a blocklist song', async () => {
+  it('writes "<name> — <artist>" as a single value for a blocklist song, WITH the Spotify id', async () => {
     const c = await pickFirst(<TrackPicker fields={{ kind: 'singleValue', valueName: 'value' }} />);
     expect(c.querySelector('input[name="value"]')).toHaveValue('Dancing Queen — ABBA');
+    expect(c.querySelector('input[name="spotifyId"]')).toHaveValue(ABBA_RESULT.id);
   });
 
-  it('writes only the name for a blocklist artist', async () => {
+  it('writes only the name for a blocklist artist, WITH the Spotify id', async () => {
     const r = render(
       <TrackPicker searchType="artist" fields={{ kind: 'singleValue', valueName: 'value' }} />,
     );
@@ -162,6 +171,7 @@ describe('TrackPicker', () => {
     await vi.advanceTimersByTimeAsync(500);
     await user.click(await screen.findByText('ABBA'));
     expect(r.container.querySelector('input[name="value"]')).toHaveValue('ABBA');
+    expect(r.container.querySelector('input[name="spotifyId"]')).toHaveValue(ABBA_ARTIST_RESULT.id);
   });
 
   it('honours namePrefix, so two ceremony slots do not collide', async () => {
@@ -204,5 +214,34 @@ describe('TrackPicker', () => {
     );
     expect(screen.getByText(/Hava Nagila/)).toBeInTheDocument();
     expect(f).not.toHaveBeenCalled();
+  });
+
+  it('carries initialPick.artistId into spotifyArtistId, so an untouched slot cannot lose a real artist id on Save', () => {
+    // Found by fresh-context review: without artistId threaded through,
+    // buildInitialPick's artistIds is [], spotifyArtistId's hidden input
+    // renders '', and saving this slot untouched writes that '' as null
+    // over an artist id the row already had.
+    const { container } = render(
+      <TrackPicker
+        {...props}
+        initialPick={{
+          id: 'aaaaaaaaaaaaaaaaaaaaaa',
+          name: 'A Thousand Years',
+          artistName: 'Christina Perri',
+          artistId: 'bbbbbbbbbbbbbbbbbbbbbb',
+        }}
+      />,
+    );
+    expect(container.querySelector('input[name="spotifyArtistId"]')).toHaveValue('bbbbbbbbbbbbbbbbbbbbbb');
+  });
+
+  it('leaves spotifyArtistId empty when initialPick carries no artistId', () => {
+    const { container } = render(
+      <TrackPicker
+        {...props}
+        initialPick={{ id: 'aaaaaaaaaaaaaaaaaaaaaa', name: 'Hava Nagila', artistName: 'Traditional' }}
+      />,
+    );
+    expect(container.querySelector('input[name="spotifyArtistId"]')).toHaveValue('');
   });
 });

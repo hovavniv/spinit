@@ -40,10 +40,14 @@ describe('spotifyFetch', () => {
   });
 
   it('never puts the response body in the error message', async () => {
+    // `.rejects.toThrow(asymmetricMatcher)` only checks that something threw —
+    // it ignores the matcher entirely, so this passed even with the response
+    // body embedded in the error message (found by fresh-context review).
+    // `.rejects.toMatchObject` actually inspects the thrown value's `message`.
     vi.stubGlobal('fetch', vi.fn(async () =>
       new Response('{"error":{"message":"secret detail"}}', { status: 500 })));
-    await expect(spotifyFetch('/x', 'tok')).rejects.toThrow(
-      expect.not.stringContaining('secret detail') as unknown as string,
-    );
+    await expect(spotifyFetch('/x', 'tok')).rejects.toMatchObject({
+      message: expect.not.stringContaining('secret detail') as unknown as string,
+    });
   });
 });

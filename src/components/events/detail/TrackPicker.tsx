@@ -25,12 +25,19 @@ interface TrackPickerProps {
   /** Seed the picker as already-picked, e.g. an existing DB row being edited.
    *  Renders the chip immediately, no search needed. Minimal shape because a
    *  saved row has no album art/duration/etc — only the fields the chip and
-   *  hidden inputs actually use. */
-  initialPick?: { id: string; name: string; artistName?: string } | null;
+   *  hidden inputs actually use.
+   *
+   *  `artistId` MUST be threaded through when the caller has one: without it,
+   *  `buildInitialPick` produces an empty `artistIds` array, so
+   *  `spotifyArtistId`'s hidden input renders '' and a Save that never
+   *  touches this slot writes that '' as null over a real id the row already
+   *  had — the ceremony update branch's own bug, one layer up (found by
+   *  fresh-context review). */
+  initialPick?: { id: string; name: string; artistName?: string; artistId?: string } | null;
 }
 
 function buildInitialPick(
-  initialPick: { id: string; name: string; artistName?: string } | null | undefined,
+  initialPick: { id: string; name: string; artistName?: string; artistId?: string } | null | undefined,
   searchType: SpotifySearchType,
 ): SearchResult | null {
   if (!initialPick) return null;
@@ -42,7 +49,7 @@ function buildInitialPick(
     id: initialPick.id,
     name: initialPick.name,
     artistNames: initialPick.artistName ? [initialPick.artistName] : [],
-    artistIds: [],
+    artistIds: initialPick.artistId ? [initialPick.artistId] : [],
     albumName: '',
     artworkUrl: null,
     durationMs: 0,

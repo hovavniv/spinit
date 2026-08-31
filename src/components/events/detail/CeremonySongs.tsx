@@ -59,7 +59,17 @@ export function CeremonySongs({ rows }: CeremonySongsProps) {
                   // empty picker, correctly prompting a re-pick.
                   initialPick={
                     existing?.spotify_track_id
-                      ? { id: existing.spotify_track_id, name: existing.title, artistName: existing.artist ?? undefined }
+                      ? {
+                          id: existing.spotify_track_id,
+                          name: existing.title,
+                          artistName: existing.artist ?? undefined,
+                          // Without this, buildInitialPick's artistIds is [],
+                          // so the hidden spotifyArtistId input renders '' --
+                          // and saving this slot untouched would then write
+                          // that '' as null over a real artist id the row
+                          // already had (found by fresh-context review).
+                          artistId: existing.spotify_artist_id ?? undefined,
+                        }
                       : null
                   }
                 />
