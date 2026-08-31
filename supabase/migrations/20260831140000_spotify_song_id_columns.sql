@@ -74,3 +74,16 @@ drop function if exists public.upsert_artist_genres(
 
 revoke all on public.artist_genres, public.enrichment_queue, public.taste_profiles
   from service_role;
+
+-- Pre-existing, not introduced here, folded in because this is the natural place.
+-- The foundation migration revoked TRUNCATE from service_role on its eight tables;
+-- the six OLDER tables were only ever hardened against anon and authenticated, so
+-- service_role still holds TRUNCATE on them -- and TRUNCATE bypasses RLS.
+--
+-- The recurring failure mode again: a control closed on one surface and left open
+-- on the adjacent one. event_song_lists.sql's own comment says these tables "must
+-- not be laxer than the ones beside them", and they now are.
+revoke truncate on
+  public.events, public.profiles, public.played_songs,
+  public.event_must_play, public.event_blocklist
+  from service_role;
