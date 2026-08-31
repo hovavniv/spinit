@@ -174,4 +174,35 @@ describe('TrackPicker', () => {
     expect(c.querySelector('input[name="ceremony-1-title"]')).toHaveValue('Dancing Queen');
     expect(c.querySelector('input[name="title"]')).toBeNull();
   });
+
+  it('applies formId to every rendered input, hidden and visible alike', () => {
+    const { container } = render(<TrackPicker {...props} formId="event-details" />);
+    const inputs = container.querySelectorAll('input');
+    expect(inputs.length).toBeGreaterThan(0);
+    for (const input of inputs) {
+      expect(input.getAttribute('form')).toBe('event-details');
+    }
+  });
+
+  it('omits the form attribute when formId is not set', () => {
+    const { container } = render(<TrackPicker {...props} />);
+    const inputs = container.querySelectorAll('input');
+    expect(inputs.length).toBeGreaterThan(0);
+    for (const input of inputs) {
+      expect(input.hasAttribute('form')).toBe(false);
+    }
+  });
+
+  it('renders the chip immediately from initialPick, with no search performed', () => {
+    const f = vi.fn();
+    vi.stubGlobal('fetch', f);
+    render(
+      <TrackPicker
+        {...props}
+        initialPick={{ id: 'aaaaaaaaaaaaaaaaaaaaaa', name: 'Hava Nagila', artistName: 'Traditional' }}
+      />,
+    );
+    expect(screen.getByText(/Hava Nagila/)).toBeInTheDocument();
+    expect(f).not.toHaveBeenCalled();
+  });
 });

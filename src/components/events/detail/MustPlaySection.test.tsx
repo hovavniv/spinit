@@ -65,6 +65,14 @@ describe('MustPlaySection', () => {
 
     expect(container.querySelector('input[name="eventId"]')).toHaveValue(EVENT_ID);
     expect(container.querySelector('input[name="segment"]')).toHaveValue('party');
-    expect(screen.getByPlaceholderText('Song title')).toBeRequired();
+    expect(screen.getByRole('combobox')).toBeInTheDocument();
+  });
+
+  test('renders a picker, not free-text title and artist inputs', () => {
+    renderSection([]);
+
+    expect(screen.getByRole('combobox')).toBeInTheDocument();
+    expect(screen.queryByPlaceholderText(/song title/i)).not.toBeInTheDocument();
+    expect(screen.getByPlaceholderText(/moment/i)).toBeInTheDocument();
   });
 });

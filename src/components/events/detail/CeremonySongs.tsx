@@ -1,6 +1,7 @@
 import { CEREMONY_SLOTS } from '@/lib/events/ceremonySlots';
 import type { MustPlayRow } from '@/lib/events/detailTypes';
 import { DETAILS_FORM_ID } from './formId';
+import { TrackPicker } from './TrackPicker';
 import styles from './CeremonySongs.module.css';
 
 interface CeremonySongsProps {
@@ -44,25 +45,23 @@ export function CeremonySongs({ rows }: CeremonySongsProps) {
                 readOnly
               />
               <div className={styles.slotRow}>
-                <input
-                  type="text"
-                  name={`ceremony-${index}-title`}
-                  defaultValue={existing?.title ?? ''}
-                  placeholder="Song title"
-                  maxLength={200}
-                  aria-label={`${slot.label} song title`}
-                  form={DETAILS_FORM_ID}
-                  className={styles.title}
-                />
-                <input
-                  type="text"
-                  name={`ceremony-${index}-artist`}
-                  defaultValue={existing?.artist ?? ''}
-                  placeholder="Artist"
-                  maxLength={200}
-                  aria-label={`${slot.label} artist`}
-                  form={DETAILS_FORM_ID}
-                  className={styles.artist}
+                <TrackPicker
+                  namePrefix={`ceremony-${index}-`}
+                  formId={DETAILS_FORM_ID}
+                  fields={{ kind: 'titleArtist', titleName: 'title', artistName: 'artist' }}
+                  // A row saved before pickers existed has a title but no
+                  // spotify_track_id (B2 added the column nullable; nothing
+                  // has backfilled it). Seeding a chip from that would show a
+                  // "picked" state whose hidden id is empty — clicking Save
+                  // without touching this slot would then fail validation on
+                  // a slot that LOOKED fine. Only seed the chip when there is
+                  // a real id to seed it with; otherwise this renders an
+                  // empty picker, correctly prompting a re-pick.
+                  initialPick={
+                    existing?.spotify_track_id
+                      ? { id: existing.spotify_track_id, name: existing.title, artistName: existing.artist ?? undefined }
+                      : null
+                  }
                 />
               </div>
             </div>

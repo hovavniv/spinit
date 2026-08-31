@@ -17,6 +17,38 @@ interface TrackPickerProps {
   /** How the chosen result becomes form fields. */
   fields: PickerFields;
   onPick?: (result: SpotifyTrack | SpotifyArtist) => void;
+  /** When TrackPicker's own markup is NOT inside a <form> (e.g. CeremonySongs,
+   *  whose inputs reach an outside form via the `form` attribute — see
+   *  formId.ts), pass that form's id here. Applied to every <input> this
+   *  component renders, hidden AND the visible combobox alike. */
+  formId?: string;
+  /** Seed the picker as already-picked, e.g. an existing DB row being edited.
+   *  Renders the chip immediately, no search needed. Minimal shape because a
+   *  saved row has no album art/duration/etc — only the fields the chip and
+   *  hidden inputs actually use. */
+  initialPick?: { id: string; name: string; artistName?: string } | null;
+}
+
+function buildInitialPick(
+  initialPick: { id: string; name: string; artistName?: string } | null | undefined,
+  searchType: SpotifySearchType,
+): SearchResult | null {
+  if (!initialPick) return null;
+  if (searchType === 'artist') {
+    const artist: SpotifyArtist = { id: initialPick.id, name: initialPick.name, artworkUrl: null };
+    return artist;
+  }
+  const track: SpotifyTrack = {
+    id: initialPick.id,
+    name: initialPick.name,
+    artistNames: initialPick.artistName ? [initialPick.artistName] : [],
+    artistIds: [],
+    albumName: '',
+    artworkUrl: null,
+    durationMs: 0,
+    explicit: false,
+  };
+  return track;
 }
 
 type Phase = 'idle' | 'loading' | 'results' | 'error';
@@ -45,12 +77,19 @@ function isArtistResult(result: SearchResult, searchType: SpotifySearchType): re
   return searchType === 'artist';
 }
 
-export function TrackPicker({ namePrefix, searchType = 'track', fields, onPick }: TrackPickerProps) {
+export function TrackPicker({
+  namePrefix,
+  searchType = 'track',
+  fields,
+  onPick,
+  formId,
+  initialPick,
+}: TrackPickerProps) {
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<SearchResult[]>([]);
   const [phase, setPhase] = useState<Phase>('idle');
   const [errorKind, setErrorKind] = useState<ErrorKind>(null);
-  const [picked, setPicked] = useState<SearchResult | null>(null);
+  const [picked, setPicked] = useState<SearchResult | null>(() => buildInitialPick(initialPick, searchType));
   const controllerRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
@@ -137,8 +176,8 @@ export function TrackPicker({ namePrefix, searchType = 'track', fields, onPick }
     chipLabel = value;
     hiddenInputs = (
       <>
-        <input type="hidden" name={`${prefix}${fields.valueName}`} value={value} readOnly />
-        <input type="hidden" name={`${prefix}spotifyId`} value={spotifyId} readOnly />
+        <input type="hidden" name={`${prefix}${fields.valueName}`} value={value} readOnly form={formId} />
+        <input type="hidden" name={`${prefix}spotifyId`} value={spotifyId} readOnly form={formId} />
       </>
     );
   } else {
@@ -147,19 +186,21 @@ export function TrackPicker({ namePrefix, searchType = 'track', fields, onPick }
     chipLabel = pickedTrack ? `${title} — ${artist}` : title;
     hiddenInputs = (
       <>
-        <input type="hidden" name={`${prefix}${fields.titleName}`} value={title} readOnly />
-        <input type="hidden" name={`${prefix}${fields.artistName}`} value={artist} readOnly />
+        <input type="hidden" name={`${prefix}${fields.titleName}`} value={title} readOnly form={formId} />
+        <input type="hidden" name={`${prefix}${fields.artistName}`} value={artist} readOnly form={formId} />
         <input
           type="hidden"
           name={`${prefix}spotifyTrackId`}
           value={pickedTrack?.id ?? ''}
           readOnly
+          form={formId}
         />
         <input
           type="hidden"
           name={`${prefix}spotifyArtistId`}
           value={pickedArtist?.id ?? firstArtistId}
           readOnly
+          form={formId}
         />
       </>
     );
@@ -188,6 +229,7 @@ export function TrackPicker({ namePrefix, searchType = 'track', fields, onPick }
             aria-autocomplete="list"
             className={styles.input}
             value={query}
+            form={formId}
             onChange={(event) => {
               const value = event.target.value;
               setQuery(value);

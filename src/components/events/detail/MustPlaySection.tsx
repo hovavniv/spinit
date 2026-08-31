@@ -4,6 +4,7 @@ import { useActionState } from 'react';
 
 import type { ActionResult } from '@/lib/auth/errors';
 import type { AddableSegment, DetailActionState, MustPlayRow } from '@/lib/events/detailTypes';
+import { TrackPicker } from './TrackPicker';
 import styles from './MustPlaySection.module.css';
 
 interface MustPlaySectionProps {
@@ -82,23 +83,7 @@ export function MustPlaySection({
       <form action={formAction} className={styles.addRow}>
         <input type="hidden" name="eventId" value={eventId} />
         <input type="hidden" name="segment" value={segment} />
-        <input
-          type="text"
-          name="title"
-          placeholder="Song title"
-          required
-          maxLength={200}
-          className={styles.inputTitle}
-          aria-label="Song title"
-        />
-        <input
-          type="text"
-          name="artist"
-          placeholder="Artist"
-          maxLength={200}
-          className={styles.inputArtist}
-          aria-label="Artist"
-        />
+        <TrackPicker fields={{ kind: 'titleArtist', titleName: 'title', artistName: 'artist' }} />
         <input
           type="text"
           name="moment"
