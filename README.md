@@ -43,6 +43,7 @@ committed; `.env.example` documents the names only.
 | `TEST_USER_A_EMAIL` / `TEST_USER_A_PASSWORD` | Credentials for a pre-created RLS test user A, registered through the app's own `/register` form | Never, and never set in Vercel — local-only, used only to run the integration suite. |
 | `TEST_USER_B_EMAIL` / `TEST_USER_B_PASSWORD` | Credentials for a pre-created RLS test user B, registered through the app's own `/register` form | Never, and never set in Vercel — local-only, used only to run the integration suite. |
 | `TEST_USER_C_EMAIL` / `TEST_USER_C_PASSWORD` | A third account, used as the **partner** in the RLS suite. A partner is a distinct role from a second DJ, and the tests that prove the event link is per-event rather than per-DJ need an account that is neither. | Never, and never set in Vercel — local-only. |
+| `TEST_USER_D_EMAIL` / `TEST_USER_D_PASSWORD` | A fourth account, the **other partner**. The assertions that matter most — one partner cannot read the other's Spotify token, cannot write their connection, cannot write their taste profile — need two partners on one event. Three accounts can only approximate that. | Never, and never set in Vercel — local-only. |
 | `SPOTIFY_CLIENT_ID` | From the Spotify Developer Dashboard | Never. Name only. |
 | `SPOTIFY_CLIENT_SECRET` | From the same app. **Server-only** — never prefix it `NEXT_PUBLIC_`. | Never. Name only. |
 | `SPOTIFY_REDIRECT_URI` | `http://127.0.0.1:3000/api/spotify/callback` locally; the production URL once deployed | Never. Name only. |
@@ -81,19 +82,33 @@ that was wrong, and the alternative that was considered.
   Do this before running `npm run dev` for the first time: without it, the
   `profiles` table and its triggers don't exist, and the whole auth flow
   breaks.
-- **P6** Register **three** test users through the app's own `/register` form
-  (not the Supabase dashboard), confirm each by email, **one full round trip at
-  a time**, and put their credentials in `.env.local` as `TEST_USER_A_*`,
-  `TEST_USER_B_*` and `TEST_USER_C_*`. These back the RLS integration tests: A
-  is a DJ, B a second DJ, C a partner. Requires **P5** first — the `profiles`
-  table and its trigger must exist before a signup can succeed.
+- **P6** Create **four** test users. They back the RLS integration tests: A is a
+  DJ, B a second DJ, C a partner, D the other partner. Requires **P5** first —
+  the `profiles` table and its trigger must exist before any signup succeeds.
+  Put the credentials in `.env.local` as `TEST_USER_A_*` … `TEST_USER_D_*`.
+
+  **Create A, B and C through the app's own `/register` form** — that exercises
+  the signup path, which is worth doing at least once. Confirm each by email,
+  **one full round trip at a time**.
+
+  **Create D through the Supabase dashboard instead** — *Authentication → Users
+  → Add user*, with **Auto Confirm User** ticked. No email is sent, so it costs
+  no quota, and the `profiles` trigger fires on `auth.users` insert regardless
+  of how the row was created. Following the `/register` route for a fourth
+  account buys nothing and will almost certainly fail.
 
   **Budget these deliberately.** Supabase's built-in mailer is capped at **2
   emails per hour, project-wide**, and 1 per minute — shared across signup,
-  recovery, everything. Creating three accounts in one sitting will hit it. The
-  failure reads as `AuthApiError: over_email_send_rate_limit` (429), which is a
-  quota, not a defect in the app. One test in the suite currently fails for
-  exactly this reason.
+  recovery, everything. Three accounts in one sitting will hit it. The failure
+  reads as `AuthApiError: over_email_send_rate_limit` (429), which is a quota,
+  not a defect in the app.
+
+  **Running the test suite also spends that budget.** Two tests in
+  `src/lib/auth/rls.integration.test.ts` call `signUp` on every run, so a single
+  `npm test` can leave you unable to create an account for the next hour. That
+  is a known defect with a written fix — see
+  `docs/specs/2026-08-31-mailer-quota-fix.md` — and it is why account D is
+  created through the dashboard.
 
 ### Spotify setup
 
