@@ -309,10 +309,14 @@ describe.skipIf(!hasSupabaseConfig || !hasTestUsers)(
           event_id: anEventOfA,
           segment: 'party',
           title: 'Not mine',
-          // A valid id, so a NOT NULL violation cannot masquerade as the RLS
-          // rejection this test actually means to pin -- Postgres checks
-          // table constraints before RLS's with-check, so a missing id here
-          // would raise 23502, not 42501, regardless of which policy is right.
+          // Kept for shape-validity and consistency with the fixture above,
+          // not because it changes the outcome: a fresh-context review
+          // reproduced this schema and confirmed RLS's with-check is
+          // evaluated BEFORE ExecConstraints, so 42501 fires regardless of
+          // whether an id is present. An earlier version of this comment
+          // claimed the opposite (that a missing id would raise 23502 first)
+          // -- that claim was wrong and unverified; corrected here rather
+          // than left to mislead the next reader.
           spotify_track_id: 'bbbbbbbbbbbbbbbbbbbbbb',
         });
 
