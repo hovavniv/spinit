@@ -132,8 +132,15 @@ SQL
 seed_if_ready() {
   [ "$SEED" -eq 1 ] || return 0
   [ "$SEEDED" -eq 0 ] || return 0
+  # No `2>/dev/null || echo f` here: that would swallow a genuine psql
+  # failure (a bad connection, a typo in this query) as "not ready yet" and
+  # let the seed silently skip while the script still exits 0. The query
+  # itself already returns false gracefully when the table doesn't exist
+  # yet -- `to_regclass` never errors on a missing relation -- so nothing
+  # legitimate depends on the swallowed branch. Under `set -e`, a failing
+  # command substitution here now stops the script, as it should.
   local has_events
-  has_events=$(psql -tAq -d "$DB" -c "select to_regclass('public.events') is not null" 2>/dev/null || echo f)
+  has_events=$(psql -tAq -d "$DB" -c "select to_regclass('public.events') is not null")
   [ "$has_events" = "t" ] || return 0
   psql -q -v ON_ERROR_STOP=1 -d "$DB" <<'SQL'
 insert into auth.users (id, email, email_confirmed_at) values
@@ -165,12 +172,16 @@ SQL
 seed_song_lists_if_ready() {
   [ "$SEED" -eq 1 ] || return 0
   [ "$SEEDED_SONGS" -eq 0 ] || return 0
+  # Same reasoning as seed_if_ready's probe above: no swallowed error, and
+  # `table_schema='public'` so a same-named column in another schema can't
+  # produce a false positive.
   local has_column
   has_column=$(psql -tAq -d "$DB" -c \
     "select to_regclass('public.event_must_play') is not null
        and exists (select 1 from information_schema.columns
-                    where table_name='event_must_play'
-                      and column_name='spotify_track_id')" 2>/dev/null || echo f)
+                    where table_schema='public'
+                      and table_name='event_must_play'
+                      and column_name='spotify_track_id')")
   [ "$has_column" = "t" ] || return 0
   psql -q -v ON_ERROR_STOP=1 -d "$DB" <<'SQL'
 with target as (select id from public.events where couple_names = 'Priya & Alex')
@@ -207,6 +218,24 @@ union all
 select id, 'party'::public.event_segment, 'genre'::public.blocklist_entry_type,
        'disco', null from target;
 SQL
+  # The insert above targets a NAME, not an id -- if 'Priya & Alex' ever
+  # drifts, the query above still runs cleanly and inserts zero rows. That
+  # is a "success" a script reporting "ok" and "[seeded ...]" would hide
+  # completely, and a delete migration verified against zero seeded rows
+  # proves nothing (the whole reason this function exists). Count what
+  # actually landed rather than trusting that the statement didn't error.
+  local landed
+  landed=$(psql -tAq -d "$DB" -c \
+    "select (select count(*) from public.event_must_play emp
+              join public.events e on e.id = emp.event_id
+             where e.couple_names = 'Priya & Alex')
+          + (select count(*) from public.event_blocklist eb
+              join public.events e on e.id = eb.event_id
+             where e.couple_names = 'Priya & Alex')")
+  if [ "$landed" != "9" ]; then
+    echo "seed_song_lists_if_ready: expected 9 rows for 'Priya & Alex' (5 must-play + 4 blocklist), found $landed" >&2
+    exit 1
+  fi
   SEEDED_SONGS=1
   echo "    [seeded mixed-id must-play/blocklist rows for the delete migration to prove itself against]"
 }
@@ -237,6 +266,16 @@ for f in $(printf '%s\n' "${FILES[@]}" | sort); do
   fi
 done
 rm -f /tmp/pg-replica-err.$$
+
+# --seed was asked for and never actually ran, for any reason (a probe
+# never went true, a migration this depends on stopped existing, etc.) --
+# a run that reports success while quietly seeding nothing is worse than a
+# run that fails loudly, because everything after it inherits the false
+# confidence.
+if [ "$SEED" -eq 1 ] && { [ "$SEEDED" -eq 0 ] || [ "$SEEDED_SONGS" -eq 0 ]; }; then
+  echo "--seed was requested but seeding never completed (SEEDED=$SEEDED, SEEDED_SONGS=$SEEDED_SONGS)" >&2
+  exit 1
+fi
 
 echo "==> summary"
 psql -tAq -d "$DB" <<'SQL'
