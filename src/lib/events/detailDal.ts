@@ -4,7 +4,8 @@ import { cache } from 'react';
 
 import { createClient } from '@/lib/supabase/server';
 import { requireUser } from '@/lib/auth/dal';
-import type { EventDetail } from './detailTypes';
+import type { EventDetail, PartnerRow } from './detailTypes';
+import type { TasteProfile } from '@/lib/spotify/tasteTypes';
 
 /**
  * One event the CURRENT verified user PARTICIPATES IN — as its DJ or as a
@@ -43,7 +44,9 @@ export const getEventDetail = cache(async (eventId: string): Promise<EventDetail
     .from('events')
     .select(
       `id, dj_id, couple_names, couple_status,
-       event_partners (id, slot, display_name, user_id),
+       event_partners (id, slot, display_name, user_id,
+         spotify_connections (status),
+         taste_profiles (top_artists, computed_at)),
        event_private_notes (body),
        event_shared_notes (body),
        event_must_play (id, segment, title, artist, moment, spotify_track_id, spotify_artist_id, created_at),
@@ -87,11 +90,46 @@ export const getEventDetail = cache(async (eventId: string): Promise<EventDetail
     // differ from what's expected here.
     privateNotes: firstRow(data.event_private_notes)?.body ?? '',
     sharedNotes: firstRow(data.event_shared_notes)?.body ?? '',
-    partners: data.event_partners ?? [],
+    partners: (data.event_partners ?? []).map(mapPartnerRow),
     mustPlay: data.event_must_play ?? [],
     blocklist: data.event_blocklist ?? [],
   };
 });
+
+/**
+ * spotify_connections and taste_profiles are both to-ONE embeds on
+ * event_partners: spotify_connections_partner_id_key is a UNIQUE constraint
+ * on partner_id, and taste_profiles.partner_id is its PRIMARY KEY -- the same
+ * PostgREST one-to-one detection condition the note embeds rely on, so both
+ * arrive as OBJECTS, not arrays. firstRow() normalises either shape so this
+ * holds even if the real shape differs from what's expected here.
+ *
+ * top_artists (snake_case jsonb column) is mapped to topArtists (camelCase)
+ * HERE and nowhere else -- tasteTypes.ts documents the DAL as the one place
+ * this translation happens.
+ */
+function mapPartnerRow(raw: {
+  id: string;
+  slot: 1 | 2;
+  display_name: string;
+  user_id: string | null;
+  spotify_connections?: { status: 'invited' | 'connected' | 'failed' } | { status: 'invited' | 'connected' | 'failed' }[] | null;
+  taste_profiles?: { top_artists: TasteProfile['topArtists']; computed_at: string } | { top_artists: TasteProfile['topArtists']; computed_at: string }[] | null;
+}): PartnerRow {
+  const connection = firstRow(raw.spotify_connections);
+  const profile = firstRow(raw.taste_profiles);
+
+  return {
+    id: raw.id,
+    slot: raw.slot,
+    display_name: raw.display_name,
+    user_id: raw.user_id,
+    connection: connection ? { status: connection.status } : null,
+    profile: profile
+      ? { partnerId: raw.id, topArtists: profile.top_artists, computedAt: profile.computed_at }
+      : null,
+  };
+}
 
 /**
  * PostgREST returns a to-MANY embed as an array and a to-ONE embed as an

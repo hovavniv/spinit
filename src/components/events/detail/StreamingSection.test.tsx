@@ -11,8 +11,8 @@ import { StreamingSection } from './StreamingSection';
 import type { PartnerRow } from '@/lib/events/detailTypes';
 
 const partners: PartnerRow[] = [
-  { id: 'p1', slot: 1, display_name: 'Maya', user_id: 'user-maya' },
-  { id: 'p2', slot: 2, display_name: 'Chris', user_id: 'user-chris' },
+  { id: 'p1', slot: 1, display_name: 'Maya', user_id: 'user-maya', connection: null, profile: null },
+  { id: 'p2', slot: 2, display_name: 'Chris', user_id: 'user-chris', connection: null, profile: null },
 ];
 
 const connections = {
