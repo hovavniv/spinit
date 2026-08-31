@@ -344,11 +344,11 @@ Today it requires a session. That gate is honestly **necessary but not sufficien
 is open, so it turns "anyone can hammer this" into "anyone willing to register can." A
 per-user rate limit is not built (§8.4).
 
-### 7.5 One privileged path, and why it exists
+### 7.5 One privileged path, why it exists, and what was rejected
 
 `SUPABASE_SERVICE_ROLE_KEY` is a deliberate departure from this repo's practice — every
 prior slice states it never touches that key, and all three RLS test suites say so in their
-headers.
+headers. It was introduced knowingly, with the alternative on the table.
 
 It exists because the genre cache is a **control input**: the decision engine reads it to
 decide whether a suggested song violates a genre ban. Two successive designs left that cache
@@ -357,11 +357,30 @@ as a `security definer` function granted to `authenticated`, which PostgREST exp
 `POST /rest/v1/rpc/…` and which took the genres **from the caller**. The hole had moved, not
 closed, and the design carried a comment asserting otherwise.
 
-The resolution: no write grant and no execute grant to `authenticated`. Writes happen in one
-server-only module under a service-role client. The constraints are checkable and are in the
-definition of done — the key appears in exactly one module, that module is server-only, it
-is never imported by a Client Component, and the RLS test suites continue to use the anon key
-exclusively so their guarantees are unchanged.
+**The alternative that was considered and rejected: a per-partner cache.** If
+`artist_genres` were keyed per partner rather than shared globally, a poisoned row would
+affect only the account that wrote it — no elevated key needed, and the "this project holds
+no service-role key" claim would have survived intact. It was rejected on cost: nothing
+would be shared across partners or events, so every couple would re-pay the full MusicBrainz
+and Last.fm enrichment for artists the project had already resolved, at 2 seconds per
+external call. The global cache is what makes per-artist cost payable **once across the
+whole project** rather than once per couple, and that is what makes the feature usable at
+all.
+
+So the trade is explicit: a single narrow privileged path, in exchange for a cache that
+scales. The resolution is no write grant and no execute grant to `authenticated`; writes
+happen in one server-only module under a service-role client.
+
+Six constraints, each checkable rather than asserted, and each in the definition of done:
+
+1. the key appears in exactly one module
+2. that module is server-only
+3. it is never imported by a Client Component
+4. it never carries `NEXT_PUBLIC_`
+5. the RLS test suites continue to use the anon key exclusively, so their guarantees are unchanged
+6. **`execute` on `upsert_artist_genres` is granted to `service_role` only and revoked from
+   `authenticated`** — pinned by a test, not by a comment, because that exact grant is what
+   the fourth review found wrong
 
 ### 7.6 A control that is correct and still produces a wrong number
 
