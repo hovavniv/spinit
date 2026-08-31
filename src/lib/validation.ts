@@ -209,3 +209,12 @@ export const ceremonySlotSchema = z.object({
   title: z.string().trim().max(200, 'Song title must be at most 200 characters.'),
   artist: optionalText(200, 'Artist must be at most 200 characters.'),
 });
+
+/* ---------------------------------------------------------------------------
+   Spotify search proxy (plan task 6). Backs the track/artist pickers.
+   --------------------------------------------------------------------------- */
+
+export const spotifySearchSchema = z.object({
+  q: z.string().trim().min(2, 'Type at least two characters.').max(100),
+  type: z.enum(['track', 'artist']),
+});
