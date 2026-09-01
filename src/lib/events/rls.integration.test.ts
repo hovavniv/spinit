@@ -818,28 +818,49 @@ describe.skipIf(!hasSupabaseConfig || !hasTestUsers || !hasPartnerUser)(
       expect(insertWithUserId.error?.code).toBe('42501');
     });
 
-    test('no authenticated path writes artist_genres -- table OR routine', async () => {
-      // Both paths in ONE test, deliberately. Review 3 found the table grant,
-      // the fix routed writes through a definer function, and review 4 found
-      // the function granted to `authenticated` and reachable at
-      // POST /rest/v1/rpc/ -- the hole had MOVED, not closed.
-      const direct = await clientA
-        .from('artist_genres')
-        .insert({ spotify_artist_id: '0LcJLqbBmaGUft1e9Mm8HV', artist_name: 'x' });
-      expect(direct.error?.code).toBe('42501');
+    test('a participant writes artist_genres for their own event; a non-participant is refused', async () => {
+      // 20260901090000_spotify_genre_enrichment.sql rescoped artist_genres per
+      // event and dropped upsert_artist_genres entirely (it no longer exists,
+      // verified against 20260831140000_spotify_song_id_columns.sql:71-73,
+      // which drops it). The old form of this test asserted a direct table
+      // write was refused and an RPC call errored -- both now prove the wrong
+      // thing: a participant CAN insert directly (that is the point of the
+      // rescope), and the RPC call errors only because the function does not
+      // exist (42883), which says nothing about authorization.
+      //
+      // clientC is a partner of linkedEvent; clientB is signed in as an
+      // entirely different DJ, a participant of neither linkedEvent nor
+      // unlinkedEvent (both of which belong to clientA) -- the same
+      // "unrelated signed-in dj" this block already uses as its negative
+      // control above.
+      //
+      // The migration grants this table only select/insert/update, not
+      // delete, so this test cannot clean up its own rows -- a fixed id would
+      // collide with itself on the second run (23505) and silently fail to
+      // prove anything. Per-run random ids (still 22 chars, matching the
+      // spotify_artist_id shape check) leave harmless debris in the live
+      // per-event cache instead of a false pass. Two distinct ids: reusing
+      // one for both inserts would make the second fail on the pkey (23505)
+      // rather than on the RLS refusal (42501) this test is actually proving.
+      const randomArtistId = () => crypto.randomUUID().replace(/-/g, '').slice(0, 22);
 
-      const viaRpc = await clientA.rpc('upsert_artist_genres', {
-        p_spotify_id: '0LcJLqbBmaGUft1e9Mm8HV',
-        p_name: 'x',
-        p_mb_id: null,
-        p_mb_name: null,
-        p_genres: { 'death metal': 100 },
-        p_origins: {},
-        p_eras: {},
-        p_status: 'resolved',
-        p_via: 'mbid',
+      const ownWrite = await clientC
+        .from('artist_genres')
+        .insert({
+          event_id: linkedEvent,
+          spotify_artist_id: randomArtistId(),
+          artist_name: 'x',
+        })
+        .select();
+      expect(ownWrite.error).toBeNull();
+      expect(ownWrite.data).toHaveLength(1);
+
+      const foreignWrite = await clientB.from('artist_genres').insert({
+        event_id: linkedEvent,
+        spotify_artist_id: randomArtistId(),
+        artist_name: 'x',
       });
-      expect(viaRpc.error).toBeTruthy();
+      expect(foreignWrite.error?.code).toBe('42501');
     });
 
     test('claim_partner_slot refuses a caller who was not invited, and says nothing', async () => {
