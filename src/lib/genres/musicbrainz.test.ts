@@ -27,9 +27,35 @@ describe('musicbrainz', () => {
         .toContain(encodeURIComponent('https://open.spotify.com/artist/0LcJLqbBmaGUft1e9Mm8HV'));
     });
 
-  it('treats a 503 with a JSON error body as an ERROR, not as "no MBID"', async () => {
+  it('treats a 503 as an ERROR even when the body is a perfectly good response', async () => {
+    // The body is deliberately VALID -- a real relation, correctly shaped.
+    // The ONLY thing wrong is the status code, so this is invalid in
+    // exactly one way: a status-blind implementation would parse this body,
+    // find a good relation, and return the MBID instead of throwing. An
+    // earlier draft used `{ error: 'currently busy' }`, which is ALSO
+    // missing the `relations` key -- invalid twice -- so the missing-key
+    // check caught it independently and the test passed whether or not the
+    // status was ever read.
+    const f = vi.fn(async (_i: RequestInfo | URL, _init?: RequestInit) =>
+      new Response(JSON.stringify({ relations: [{
+        type: 'free streaming',
+        url: { resource: 'https://open.spotify.com/artist/0LcJLqbBmaGUft1e9Mm8HV' },
+        artist: { id: 'b1e2c3d4-0000-4000-8000-000000000001' },
+      }] }), { status: 503 }));
+    vi.stubGlobal('fetch', f);
+    await expect(mbidForSpotifyArtist('0LcJLqbBmaGUft1e9Mm8HV'))
+      .rejects.toMatchObject({ kind: 'unavailable' });
+    // A persistent 503 must terminate as an error, not retry forever --
+    // exactly two attempts (the one retry mbFetch allows), then throw.
+    expect(f).toHaveBeenCalledTimes(2);
+  });
+
+  it('a 200 with a malformed body (no relations key) is an ERROR', async () => {
+    // Invalid in exactly one way: a valid status, a body that is not the
+    // shape asked for. Keeps this check pinned separately from the 503
+    // status check above, now that neither fixture is invalid twice.
     vi.stubGlobal('fetch', vi.fn(async (_i: RequestInfo | URL, _init?: RequestInit) =>
-      new Response(JSON.stringify({ error: 'currently busy' }), { status: 503 })));
+      new Response(JSON.stringify({ error: 'currently busy' }), { status: 200 })));
     await expect(mbidForSpotifyArtist('x')).rejects.toMatchObject({ kind: 'unavailable' });
   });
 
@@ -85,8 +111,11 @@ describe('musicbrainz', () => {
   });
 
   it('a 404 is an ERROR', async () => {
+    // A valid, well-shaped body (empty relations, same as the "no link"
+    // success case) -- invalid in exactly one way, the status code, so a
+    // status-blind implementation would resolve null instead of throwing.
     vi.stubGlobal('fetch', vi.fn(async (_i: RequestInfo | URL, _init?: RequestInit) =>
-      new Response('{}', { status: 404 })));
+      new Response(JSON.stringify({ relations: [] }), { status: 404 })));
     await expect(mbidForSpotifyArtist('x')).rejects.toMatchObject({ kind: 'unavailable' });
   });
 });
