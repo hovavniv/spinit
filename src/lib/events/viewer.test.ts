@@ -4,8 +4,8 @@ import { resolveViewer } from './viewer';
 import type { PartnerRow } from './detailTypes';
 
 const partners: PartnerRow[] = [
-  { id: 'p1', slot: 1, display_name: 'Maya', user_id: 'user-maya' },
-  { id: 'p2', slot: 2, display_name: 'Chris', user_id: null },
+  { id: 'p1', slot: 1, display_name: 'Maya', user_id: 'user-maya', connection: null, profile: null },
+  { id: 'p2', slot: 2, display_name: 'Chris', user_id: null, connection: null, profile: null },
 ];
 
 describe('resolveViewer', () => {
@@ -25,7 +25,9 @@ describe('resolveViewer', () => {
   });
 
   it('prefers dj when the dj is somehow also a partner', () => {
-    const odd: PartnerRow[] = [{ id: 'p9', slot: 1, display_name: 'X', user_id: 'dj-1' }];
+    const odd: PartnerRow[] = [
+      { id: 'p9', slot: 1, display_name: 'X', user_id: 'dj-1', connection: null, profile: null },
+    ];
 
     expect(resolveViewer('dj-1', 'dj-1', odd)).toEqual({ role: 'dj' });
   });

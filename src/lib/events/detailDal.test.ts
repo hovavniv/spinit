@@ -112,7 +112,7 @@ describe('getEventDetail', () => {
     const detail = await getEventDetail(EVENT);
 
     expect(detail?.partners).toEqual([
-      { id: 'p1', slot: 1, display_name: 'Noa', user_id: null },
+      { id: 'p1', slot: 1, display_name: 'Noa', user_id: null, connection: null, profile: null },
     ]);
   });
 
@@ -212,5 +212,94 @@ describe('getEventDetail', () => {
     });
 
     await expect(getEventDetail(EVENT)).resolves.toBeNull();
+  });
+
+  it('does not select refresh_token, in any shape', async () => {
+    maybeSingle.mockResolvedValue({ data: row(), error: null });
+
+    await getEventDetail(EVENT);
+
+    expect(JSON.stringify(select.mock.calls[0][0])).not.toContain('refresh_token');
+    expect(JSON.stringify(select.mock.calls[0][0])).not.toContain('spotify_tokens');
+  });
+
+  it('maps a to-one connection embed arriving as an OBJECT', async () => {
+    maybeSingle.mockResolvedValue({
+      data: row({
+        event_partners: [
+          {
+            id: 'p1',
+            slot: 1,
+            display_name: 'Noa',
+            user_id: null,
+            spotify_connections: { status: 'connected' },
+          },
+        ],
+      }),
+      error: null,
+    });
+
+    const detail = await getEventDetail(EVENT);
+
+    expect(detail?.partners[0].connection?.status).toBe('connected');
+  });
+
+  it('maps the same embed arriving as an ARRAY, so the code is right either way', async () => {
+    maybeSingle.mockResolvedValue({
+      data: row({
+        event_partners: [
+          {
+            id: 'p1',
+            slot: 1,
+            display_name: 'Noa',
+            user_id: null,
+            spotify_connections: [{ status: 'failed' }],
+          },
+        ],
+      }),
+      error: null,
+    });
+
+    const detail = await getEventDetail(EVENT);
+
+    expect(detail?.partners[0].connection?.status).toBe('failed');
+  });
+
+  it('maps top_artists (snake) onto topArtists (camel)', async () => {
+    maybeSingle.mockResolvedValue({
+      data: row({
+        event_partners: [
+          {
+            id: 'p1',
+            slot: 1,
+            display_name: 'Noa',
+            user_id: null,
+            taste_profiles: {
+              top_artists: [{ id: 'a', name: 'A', artworkUrl: null, score: 1, ranges: [] }],
+              computed_at: '2026-01-01',
+            },
+          },
+        ],
+      }),
+      error: null,
+    });
+
+    const detail = await getEventDetail(EVENT);
+
+    expect(detail?.partners[0].profile?.topArtists).toHaveLength(1);
+  });
+
+  it('yields a null connection and null profile rather than throwing when the embed is absent', async () => {
+    maybeSingle.mockResolvedValue({
+      data: row({
+        event_partners: [{ id: 'p1', slot: 1, display_name: 'Noa', user_id: null }],
+      }),
+      error: null,
+    });
+
+    const detail = await getEventDetail(EVENT);
+
+    expect(detail?.partners[0].connection).toBeNull();
+    expect(detail?.partners[0].profile).toBeNull();
   });
 });

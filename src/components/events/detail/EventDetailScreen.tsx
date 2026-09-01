@@ -11,7 +11,8 @@ import {
 } from '@/lib/events/detailActions';
 import { savePrivateNotes, saveSharedNotes } from '@/lib/events/notesActions';
 import { StepHeader } from './StepHeader';
-import { StreamingSection } from './StreamingSection';
+import { StreamingSection, type StreamingConnections } from './StreamingSection';
+import { TasteProfile } from './TasteProfile';
 import { CeremonySongs } from './CeremonySongs';
 import { MustPlaySection } from './MustPlaySection';
 import { BlocklistSection } from './BlocklistSection';
@@ -44,6 +45,13 @@ export function EventDetailScreen({ event, viewer }: EventDetailScreenProps) {
   const mustPlay = splitBySegment(event.mustPlay);
   const blocklist = splitBySegment(event.blocklist);
 
+  const connections: StreamingConnections = {};
+  for (const partner of event.partners) {
+    connections[partner.id] = partner.connection;
+  }
+
+  const [partner1, partner2] = event.partners;
+
   return (
     <div className={styles.page}>
       <Link href="/dashboard" className={styles.backLink}>
@@ -55,7 +63,14 @@ export function EventDetailScreen({ event, viewer }: EventDetailScreenProps) {
       <StepHeader />
 
       <div className={styles.card}>
-        <StreamingSection coupleStatus={event.couple_status} />
+        <StreamingSection partners={event.partners} connections={connections} viewer={viewer} />
+
+        {partner1 && partner2 && (
+          <TasteProfile
+            partner1={{ name: partner1.display_name, profile: partner1.profile }}
+            partner2={{ name: partner2.display_name, profile: partner2.profile }}
+          />
+        )}
 
         <CeremonySongs rows={mustPlay.ceremony} />
 

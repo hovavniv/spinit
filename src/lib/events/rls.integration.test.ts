@@ -906,3 +906,339 @@ describe.skipIf(!hasSupabaseConfig || !hasTestUsers || !hasPartnerUser)(
     });
   },
 );
+
+/* ---------------------------------------------------------------------------
+   SPOTIFY TABLES — plan B task 13.
+
+   spotify_connections, spotify_tokens and taste_profiles have been live and
+   empty since the migration shipped. This is the first test of the exact
+   boundary those three tables exist to protect: one partner must not be able
+   to read or write another partner's Spotify credentials.
+
+   A and B are DJs (unrelated to each other), C is already a partner used
+   elsewhere in this file. The assertions here need TWO partners of the SAME
+   event who are genuinely different people -- reusing A/B/C would test
+   cross-DJ or cross-event isolation, not the partner-vs-partner boundary
+   these tables specifically need. Hence a FOURTH account, D.
+   --------------------------------------------------------------------------- */
+
+const D_EMAIL = process.env.TEST_USER_D_EMAIL;
+const D_PASSWORD = process.env.TEST_USER_D_PASSWORD;
+const hasFourthTestUser = Boolean(D_EMAIL && D_PASSWORD);
+
+if (hasSupabaseConfig && hasTestUsers && hasPartnerUser && !hasFourthTestUser) {
+  describe('spotify tables (auth-gated)', () => {
+    test('TEST_USER_D_* must be set for the spotify-tables tests', () => {
+      throw new Error(
+        'TEST_USER_A/B/C are set but TEST_USER_D_EMAIL / TEST_USER_D_PASSWORD are not. ' +
+          'These tests need a SECOND partner on the same event as C -- reusing A, B or C ' +
+          'would test cross-DJ or cross-event isolation, not the partner-vs-partner ' +
+          'boundary spotify_tokens exists to enforce. Create the account through the ' +
+          'Supabase dashboard with Auto Confirm ON, not through /register.',
+      );
+    });
+  });
+}
+
+describe.skipIf(!hasSupabaseConfig || !hasTestUsers || !hasPartnerUser || !hasFourthTestUser)(
+  'spotify tables (auth-gated)',
+  { timeout: 30000 },
+  () => {
+    let clientA: SupabaseClient;
+    let clientB: SupabaseClient;
+    let clientC: SupabaseClient;
+    let clientD: SupabaseClient;
+
+    let linkedEvent: string;
+    let unlinkedEvent: string;
+    let partnerC: string;
+    let partnerD: string;
+    let partnerOnEventB: string;
+
+    let slot1Original: { invite_email: string; display_name: string };
+    let slot2Original: { invite_email: string; display_name: string };
+    let unlinkedSlot1Original: { invite_email: string; display_name: string };
+
+    // Every seeding write below goes through this rather than a bare
+    // `.upsert(...)` -- an unchecked upsert can silently write zero rows
+    // (wrong column, RLS misconfiguration, etc.) and the suite would stay
+    // green while the row it claims to have seeded never existed.
+    const seed = async (client: SupabaseClient, table: string, row: Record<string, unknown>) => {
+      const { data, error } = await client
+        .from(table)
+        .upsert(row, { onConflict: 'partner_id' })
+        .select();
+      if (error || !data?.length) {
+        throw new Error(`seeding ${table} for ${row.partner_id} failed: ${error?.message ?? 'zero rows'}`);
+      }
+    };
+
+    beforeAll(async () => {
+      // persistSession: false on EVERY client -- same reason as the two
+      // describe blocks above: supabase-js keys localStorage by project ref
+      // alone under jsdom, so four clients would otherwise share one slot.
+      clientA = createClient(SUPABASE_URL!, SUPABASE_ANON_KEY!, { auth: { persistSession: false } });
+      clientB = createClient(SUPABASE_URL!, SUPABASE_ANON_KEY!, { auth: { persistSession: false } });
+      clientC = createClient(SUPABASE_URL!, SUPABASE_ANON_KEY!, { auth: { persistSession: false } });
+      clientD = createClient(SUPABASE_URL!, SUPABASE_ANON_KEY!, { auth: { persistSession: false } });
+
+      const a = await clientA.auth.signInWithPassword({ email: A_EMAIL!, password: A_PASSWORD! });
+      if (a.error) throw new Error(`sign in A failed: ${a.error.message}`);
+      const b = await clientB.auth.signInWithPassword({ email: B_EMAIL!, password: B_PASSWORD! });
+      if (b.error) throw new Error(`sign in B failed: ${b.error.message}`);
+      const c = await clientC.auth.signInWithPassword({ email: C_EMAIL!, password: C_PASSWORD! });
+      if (c.error) throw new Error(`sign in C failed: ${c.error.message}`);
+      const d = await clientD.auth.signInWithPassword({ email: D_EMAIL!, password: D_PASSWORD! });
+      if (d.error || !d.data.user) {
+        throw new Error(
+          `sign in D failed: ${d.error?.message}. If this is email_not_confirmed, the ` +
+            'dashboard account was created without Auto Confirm.',
+        );
+      }
+
+      const pick = async (coupleNames: string) => {
+        const { data, error } = await clientA
+          .from('events')
+          .select('id')
+          .eq('couple_names', coupleNames)
+          .limit(1);
+        if (error || !data?.length) {
+          throw new Error(`No '${coupleNames}' event for A. Run \`npm run seed:demo\`.`);
+        }
+        return data[0].id as string;
+      };
+      linkedEvent = await pick('Priya & Alex');
+      unlinkedEvent = await pick('Noa & Eitan');
+
+      const repointAndClaim = async (
+        client: SupabaseClient,
+        eventId: string,
+        slot: 1 | 2,
+        email: string,
+      ) => {
+        const { data: seeded } = await clientA
+          .from('event_partners')
+          .select('id, invite_email, display_name')
+          .eq('event_id', eventId)
+          .eq('slot', slot)
+          .maybeSingle();
+        if (!seeded) throw new Error(`No partner slot ${slot} on event ${eventId}.`);
+        const original = { invite_email: seeded.invite_email, display_name: seeded.display_name };
+        await clientA.from('event_partners').delete().eq('id', seeded.id);
+        const { data: fresh, error: insertError } = await clientA
+          .from('event_partners')
+          .insert({ event_id: eventId, slot, display_name: seeded.display_name, invite_email: email })
+          .select('id')
+          .single();
+        if (insertError || !fresh) throw new Error(`could not reset slot ${slot}: ${insertError?.message}`);
+        const claim = await client.rpc('claim_partner_slot', { p_event: eventId, p_slot: slot });
+        if (claim.error) throw new Error(`claim failed for slot ${slot}: ${claim.error.message}`);
+        return { partnerId: fresh.id as string, original };
+      };
+
+      ({ partnerId: partnerC, original: slot1Original } = await repointAndClaim(
+        clientC,
+        linkedEvent,
+        1,
+        C_EMAIL!,
+      ));
+      ({ partnerId: partnerD, original: slot2Original } = await repointAndClaim(
+        clientD,
+        linkedEvent,
+        2,
+        D_EMAIL!,
+      ));
+      ({ partnerId: partnerOnEventB, original: unlinkedSlot1Original } = await repointAndClaim(
+        clientB,
+        unlinkedEvent,
+        1,
+        B_EMAIL!,
+      ));
+
+      await seed(clientC, 'spotify_connections', {
+        partner_id: partnerC,
+        status: 'connected',
+        spotify_user_id: 'spotify-c',
+      });
+      await seed(clientC, 'spotify_tokens', {
+        partner_id: partnerC,
+        refresh_token: 'v1.aaaa.bbbb.token-c',
+      });
+      await seed(clientC, 'taste_profiles', {
+        partner_id: partnerC,
+        top_artists: [{ id: 'artist-c', name: 'Artist C', score: 1, ranges: [] }],
+      });
+
+      await seed(clientD, 'spotify_connections', {
+        partner_id: partnerD,
+        status: 'connected',
+        spotify_user_id: 'spotify-d',
+      });
+      await seed(clientD, 'spotify_tokens', {
+        partner_id: partnerD,
+        refresh_token: 'v1.cccc.dddd.token-d',
+      });
+      await seed(clientD, 'taste_profiles', {
+        partner_id: partnerD,
+        top_artists: [{ id: 'artist-d', name: 'Artist D', score: 1, ranges: [] }],
+      });
+
+      // Positive control for "a partner of event A reads no taste profile
+      // from event B" below -- without a seeded row here, that test's
+      // toHaveLength(0) is equally true because the row simply doesn't
+      // exist, and would pass with RLS disabled entirely.
+      await seed(clientB, 'taste_profiles', {
+        partner_id: partnerOnEventB,
+        top_artists: [{ id: 'artist-b', name: 'Artist B', score: 1, ranges: [] }],
+      });
+    });
+
+    afterAll(async () => {
+      // Unclaiming (delete + reinsert) CASCADES to spotify_connections,
+      // spotify_tokens and taste_profiles -- partner_id is `on delete cascade`
+      // on all three -- so the rows seeded above need no separate teardown.
+      try {
+        if (partnerC) {
+          await clientA.from('event_partners').delete().eq('id', partnerC);
+          await clientA
+            .from('event_partners')
+            .insert({ event_id: linkedEvent, slot: 1, ...slot1Original });
+        }
+        if (partnerD) {
+          await clientA.from('event_partners').delete().eq('id', partnerD);
+          await clientA
+            .from('event_partners')
+            .insert({ event_id: linkedEvent, slot: 2, ...slot2Original });
+        }
+        if (partnerOnEventB) {
+          await clientA.from('event_partners').delete().eq('id', partnerOnEventB);
+          await clientA
+            .from('event_partners')
+            .insert({ event_id: unlinkedEvent, slot: 1, ...unlinkedSlot1Original });
+        }
+      } catch (cleanupError) {
+        console.error('spotify tables: cleanup failed, live rows may be left behind', cleanupError);
+      }
+    });
+
+    test('a partner reads their own token row', async () => {
+      const { data } = await clientC.from('spotify_tokens').select('partner_id').eq('partner_id', partnerC);
+      expect(data).toHaveLength(1);
+    });
+
+    test('the OTHER partner cannot read it — zero rows, not an error', async () => {
+      const { data, error } = await clientD
+        .from('spotify_tokens')
+        .select('partner_id')
+        .eq('partner_id', partnerC);
+      expect(error).toBeNull();
+      expect(data ?? []).toHaveLength(0);
+    });
+
+    test('the DJ cannot read it either', async () => {
+      const { data } = await clientA.from('spotify_tokens').select('partner_id').eq('partner_id', partnerC);
+      expect(data ?? []).toHaveLength(0);
+    });
+
+    test("a partner writes their OWN token, and cannot write another partner's", async () => {
+      // Positive control FIRST. Without it, "zero rows" below would be
+      // equally true of a row that simply does not exist -- an UPDATE
+      // against a missing row also returns success with zero rows, no
+      // error. Self-contained rather than leaning on the earlier
+      // "reads their own token row" test to have proven this row exists.
+      const mine = await clientC
+        .from('spotify_tokens')
+        .update({ refresh_token: 'v1.own.update.token-c' })
+        .eq('partner_id', partnerC)
+        .select();
+      expect(mine.error).toBeNull();
+      expect(mine.data ?? []).toHaveLength(1);
+
+      const theirs = await clientD
+        .from('spotify_tokens')
+        .update({ refresh_token: 'v1.x.y.z' })
+        .eq('partner_id', partnerC)
+        .select();
+      expect(theirs.error).toBeNull();
+      expect(theirs.data ?? []).toHaveLength(0);
+    });
+
+    test("a partner writes their OWN connection, and cannot write another partner's", async () => {
+      // Same positive-control shape as the token test above: prove the row
+      // exists and is writable by its owner before the zero-row assertion
+      // below can mean "RLS blocked it" rather than "there was no row".
+      const mine = await clientC
+        .from('spotify_connections')
+        .update({ status: 'connected' })
+        .eq('partner_id', partnerC)
+        .select();
+      expect(mine.error).toBeNull();
+      expect(mine.data ?? []).toHaveLength(1);
+
+      const theirs = await clientD
+        .from('spotify_connections')
+        .update({ status: 'failed' })
+        .eq('partner_id', partnerC)
+        .select();
+      expect(theirs.error).toBeNull();
+      expect(theirs.data ?? []).toHaveLength(0);
+    });
+
+    test("a partner writes their OWN taste profile, and cannot write another partner's", async () => {
+      const mine = await clientC
+        .from('taste_profiles')
+        .update({ top_artists: [{ id: 'artist-c', name: 'Artist C', score: 1, ranges: [] }] })
+        .eq('partner_id', partnerC)
+        .select();
+      expect(mine.error).toBeNull();
+      expect(mine.data ?? []).toHaveLength(1);
+
+      const theirs = await clientD
+        .from('taste_profiles')
+        .update({ top_artists: [] })
+        .eq('partner_id', partnerC)
+        .select();
+      expect(theirs.error).toBeNull();
+      expect(theirs.data ?? []).toHaveLength(0);
+    });
+
+    test("the DJ reads BOTH partners' taste profiles for their own event", async () => {
+      const { data } = await clientA
+        .from('taste_profiles')
+        .select('partner_id')
+        .in('partner_id', [partnerC, partnerD]);
+      expect(data?.map((r) => r.partner_id).sort()).toEqual([partnerC, partnerD].sort());
+    });
+
+    test('the DJ reads both connections but never a token', async () => {
+      const conns = await clientA
+        .from('spotify_connections')
+        .select('partner_id')
+        .in('partner_id', [partnerC, partnerD]);
+      expect(conns.data).toHaveLength(2);
+      const toks = await clientA
+        .from('spotify_tokens')
+        .select('partner_id')
+        .in('partner_id', [partnerC, partnerD]);
+      expect(toks.data ?? []).toHaveLength(0);
+    });
+
+    test('a partner of event A reads no taste profile from event B', async () => {
+      // Positive control first: prove the row exists and its own owner can
+      // see it, so the zero-row assertion below can only mean "RLS blocked
+      // it" rather than "there was no row to find".
+      const control = await clientB
+        .from('taste_profiles')
+        .select('partner_id')
+        .eq('partner_id', partnerOnEventB);
+      expect(control.data).toHaveLength(1);
+
+      const { data, error } = await clientC
+        .from('taste_profiles')
+        .select('partner_id')
+        .eq('partner_id', partnerOnEventB);
+      expect(error).toBeNull();
+      expect(data ?? []).toHaveLength(0);
+    });
+  },
+);

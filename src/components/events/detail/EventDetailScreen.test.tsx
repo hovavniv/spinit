@@ -45,7 +45,13 @@ function buildEvent(): EventDetail {
     dj_id: 'dj-1',
     privateNotes: 'DJ private note',
     sharedNotes: 'Couple shared note',
-    partners: [],
+    // A real partner in the 'invited' state (no connection row yet) so
+    // StreamingSection actually renders a Connect <form> for it -- needed by
+    // the assembled-screen nested-form test below. Its id matches the
+    // `partnerId: 'p1'` viewer already used elsewhere in this file.
+    partners: [
+      { id: 'p1', slot: 1, display_name: 'Noa', user_id: null, connection: null, profile: null },
+    ],
     mustPlay: [
       {
         id: 'must-1',
@@ -153,5 +159,38 @@ describe('EventDetailScreen', () => {
     assertNoFormIsNestedInAnotherForm(container);
     expect(screen.getByLabelText(/your private notes/i)).toBeInTheDocument();
     expect(screen.getByLabelText(/shared notes/i)).toBeInTheDocument();
+  });
+
+  test('StreamingSection contributes forms, and none of them nests inside the details form', () => {
+    // Deviation from the plan's literal snippet: rendered with viewer
+    // { role: 'dj' }, StreamingSection renders its status rows but NO <form>
+    // at all -- Connect/Re-sync/Try-again forms only render on the row
+    // belonging to the partner currently viewing the page (StreamingSection's
+    // own isOwnRow check). With a dj viewer the other sections on this page
+    // already put 9 forms on the tree, so `length > 2` would hold whether or
+    // not StreamingSection contributed anything -- exactly the unfalsifiable
+    // assertion this project keeps finding. Using the fixture's own partner
+    // (`partnerId: 'p1'`, already the 'invited' partner in buildEvent()) as
+    // the viewer makes StreamingSection actually render a Connect form, so
+    // this test can fail if that form is ever wrapped in the details form.
+    const { container } = render(
+      <EventDetailScreen
+        event={buildEvent()}
+        viewer={{ role: 'partner', partnerId: 'p1' }}
+      />,
+    );
+
+    assertNoFormIsNestedInAnotherForm(container);
+    // Not just "no failure" -- StreamingSection must actually have RENDERED a
+    // form here, or the assertion above is vacuous. A raw form COUNT cannot
+    // pin this: CeremonySongs, MustPlaySection (x2), BlocklistSection (x2),
+    // SharedNotesSection and EventDetailsForm alone put well over two forms
+    // on the tree regardless of what StreamingSection does -- confirmed by
+    // making StreamingSection return null and watching `length > 2` still
+    // hold. Asserting the Connect button itself is present is the only check
+    // that actually depends on StreamingSection having rendered its form.
+    expect(
+      screen.getByRole('button', { name: /connect .*spotify/i }),
+    ).toBeInTheDocument();
   });
 });

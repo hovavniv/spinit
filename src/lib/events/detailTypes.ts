@@ -9,6 +9,7 @@
 
 import type { ActionResult } from '@/lib/auth/errors';
 import type { CoupleStatus } from '@/lib/dashboard/types';
+import type { TasteProfile } from '@/lib/spotify/tasteTypes';
 
 export type EventSegment = 'ceremony' | 'reception' | 'party';
 
@@ -58,6 +59,10 @@ export interface PartnerRow {
   display_name: string;
   /** Null between the DJ sending the invite and the partner claiming the slot. */
   user_id: string | null;
+  /** Null when no spotify_connections row exists yet for this partner. */
+  connection: { status: 'invited' | 'connected' | 'failed' } | null;
+  /** Null when no taste_profiles row exists yet for this partner. */
+  profile: TasteProfile | null;
 }
 
 /**
