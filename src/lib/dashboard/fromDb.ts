@@ -17,6 +17,32 @@ import type {
   UpcomingEvent,
 } from './types';
 
+type SpotifyConnStatus = 'invited' | 'connected' | 'failed';
+
+/**
+ * A partner slot's connection status, as embedded by `EVENT_COLUMNS`.
+ *
+ * `spotify_connections` is keyed on `partner_id` (unique), so at the wire it
+ * embeds to-one — an object or `null`, never an array. But `createClient()`
+ * (src/lib/supabase/server.ts) is built with no generated `Database` schema
+ * type, so postgrest-js's compile-time select-string parser has no
+ * uniqueness metadata to detect that from and falls back to typing every
+ * nested embed as an array, regardless of the real cardinality. Typed here as
+ * "object, array, or null" and normalised with `firstRow()` below, the same
+ * way `src/lib/events/detailDal.ts`'s `firstRow()` already does for this
+ * exact relationship — asserting the narrower object-only shape instead
+ * produces a TS2352 cast error against what the client actually infers.
+ */
+interface EventPartnerRow {
+  spotify_connections: { status: SpotifyConnStatus } | { status: SpotifyConnStatus }[] | null;
+}
+
+/** Normalises a to-one embed to its single row, whichever shape it arrives as. */
+function firstRow<T>(embed: T | T[] | null | undefined): T | undefined {
+  if (embed == null) return undefined;
+  return Array.isArray(embed) ? embed[0] : embed;
+}
+
 /** A row of `public.events`, as this branch selects it (design §5). */
 export interface DashboardEventRow {
   id: string;
@@ -26,7 +52,28 @@ export interface DashboardEventRow {
   status: 'draft' | 'upcoming' | 'live' | 'completed' | 'cancelled';
   phase: EventPhase | null;
   start_time: string | null; // 'HH:mm:ss'
-  couple_status: CoupleStatus;
+  // `event_partners` is to-many from `events` (its FK is not unique), so this
+  // one IS an array — the other half of the same embed-cardinality trap.
+  event_partners: EventPartnerRow[];
+}
+
+/**
+ * Derived, never stored: a partner's own session cannot write `events` (its
+ * UPDATE policy is `auth.uid() = dj_id`), so the status is computed from the
+ * connection rows the DJ can already read (`dj or participant selects
+ * partners` on `event_partners`; `participants select connections` on
+ * `spotify_connections`).
+ *
+ * Counts connected partners and requires at least two, rather than asserting
+ * "no partner is unconnected" — `every()` over an empty or one-element array
+ * is vacuously true, which would read a half-set-up or partner-less event as
+ * connected.
+ */
+function coupleStatusOf(row: DashboardEventRow): CoupleStatus {
+  const connected = (row.event_partners ?? []).filter(
+    (p) => firstRow(p.spotify_connections)?.status === 'connected',
+  ).length;
+  return connected >= 2 ? 'streaming-connected' : 'awaiting-couple';
 }
 
 /**
@@ -104,7 +151,7 @@ export function toUpcomingEvents(rows: DashboardEventRow[]): UpcomingEvent[] {
       coupleNames: row.couple_names,
       venue: row.venue,
       date: row.event_date,
-      status: row.couple_status,
+      status: coupleStatusOf(row),
     }));
 }
 
