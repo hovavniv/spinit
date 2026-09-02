@@ -194,3 +194,34 @@ export async function partnerOwner(partnerId: string): Promise<string | null> {
 
   return (data as { user_id: string }).user_id;
 }
+
+/**
+ * The same `event_partners` lookup as `partnerOwner`, widened to also return
+ * `event_id` -- the enrich-next route (Task 7) needs both: `userId` to
+ * authorize the caller IS this partner, `eventId` to scope the claim/recompute
+ * reads that follow. Gap noted in Task 6b's file list, closed here.
+ *
+ * Returns `null` only when the partner ROW itself doesn't exist. A row that
+ * exists but has never been claimed (`user_id is null`, an invited-but-not-
+ * yet-signed-up slot) is a real, distinct result -- `{ userId: null, eventId }`
+ * -- and the caller (the route) must refuse that too, since `null !== auth.uid()`
+ * already reads as "not this caller" without a special case.
+ */
+export async function partnerContext(
+  partnerId: string,
+): Promise<{ userId: string | null; eventId: string } | null> {
+  const supabase = await createClient();
+
+  const { data, error } = await supabase
+    .from('event_partners')
+    .select('user_id, event_id')
+    .eq('id', partnerId)
+    .single();
+
+  if (error || !data) {
+    return null;
+  }
+
+  const row = data as { user_id: string | null; event_id: string };
+  return { userId: row.user_id, eventId: row.event_id };
+}

@@ -19,8 +19,17 @@ const blEq2 = vi.fn();
 
 vi.mock('@/lib/supabase/server', () => ({ createClient: async () => ({ from }) }));
 
-import { writeGenres, readGenres, blockedGenres } from './genresDal';
+import { writeGenres, readGenres, blockedGenres, writeGenreWeights } from './genresDal';
 import type { ArtistGenresRow } from './enrich';
+
+// taste_profiles: upsert(row, opts).select()
+const tpUpsert = vi.fn();
+const tpUpsertSelect = vi.fn();
+
+function tasteProfilesTable() {
+  tpUpsert.mockReturnValue({ select: tpUpsertSelect });
+  return { upsert: tpUpsert };
+}
 
 function artistGenresTable() {
   agUpsert.mockReturnValue({ select: agUpsertSelect });
@@ -41,9 +50,11 @@ beforeEach(() => {
   vi.clearAllMocks();
   agUpsertSelect.mockResolvedValue({ data: [{ event_id: 'e1' }], error: null });
   agReadMaybeSingle.mockResolvedValue({ data: null, error: null });
+  tpUpsertSelect.mockResolvedValue({ data: [{ partner_id: 'p1' }], error: null });
   from.mockImplementation((table: string) => {
     if (table === 'artist_genres') return artistGenresTable();
     if (table === 'event_blocklist') return eventBlocklistTable();
+    if (table === 'taste_profiles') return tasteProfilesTable();
     throw new Error(`unexpected table ${table}`);
   });
 });
@@ -101,6 +112,45 @@ describe('writeGenres', () => {
       expect('genres' in sent).toBe(false);
       expect('origins' in sent).toBe(false);
       expect('eras' in sent).toBe(false);
+    },
+  );
+});
+
+describe('writeGenreWeights', () => {
+  const weights = { genres: { pop: 0.6 }, origins: { israeli: 0.4 }, eras: { '2010s': 1 } };
+
+  it('resolves the row count from the upsert', async () => {
+    tpUpsertSelect.mockResolvedValueOnce({ data: [{ partner_id: 'p1' }], error: null });
+    await expect(writeGenreWeights('p1', weights)).resolves.toEqual({ rowCount: 1 });
+  });
+
+  it('surfaces a zero row count rather than throwing -- the caller decides what that means', async () => {
+    tpUpsertSelect.mockResolvedValueOnce({ data: [], error: null });
+    await expect(writeGenreWeights('p1', weights)).resolves.toEqual({ rowCount: 0 });
+  });
+
+  it('throws when the upsert itself errors', async () => {
+    tpUpsertSelect.mockResolvedValueOnce({ data: null, error: { code: '42501' } });
+    await expect(writeGenreWeights('p1', weights)).rejects.toThrow(/genre-weights upsert failed/);
+  });
+
+  it(
+    'sends a payload that NEVER carries top_artists or computed_at -- sync.ts owns those two ' +
+      'columns exclusively, and an upsert from here carrying them would clobber the artist ' +
+      'list with whatever this caller happens to hold',
+    async () => {
+      await writeGenreWeights('p1', weights);
+
+      const sent = tpUpsert.mock.calls[0][0] as Record<string, unknown>;
+      expect('top_artists' in sent).toBe(false);
+      expect('computed_at' in sent).toBe(false);
+      expect(sent).toMatchObject({
+        partner_id: 'p1',
+        genre_weights: weights.genres,
+        origin_weights: weights.origins,
+        era_weights: weights.eras,
+      });
+      expect(sent).toHaveProperty('enriched_at');
     },
   );
 });

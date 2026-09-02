@@ -37,6 +37,47 @@ export async function writeGenres(row: ArtistGenresRow): Promise<{ rowCount: num
   return { rowCount: write.data?.length ?? 0 };
 }
 
+/**
+ * Writes ONLY the genre-side columns of `taste_profiles`: `genre_weights`,
+ * `origin_weights`, `era_weights` and `enriched_at`. `sync.ts` owns
+ * `top_artists` and `computed_at` exclusively -- two writers, one table,
+ * disjoint column sets, same single-writer discipline that fixed the
+ * `attempts`/`last_attempt_at` collision between `enrich.ts` and
+ * `releaseClaim` (queueDal.ts). An upsert from here that also carried
+ * `top_artists` would clobber the artist list with whatever THIS caller
+ * happened to hold -- the same class of silent data loss `writeGenres`'s own
+ * omitted-keys discipline exists to prevent, one table over.
+ *
+ * Named `writeGenreWeights`, not the plan's original `writeTasteProfile` --
+ * task 6b's file list omitted this function entirely; the rename records
+ * that it writes a narrow slice of the row, not the whole profile.
+ */
+export async function writeGenreWeights(
+  partnerId: string,
+  weights: { genres: Record<string, number>; origins: Record<string, number>; eras: Record<string, number> },
+): Promise<{ rowCount: number }> {
+  const supabase = await createClient();
+
+  const write = await supabase
+    .from('taste_profiles')
+    .upsert(
+      {
+        partner_id: partnerId,
+        genre_weights: weights.genres,
+        origin_weights: weights.origins,
+        era_weights: weights.eras,
+        enriched_at: new Date().toISOString(),
+      },
+      { onConflict: 'partner_id' },
+    )
+    .select();
+  if (write.error) {
+    throw new Error(`taste_profiles genre-weights upsert failed: ${write.error.code}`);
+  }
+
+  return { rowCount: write.data?.length ?? 0 };
+}
+
 export async function readGenres(eventId: string, artistId: string): Promise<FacetedTags | null> {
   const supabase = await createClient();
 
