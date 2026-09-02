@@ -1,4 +1,4 @@
-import { describe, test, expect } from 'vitest';
+import { describe, test, expect, vi, afterEach } from 'vitest';
 import { render, screen } from '@testing-library/react';
 
 import { EventDetailScreen } from './EventDetailScreen';
@@ -195,12 +195,21 @@ describe('EventDetailScreen', () => {
     ).toBeInTheDocument();
   });
 
-  test('renders genre bars from the genres the DAL fetched', () => {
+  test('renders genre bars from the genres the DAL fetched', async () => {
     // The ONLY test that proves the fetch reaches the panel. TasteProfile's
     // own tests (TasteProfile.test.tsx) hand it a fixture directly via
     // props, so they stay green whether or not anything in the app actually
     // supplies genresByArtistId -- this test exercises the real wiring path
     // through EventDetailScreen instead.
+    //
+    // Both partners must be `connected` here (plan task 10): TasteProfileClient
+    // only polls -- and so only reports a nonzero `progress.total` -- for a
+    // partner whose connection is 'connected'. A `connection: null` fixture
+    // (as this test used pre-task-10, matching the placeholder progress it
+    // stood in for) now correctly renders NOTHING genre-shaped, per
+    // TasteProfile's own "nobody has connected yet" rule -- that was this
+    // test's actual bug once real per-partner progress replaced the
+    // placeholder, not a false predicted failure.
     const ARTIST_ID = 'artist-1';
     const genreProfile = (partnerId: string) => ({
       partnerId,
@@ -213,13 +222,58 @@ describe('EventDetailScreen', () => {
     const event: EventDetail = {
       ...buildEvent(),
       partners: [
-        { id: 'p1', slot: 1, display_name: 'Noa', user_id: null, connection: null, profile: genreProfile('p1') },
-        { id: 'p2', slot: 2, display_name: 'Eitan', user_id: null, connection: null, profile: genreProfile('p2') },
+        {
+          id: 'p1', slot: 1, display_name: 'Noa', user_id: null,
+          connection: { status: 'connected' }, profile: genreProfile('p1'),
+        },
+        {
+          id: 'p2', slot: 2, display_name: 'Eitan', user_id: null,
+          connection: { status: 'connected' }, profile: genreProfile('p2'),
+        },
       ],
       genresByArtistId: { [ARTIST_ID]: { mizrahi: 100 } },
     };
 
+    // Stands in for a queue that is already fully drained for both
+    // partners, so useEnrichmentPoll's single resolved poll is enough to
+    // move TasteProfile out of "still analysing" and into rendering the
+    // genre bars from genresByArtistId.
+    vi.stubGlobal('fetch', vi.fn(async () =>
+      Response.json({ remaining: 0, settled: 1, total: 1 })));
+
     render(<EventDetailScreen event={event} viewer={{ role: 'dj' }} />);
-    expect(screen.getByTestId('genre-bar')).toBeInTheDocument();
+    expect(await screen.findByTestId('genre-bar')).toBeInTheDocument();
+  });
+
+  test('shows still-analysing while the poll reports work outstanding', async () => {
+    // Fails if EventDetailScreen ever goes back to hardcoding progress -- the
+    // placeholder it replaced made settled === total permanently true, so
+    // "still analysing" could never render in production. A placeholder is
+    // only safely temporary if something fails when it outlives its purpose.
+    const event: EventDetail = {
+      ...buildEvent(),
+      partners: [
+        {
+          id: 'p1', slot: 1, display_name: 'Noa', user_id: null,
+          connection: { status: 'connected' },
+          profile: { partnerId: 'p1', computedAt: '2026-08-30T10:00:00Z', topArtists: [] },
+        },
+        {
+          id: 'p2', slot: 2, display_name: 'Eitan', user_id: null,
+          connection: { status: 'connected' },
+          profile: { partnerId: 'p2', computedAt: '2026-08-30T10:00:00Z', topArtists: [] },
+        },
+      ],
+    };
+
+    vi.stubGlobal('fetch', vi.fn(async () =>
+      Response.json({ remaining: 18, settled: 12, total: 30 })));
+
+    render(<EventDetailScreen event={event} viewer={{ role: 'dj' }} />);
+    expect(await screen.findByText(/still analysing/i)).toBeInTheDocument();
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
   });
 });

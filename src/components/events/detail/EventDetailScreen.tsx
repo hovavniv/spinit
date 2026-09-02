@@ -12,7 +12,7 @@ import {
 import { savePrivateNotes, saveSharedNotes } from '@/lib/events/notesActions';
 import { StepHeader } from './StepHeader';
 import { StreamingSection, type StreamingConnections } from './StreamingSection';
-import { TasteProfile } from './TasteProfile';
+import { TasteProfileClient } from './TasteProfileClient';
 import { CeremonySongs } from './CeremonySongs';
 import { MustPlaySection } from './MustPlaySection';
 import { BlocklistSection } from './BlocklistSection';
@@ -66,18 +66,14 @@ export function EventDetailScreen({ event, viewer }: EventDetailScreenProps) {
         <StreamingSection partners={event.partners} connections={connections} viewer={viewer} />
 
         {partner1 && partner2 && (
-          <TasteProfile
-            partner1={{ name: partner1.display_name, profile: partner1.profile }}
-            partner2={{ name: partner2.display_name, profile: partner2.profile }}
+          // TasteProfileClient (plan task 10) polls each partner's own
+          // enrichment queue and combines the two into the one `progress`
+          // TasteProfile expects -- see that file's header comment for the
+          // combination rule, which nothing in the plan or design specifies.
+          <TasteProfileClient
+            partner1={partner1}
+            partner2={partner2}
             genresByArtistId={event.genresByArtistId}
-            // Placeholder until plan task 10 wires useEnrichmentPoll's real
-            // settled/total (queueCounts, per partner, is not yet combined
-            // for a couple anywhere in this codebase). A nonzero equal pair
-            // keeps TasteProfile in its "queue drained" state so the genre
-            // panels reflect whatever `genresByArtistId` already holds,
-            // without this task inventing enrichment-queue arithmetic it
-            // does not own.
-            progress={{ settled: 1, total: 1 }}
           />
         )}
 
