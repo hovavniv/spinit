@@ -1,5 +1,6 @@
 import 'server-only';
 import { GenreError, type GenreErrorKind } from './errors';
+import type { Tag } from './types';
 
 const BASE = 'https://ws.audioscrobbler.com/2.0/';
 
@@ -27,12 +28,6 @@ function classify(status: number): GenreErrorKind {
 
 function wait(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-/** The client's output contract: every consumer can trust `count: number`. */
-interface LastfmTag {
-  name: string;
-  count: number;
 }
 
 /** The wire shape. Last.fm sends `count` as a STRING -- coerced to `LastfmTag`
@@ -99,7 +94,7 @@ async function lastfmFetch(url: URL): Promise<unknown> {
  * other `error` code, and a 200 missing the `toptags` key entirely, means
  * Last.fm did not do the lookup we asked for and is 'unavailable'.
  */
-export async function topTagsByMbid(mbid: string): Promise<LastfmTag[]> {
+export async function topTagsByMbid(mbid: string): Promise<Tag[]> {
   const apiKey = process.env.LASTFM_API_KEY;
   if (!apiKey) {
     throw new GenreError('unavailable', 'lastfm api key not configured');
