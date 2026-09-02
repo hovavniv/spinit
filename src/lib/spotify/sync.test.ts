@@ -277,3 +277,42 @@ it('throws when the taste_profiles upsert admits zero rows', async () => {
   profileUpsertSelect.mockResolvedValue({ data: [], error: null });
   await expect(syncTasteProfile('p1')).rejects.toThrow(/taste_profiles upsert wrote no row/);
 });
+
+/**
+ * FIX-SPEC BLOCKER 2. design §2.11: "the top 20 by artistScore" -- the queue
+ * must never track the whole merged list (up to ~150 artists), or the
+ * enrichment ladder's 2s-per-artist MusicBrainz pacing turns one sync into
+ * 5+ minutes and 300+ outbound calls for a report that renders four genre
+ * bars.
+ */
+it('queues at most 20 artists even when the profile has 150', async () => {
+  queueSelectEq.mockResolvedValue({ data: [], error: null });
+  freshArtists(Array.from({ length: 150 }, (_, i) => `a${i}`));
+  await syncTasteProfile('p1');
+  expect(queueInsertMock.mock.calls[0][0]).toHaveLength(20);
+});
+
+/**
+ * DEVIATION FROM THE SPEC'S PASTED FIXTURE: the spec's literal test mocks
+ * `existingArtistIds` to `new Set(['a0'])` against a 150-artist fresh list
+ * and asserts `settleMany` is called with `[]`. That assertion holds
+ * identically whether the stale diff is computed against the CAPPED top-20
+ * set or the full uncapped 150 -- 'a0' (rank 0) is inside both, so it is
+ * never stale either way, and the test cannot distinguish the two
+ * implementations. Rebuilt here so it actually depends on the cap: 'a0' is
+ * inside the top 20 and stays fresh either way, but 'a50' was queued by an
+ * earlier sync (rank 50, now outside QUEUE_DEPTH) -- comparing against the
+ * capped set correctly settles it as stale; comparing against the uncapped
+ * list (a50 is still present in the full merged list, just past the cap)
+ * would never settle it.
+ */
+it('settles a previously-queued artist that fell outside the top-20 window, ' +
+   'not one still inside it', async () => {
+  queueSelectEq.mockResolvedValue({
+    data: [{ artist_id: 'a0' }, { artist_id: 'a50' }],
+    error: null,
+  });
+  freshArtists(Array.from({ length: 150 }, (_, i) => `a${i}`));
+  await syncTasteProfile('p1');
+  expect(queueUpdateIn).toHaveBeenCalledWith('artist_id', ['a50']);
+});

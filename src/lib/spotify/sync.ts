@@ -9,6 +9,16 @@ import type { TimeRange } from './tasteTypes';
 
 const RANGES: TimeRange[] = ['short_term', 'medium_term', 'long_term'];
 
+/**
+ * design §2.11 line 810: "sync.ts writes it in phase 1 -- the top 20 by
+ * artistScore." Without this cap, sync.ts seeded ALL of a partner's merged
+ * top-artist list (up to ~150, three ranges at up to 50 each) into
+ * enrichment_queue -- at the ladder's 2s MusicBrainz pacing, 5+ minutes and
+ * 300+ outbound calls per partner against two free, rate-limited APIs, for a
+ * report that renders four genre bars.
+ */
+const QUEUE_DEPTH = 20;
+
 interface SpotifyArtist {
   id: string;
   name: string;
@@ -83,12 +93,22 @@ export async function syncTasteProfile(partnerId: string): Promise<void> {
     // comment and the "three rules" recorded there (never un-settle, seed
     // position from rank, never renumber an existing row).
     const existingIds = await existingArtistIds(partnerId);
-    const freshIds = new Set(topArtists.map((a) => a.id));
+
+    // The queue only ever tracks the top QUEUE_DEPTH artists (design §2.11:
+    // "the top 20 by artistScore"), computed ONCE and used for BOTH the
+    // insert below and the stale diff -- comparing the stale diff against the
+    // uncapped `topArtists` instead would leave an artist ranked 21+ that a
+    // PRE-cap sync already queued (or an artist that fell out of the top 20
+    // between syncs while staying on the full merged list) looking "still
+    // fresh" forever, so it would never settle even though the capped queue
+    // no longer tracks it.
+    const cappedArtists = topArtists.slice(0, QUEUE_DEPTH);
+    const freshIds = new Set(cappedArtists.map((a) => a.id));
 
     const staleIds = [...existingIds].filter((id) => !freshIds.has(id));
     await settleMany(partnerId, staleIds);
 
-    const newRows = topArtists
+    const newRows = cappedArtists
       .map((artist, position) => ({ artistId: artist.id, position }))
       .filter((row) => !existingIds.has(row.artistId));
     await insertQueueRows(partnerId, newRows);
