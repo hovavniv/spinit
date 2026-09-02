@@ -33,6 +33,18 @@ export interface EnrichDeps {
 // the "a failed WRITE surfaces as failed" test (and, more directly, its sibling assertion that
 // `written.genres` is `undefined` on the error path) only holds if the row genuinely lacks the
 // key, not if it is set to `{}`.
+// DEVIATION (second one): `attempts` and `last_attempt_at` are ALSO optional here, and
+// `enrichArtist` never writes them at all -- ownership moved entirely to `releaseClaim`
+// (queueDal.ts) after a real bug was found: `baseRow` used to write `attempts: 1`
+// unconditionally on every failed attempt, while `releaseClaim` reads-then-increments the
+// stored value. Both writers fire on every transient failure (they are not mutually
+// exclusive -- `writeGenres` runs inside `enrichArtist` regardless of what the route calls
+// afterwards), so the sequence was: writeGenres resets to 1, releaseClaim reads 1 and writes
+// 2, forever -- `attempts` pinned at 2 for the rest of the artist's life, and the backoff
+// (`2^attempts` minutes) frozen at 4 minutes instead of growing. `writeGenres` owns what the
+// artist IS (genres, status, musicbrainz_*); `releaseClaim` owns how the RETRYING is going
+// (attempts, last_attempt_at, the queue's claimed_at). supabase-js's upsert only writes the
+// columns provided, so omitting these here leaves whatever `releaseClaim` last stored alone.
 export interface ArtistGenresRow {
   event_id: string;
   spotify_artist_id: string;
@@ -44,14 +56,14 @@ export interface ArtistGenresRow {
   origins?: Record<string, number>; // FacetedTags is the in-memory shape,
   eras?: Record<string, number>; // never the row shape
   resolved_via?: 'mbid' | 'alias' | 'spotify_name' | 'none' | null;
-  attempts: number;
-  last_attempt_at: string;
+  attempts?: number; // owned by releaseClaim, not written here -- see above
+  last_attempt_at?: string; // owned by releaseClaim, not written here -- see above
   fetched_at?: string | null;
 }
 
 function baseRow(input: EnrichInput, mbid: string | null, mbName: string | null): Pick<
   ArtistGenresRow,
-  'event_id' | 'spotify_artist_id' | 'artist_name' | 'musicbrainz_id' | 'musicbrainz_name' | 'attempts' | 'last_attempt_at'
+  'event_id' | 'spotify_artist_id' | 'artist_name' | 'musicbrainz_id' | 'musicbrainz_name'
 > {
   return {
     event_id: input.eventId,
@@ -59,8 +71,6 @@ function baseRow(input: EnrichInput, mbid: string | null, mbName: string | null)
     artist_name: input.name,
     musicbrainz_id: mbid,
     musicbrainz_name: mbName,
-    attempts: 1,
-    last_attempt_at: new Date().toISOString(),
   };
 }
 

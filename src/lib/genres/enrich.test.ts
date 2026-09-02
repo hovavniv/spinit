@@ -132,4 +132,24 @@ describe('enrichArtist', () => {
     const d = deps({ writeGenres: vi.fn(async (_r: unknown) => ({ rowCount: 0 })) });
     await expect(enrichArtist(IN, d)).resolves.toMatchObject({ status: 'failed' });
   });
+
+  it('does NOT write attempts or last_attempt_at -- releaseClaim owns those', async () => {
+    // Both writers fire on every transient failure (writeGenres runs inside
+    // enrichArtist regardless of what the route calls afterwards), so if
+    // this file also wrote attempts, it would collide with releaseClaim's
+    // read-then-increment and pin the backoff at a fixed value forever --
+    // exactly the bug this test exists to prevent from coming back.
+    const d = deps({
+      topTagsByMbid: vi.fn(async (_m: string) => {
+        throw new GenreError('unavailable', 'x');
+      }),
+    });
+    await enrichArtist(IN, d);
+    const row = (d.writeGenres as ReturnType<typeof vi.fn>).mock.calls[0][0] as Record<
+      string,
+      unknown
+    >;
+    expect(row).not.toHaveProperty('attempts');
+    expect(row).not.toHaveProperty('last_attempt_at');
+  });
 });

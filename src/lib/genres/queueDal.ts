@@ -47,16 +47,28 @@ export async function settle(partnerId: string, artistId: string): Promise<{ row
  * function's own parameters carry no event id -- it is looked up from
  * `event_partners` first.
  *
- * CONCERN (flagged, not resolved here): `enrichArtist`'s own failure path
- * (enrich.ts) already writes `attempts: 1` unconditionally on every failed
- * attempt via `writeGenres`, rather than incrementing whatever was already
- * there. If a future route (task 7) calls both `writeGenres` (indirectly,
- * inside `enrichArtist`) AND this function for the same failure, the two
- * attempts-tracking writes can disagree -- this function increments the
- * CURRENT stored value, `enrichArtist`'s own write resets it to 1. That
- * inconsistency is not introduced or fixed here; it depends on how task 7
- * (not visible from this task) actually sequences the two calls, and on
- * "fix 9" referenced in the plan, which is also not visible from here.
+ * RESOLVED bug, not just a flagged concern: `enrichArtist`'s failure path
+ * (enrich.ts) used to write `attempts: 1` unconditionally via `writeGenres`
+ * on EVERY failed attempt, while this function reads-then-increments. Both
+ * writers fire on every transient failure -- they are not mutually exclusive,
+ * `writeGenres` runs inside `enrichArtist` regardless of what the route calls
+ * afterwards -- so the sequence was: writeGenres resets to 1, this function
+ * reads 1 and writes 2, forever. `attempts` pinned at 2 for the rest of the
+ * artist's life, and the backoff (`2^attempts` minutes) frozen at 4 minutes
+ * instead of growing -- the exact hot-loop retry storm the backoff exists to
+ * prevent, defeated by pinning its input rather than omitting the clause, so
+ * it looked correct in review. Fixed by removing `attempts`/`last_attempt_at`
+ * from `enrich.ts`'s write entirely: `writeGenres` now owns only what the
+ * artist IS, this function owns how the RETRYING is going. See `enrich.ts`'s
+ * `ArtistGenresRow` comment for the full account.
+ *
+ * BOUNDED ASSUMPTION, not fixed: the read-then-increment above is not
+ * atomic. Safe only because `claim_next_artist` sets `claimed_at = now()` on
+ * claim and its own reclaim window is 2 minutes, so two workers cannot hold
+ * the same (partner, artist) claim concurrently -- unless a single
+ * enrichment run exceeds 2 minutes, which the route's `maxDuration = 30`
+ * (task 7) makes impossible. If that duration budget ever changes, this
+ * assumption needs re-checking.
  *
  * Reports the `enrichment_queue` update's row count -- that is the row this
  * function is nominally "releasing"; the caller has no stated need for a
