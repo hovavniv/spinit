@@ -75,6 +75,7 @@ function buildEvent(): EventDetail {
       },
     ],
     genresByArtistId: {},
+    enrichmentProgress: { settled: 0, total: 0 },
   };
 }
 
@@ -271,6 +272,73 @@ describe('EventDetailScreen', () => {
 
     render(<EventDetailScreen event={event} viewer={{ role: 'dj' }} />);
     expect(await screen.findByText(/still analysing/i)).toBeInTheDocument();
+  });
+
+  describe('DJ progress comes from the server, not from polling (fix-spec Blocker 1)', () => {
+    // Every fixture below gives both partners a `connected` connection and a
+    // non-null profile so TasteProfileClient actually calls useEnrichmentPoll
+    // for both -- the DJ path this bug lived on.
+    function connectedPartners(artistId: string) {
+      const profile = (partnerId: string) => ({
+        partnerId,
+        computedAt: '2026-08-30T10:00:00Z',
+        topArtists: [
+          { id: artistId, name: 'Artist', artworkUrl: null, score: 1, ranges: ['medium_term' as const] },
+        ],
+      });
+      return [
+        {
+          id: 'p1', slot: 1 as const, display_name: 'Noa', user_id: null,
+          connection: { status: 'connected' as const }, profile: profile('p1'),
+        },
+        {
+          id: 'p2', slot: 2 as const, display_name: 'Eitan', user_id: null,
+          connection: { status: 'connected' as const }, profile: profile('p2'),
+        },
+      ];
+    }
+
+    test('renders genre panels for the DJ, who cannot poll enrich-next', async () => {
+      const ARTIST_ID = 'artist-1';
+
+      // The DJ's poll gets 403 on both partners -- useEnrichmentPoll stops and
+      // its `progress` stays null forever. If TasteProfileClient still summed
+      // only the two polls, this would render nothing genre-shaped no matter
+      // what the server read said.
+      vi.stubGlobal('fetch', vi.fn(async () => new Response('forbidden', { status: 403 })));
+
+      const event: EventDetail = {
+        ...buildEvent(),
+        partners: connectedPartners(ARTIST_ID),
+        genresByArtistId: { [ARTIST_ID]: { mizrahi: 100 } },
+        enrichmentProgress: { settled: 4, total: 4 },
+      };
+
+      render(<EventDetailScreen event={event} viewer={{ role: 'dj' }} />);
+
+      expect(await screen.findByTestId('genre-bar')).toBeInTheDocument();
+      expect(screen.queryByText(/still analysing/i)).not.toBeInTheDocument();
+    });
+
+    test('still shows analysing to the DJ while the queue is unfinished', () => {
+      // Proves the server value is READ, not that panels always render.
+      // Stubbed to 403 (same as the test above) purely so the effect's real
+      // fetch never actually leaves the process -- the assertion below runs
+      // synchronously right after render, before either poll can have
+      // resolved anything, so `progress` can only have come from
+      // `enrichmentProgress` regardless of what the stub returns.
+      vi.stubGlobal('fetch', vi.fn(async () => new Response('forbidden', { status: 403 })));
+
+      const event: EventDetail = {
+        ...buildEvent(),
+        partners: connectedPartners('artist-unused'),
+        enrichmentProgress: { settled: 1, total: 4 },
+      };
+
+      render(<EventDetailScreen event={event} viewer={{ role: 'dj' }} />);
+
+      expect(screen.getByText(/still analysing/i)).toBeInTheDocument();
+    });
   });
 
   afterEach(() => {

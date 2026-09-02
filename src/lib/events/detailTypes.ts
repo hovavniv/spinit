@@ -109,4 +109,12 @@ export interface EventDetail {
    * first thing that reads this.
    */
   genresByArtistId: Record<string, Record<string, number>>;
+  /**
+   * `enrichment_queue` counts for BOTH partners, summed (fix-spec Blocker 1).
+   * The DJ cannot poll `/api/spotify/enrich-next` (partner-only by design),
+   * so this server-computed value is the ONLY way the DJ's `TasteProfile`
+   * ever sees real progress -- `TasteProfileClient` seeds from this and lets
+   * a successful poll (partner viewers only) override it.
+   */
+  enrichmentProgress: { settled: number; total: number };
 }

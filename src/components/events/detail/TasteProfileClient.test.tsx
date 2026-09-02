@@ -46,6 +46,7 @@ describe('TasteProfileClient', () => {
         partner1={connectedPartner({ id: 'partner-1', display_name: 'Maya' })}
         partner2={connectedPartner({ id: 'partner-2', display_name: 'Chris' })}
         genresByArtistId={{}}
+        enrichmentProgress={{ settled: 0, total: 0 }}
       />,
     );
 
@@ -66,6 +67,7 @@ describe('TasteProfileClient', () => {
           id: 'partner-2', display_name: 'Chris', connection: null,
         })}
         genresByArtistId={{}}
+        enrichmentProgress={{ settled: 0, total: 0 }}
       />,
     );
 

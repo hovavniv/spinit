@@ -74,6 +74,7 @@ export function EventDetailScreen({ event, viewer }: EventDetailScreenProps) {
             partner1={partner1}
             partner2={partner2}
             genresByArtistId={event.genresByArtistId}
+            enrichmentProgress={event.enrichmentProgress}
           />
         )}
 

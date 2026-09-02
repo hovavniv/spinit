@@ -98,6 +98,33 @@ export const getEventDetail = cache(async (eventId: string): Promise<EventDetail
     genresByArtistId[row.spotify_artist_id] = row.genres;
   }
 
+  // enrichment_queue counts for BOTH partners, summed into one server-side
+  // progress value (fix spec Blocker 1). `useEnrichmentPoll` is partner-only
+  // by design (a DJ's `taste_profiles` write would be a silent zero-row
+  // no-op under RLS), so the DJ never gets a successful poll and, before this
+  // read existed, `progress` stayed `{0, 0}` forever for that viewer --
+  // `TasteProfile`'s `total === 0` branch then reads as "nobody has connected
+  // yet" even when both partners are fully enriched. RLS admits the DJ to
+  // `enrichment_queue` the same way it admits them to `artist_genres` above,
+  // so this read (unlike the poll route) works for every viewer this page
+  // admits.
+  const partnerIds = (data.event_partners ?? []).map((p) => (p as { id: string }).id);
+  const queue =
+    partnerIds.length > 0
+      ? await supabase.from('enrichment_queue').select('partner_id, settled_at').in('partner_id', partnerIds)
+      : { data: [] as { partner_id: string; settled_at: string | null }[], error: null };
+
+  if (queue.error) {
+    throw new Error(`enrichment_queue read failed: ${queue.error.code}`);
+  }
+
+  let settled = 0;
+  let total = 0;
+  for (const row of queue.data ?? []) {
+    total += 1;
+    if ((row as { settled_at: string | null }).settled_at !== null) settled += 1;
+  }
+
   return {
     id: data.id,
     dj_id: data.dj_id,
@@ -121,6 +148,7 @@ export const getEventDetail = cache(async (eventId: string): Promise<EventDetail
     mustPlay: data.event_must_play ?? [],
     blocklist: data.event_blocklist ?? [],
     genresByArtistId,
+    enrichmentProgress: { settled, total },
   };
 });
 
