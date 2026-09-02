@@ -27,6 +27,28 @@ describe('musicbrainz', () => {
         .toContain(encodeURIComponent('https://open.spotify.com/artist/0LcJLqbBmaGUft1e9Mm8HV'));
     });
 
+  // Real MusicBrainz response, harvested 2026-09-02:
+  // GET /ws/2/url?resource=https://open.spotify.com/artist/66CXWjxzNUsdJxJ2JdwvnR
+  //   &inc=artist-rels&fmt=json  (Ariana Grande). An earlier, INVENTED version
+  // of this fixture put `resource` on each relation (`relation.url.resource`)
+  // -- the real shape has no `url` field on a relation at all; `resource` is
+  // top-level, since the endpoint is a lookup BY that resource and every
+  // relation returned already belongs to it. The invented fixture and the
+  // implementation it was tested against were wrong in the SAME way, so this
+  // test passed while `mbidForSpotifyArtist` returned null for every real
+  // artist ever enriched -- caught only when a live manual walk produced
+  // `resolved_via: 'spotify_name'` for 4/4 real, easily-MBID-resolvable
+  // artists. See the fix and its comment in musicbrainz.ts.
+  const REAL_URL_LOOKUP_BODY = {
+    relations: [{
+      type: 'free streaming',
+      'target-type': 'artist',
+      artist: { id: 'f4fdbb4c-e4b7-47a0-b83b-d91bbfcfa387', name: 'Ariana Grande' },
+    }],
+    resource: 'https://open.spotify.com/artist/66CXWjxzNUsdJxJ2JdwvnR',
+    id: '67420a46-c084-4b9c-b3df-e88b5512477a',
+  };
+
   it('treats a 503 as an ERROR even when the body is a perfectly good response', async () => {
     // The body is deliberately VALID -- a real relation, correctly shaped.
     // The ONLY thing wrong is the status code, so this is invalid in
@@ -37,13 +59,9 @@ describe('musicbrainz', () => {
     // check caught it independently and the test passed whether or not the
     // status was ever read.
     const f = vi.fn(async (_i: RequestInfo | URL, _init?: RequestInit) =>
-      new Response(JSON.stringify({ relations: [{
-        type: 'free streaming',
-        url: { resource: 'https://open.spotify.com/artist/0LcJLqbBmaGUft1e9Mm8HV' },
-        artist: { id: 'b1e2c3d4-0000-4000-8000-000000000001' },
-      }] }), { status: 503 }));
+      new Response(JSON.stringify(REAL_URL_LOOKUP_BODY), { status: 503 }));
     vi.stubGlobal('fetch', f);
-    await expect(mbidForSpotifyArtist('0LcJLqbBmaGUft1e9Mm8HV'))
+    await expect(mbidForSpotifyArtist('66CXWjxzNUsdJxJ2JdwvnR'))
       .rejects.toMatchObject({ kind: 'unavailable' });
     // A persistent 503 must terminate as an error, not retry forever --
     // exactly two attempts (the one retry mbFetch allows), then throw.
@@ -61,15 +79,14 @@ describe('musicbrainz', () => {
 
   it('returns the MBID from a real spotify relation', async () => {
     // The happy path. Without it, every other test in this file passes against
-    // an implementation that returns null unconditionally.
+    // an implementation that returns null unconditionally -- which is exactly
+    // what shipped once, undetected, because the fixture used to be invented
+    // in the same wrong shape as the bug. Real harvested body now (see
+    // REAL_URL_LOOKUP_BODY above).
     vi.stubGlobal('fetch', vi.fn(async (_i: RequestInfo | URL, _init?: RequestInit) =>
-      new Response(JSON.stringify({ relations: [{
-        type: 'free streaming',
-        url: { resource: 'https://open.spotify.com/artist/0LcJLqbBmaGUft1e9Mm8HV' },
-        artist: { id: 'b1e2c3d4-0000-4000-8000-000000000001' },
-      }] }), { status: 200 })));
-    await expect(mbidForSpotifyArtist('0LcJLqbBmaGUft1e9Mm8HV'))
-      .resolves.toBe('b1e2c3d4-0000-4000-8000-000000000001');
+      new Response(JSON.stringify(REAL_URL_LOOKUP_BODY), { status: 200 })));
+    await expect(mbidForSpotifyArtist('66CXWjxzNUsdJxJ2JdwvnR'))
+      .resolves.toBe('f4fdbb4c-e4b7-47a0-b83b-d91bbfcfa387');
   });
 
   it('returns null — not an error — when the artist genuinely has no link', async () => {

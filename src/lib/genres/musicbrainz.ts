@@ -83,12 +83,13 @@ async function mbFetch(url: URL): Promise<unknown> {
 
 interface MbRelation {
   type?: string;
-  url?: { resource?: string };
+  'target-type'?: string;
   artist?: { id?: string };
 }
 
 interface MbUrlLookup {
   relations?: MbRelation[];
+  resource?: string;
 }
 
 /**
@@ -100,6 +101,19 @@ interface MbUrlLookup {
  *
  * The canonical form matters: a Spotify URL carrying an `intl-xx` segment or
  * query string does not match MusicBrainz's `resource=` exactly.
+ *
+ * BUG FOUND LIVE, NOT IN REVIEW: an earlier version matched
+ * `r.url?.resource === canonical` -- a relation object has NO `url` field.
+ * `resource` sits at the TOP LEVEL of the response (this endpoint is a
+ * lookup BY that resource, so every relation returned already belongs to
+ * it). That earlier check was `undefined === canonical`, always false, so
+ * `mbidForSpotifyArtist` returned null for every artist ever enriched and
+ * the ladder fell through to the by-name fallback every time -- the exact
+ * ambiguous path §2.10 exists to avoid. Verified against a real response
+ * (`GET /ws/2/url?resource=...&inc=artist-rels`, Ariana Grande's Spotify id)
+ * before writing this fix, not from the fixture that had encoded the same
+ * wrong shape. Filtering on `type` + `target-type` is sufficient because the
+ * query is already scoped to this one resource.
  */
 export async function mbidForSpotifyArtist(spotifyArtistId: string): Promise<string | null> {
   const canonical = `https://open.spotify.com/artist/${spotifyArtistId}`;
@@ -117,7 +131,7 @@ export async function mbidForSpotifyArtist(spotifyArtistId: string): Promise<str
   }
 
   const match = body.relations.find(
-    (r) => r.type === 'free streaming' && r.url?.resource === canonical,
+    (r) => r.type === 'free streaming' && r['target-type'] === 'artist' && r.artist?.id,
   );
   return match?.artist?.id ?? null;
 }
