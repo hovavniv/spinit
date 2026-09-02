@@ -7,6 +7,7 @@ import {
   type DashboardEventRow,
   type PastEventCountRow,
 } from './fromDb';
+import type { CoupleStatus } from './types';
 
 function row(overrides: Partial<DashboardEventRow> = {}): DashboardEventRow {
   return {
@@ -17,8 +18,22 @@ function row(overrides: Partial<DashboardEventRow> = {}): DashboardEventRow {
     status: 'upcoming',
     phase: 'cocktails',
     start_time: null,
-    couple_status: 'awaiting-couple',
+    event_partners: [],
     ...overrides,
+  };
+}
+
+/**
+ * Builds the `event_partners` embed for a row: one entry per argument, each
+ * either a connection status string or `null` for "no connection row yet".
+ * `spotify_connections` embeds to-one (object or null), never an array —
+ * see the comment on `EventPartnerRow` in fromDb.ts.
+ */
+function partners(...statuses: (string | null)[]): Partial<DashboardEventRow> {
+  return {
+    event_partners: statuses.map((s) => ({
+      spotify_connections: s === null ? null : { status: s as 'invited' | 'connected' | 'failed' },
+    })),
   };
 }
 
@@ -81,7 +96,7 @@ describe('toUpcomingEvents', () => {
         venue: 'Brookline Barn',
         event_date: '2026-09-12',
         status: 'upcoming',
-        couple_status: 'streaming-connected',
+        ...partners('connected', 'connected'),
       }),
       row({ id: 'done', status: 'completed' }),
       row({ id: 'sketch', status: 'draft' }),
@@ -105,10 +120,10 @@ describe('toUpcomingEvents', () => {
     expect(toUpcomingEvents(rows).map((event) => event.id)).toEqual(['b', 'a']);
   });
 
-  it('carries both couple_status values through unchanged', () => {
+  it('derives couple_status independently per row within one batch', () => {
     const rows = [
-      row({ id: 'one', couple_status: 'streaming-connected' }),
-      row({ id: 'two', couple_status: 'awaiting-couple' }),
+      row({ id: 'one', ...partners('connected', 'connected') }),
+      row({ id: 'two', ...partners('connected', null) }),
     ];
     expect(toUpcomingEvents(rows).map((event) => event.status)).toEqual([
       'streaming-connected',
@@ -118,6 +133,48 @@ describe('toUpcomingEvents', () => {
 
   it('returns an empty array for a DJ with no events', () => {
     expect(toUpcomingEvents([])).toEqual([]);
+  });
+
+  describe('couple_status derivation', () => {
+    it.each<[string, (string | null)[], CoupleStatus]>([
+      [
+        'is streaming-connected only when BOTH partners are connected',
+        ['connected', 'connected'],
+        'streaming-connected',
+      ],
+      [
+        'is awaiting-couple when only one partner is connected',
+        ['connected', null],
+        'awaiting-couple',
+      ],
+      [
+        // 'failed' and 'invited' are both rows -- presence is not connectedness.
+        "is awaiting-couple when a partner's connection exists but FAILED",
+        ['connected', 'failed'],
+        'awaiting-couple',
+      ],
+      [
+        // A half-set-up event must not read as connected just because its
+        // single slot is. Count connected partners, never "no partner is
+        // unconnected" (every() over a 1-element array is vacuously true).
+        'is awaiting-couple when the event has only ONE partner slot',
+        ['connected'],
+        'awaiting-couple',
+      ],
+      [
+        'is awaiting-couple when the event has no partner slots at all',
+        [],
+        'awaiting-couple',
+      ],
+      [
+        'ignores a third partner row rather than throwing',
+        ['connected', 'connected', 'invited'],
+        'streaming-connected',
+      ],
+    ])('%s', (_description, statuses, expected) => {
+      const [event] = toUpcomingEvents([row(partners(...statuses))]);
+      expect(event.status).toBe(expected);
+    });
   });
 });
 

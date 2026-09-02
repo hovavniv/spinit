@@ -22,6 +22,7 @@ import {
   disconnect,
   withUserToken,
   partnerOwner,
+  partnerContext,
 } from './connectionDal';
 
 /**
@@ -298,4 +299,25 @@ describe('partnerOwner', () => {
     partnerSingle.mockResolvedValue({ data: null, error: { code: 'PGRST116' } });
     await expect(partnerOwner('missing')).resolves.toBeNull();
   });
+});
+
+describe('partnerContext', () => {
+  it('resolves the user_id and event_id together', async () => {
+    partnerSingle.mockResolvedValue({ data: { user_id: 'owner-1', event_id: 'e-1' }, error: null });
+    await expect(partnerContext('p1')).resolves.toEqual({ userId: 'owner-1', eventId: 'e-1' });
+  });
+
+  it('resolves null when the partner row does not exist', async () => {
+    partnerSingle.mockResolvedValue({ data: null, error: { code: 'PGRST116' } });
+    await expect(partnerContext('missing')).resolves.toBeNull();
+  });
+
+  it(
+    'refuses an unclaimed partner slot -- user_id is nullable -- ' +
+      'resolves { userId: null, eventId } rather than treating it like a missing row',
+    async () => {
+      partnerSingle.mockResolvedValue({ data: { user_id: null, event_id: 'e-1' }, error: null });
+      await expect(partnerContext('p1')).resolves.toEqual({ userId: null, eventId: 'e-1' });
+    },
+  );
 });

@@ -15,12 +15,17 @@ const profile = (ids: string[]): TasteProfileType => ({
   })),
 });
 
+const noGenres = {};
+const noProgress = { settled: 0, total: 0 };
+
 describe('TasteProfile', () => {
   it('renders the outstanding partner by name when only one has a profile', () => {
     render(
       <TasteProfile
         partner1={{ name: 'Maya', profile: profile(['a']) }}
         partner2={{ name: 'Chris', profile: null }}
+        genresByArtistId={noGenres}
+        progress={noProgress}
       />,
     );
     expect(screen.getByText(/chris/i)).toBeInTheDocument();
@@ -32,6 +37,8 @@ describe('TasteProfile', () => {
       <TasteProfile
         partner1={{ name: 'Maya', profile: profile(['a', 'b']) }}
         partner2={{ name: 'Chris', profile: profile(['b', 'c']) }}
+        genresByArtistId={noGenres}
+        progress={noProgress}
       />,
     );
     expect(screen.getByText(/music match/i)).toBeInTheDocument();
@@ -39,23 +46,13 @@ describe('TasteProfile', () => {
     expect(screen.getByText('Artist b')).toBeInTheDocument();
   });
 
-  it('renders NO genre panel at all in C1 — not even a waiting state', () => {
-    render(
-      <TasteProfile
-        partner1={{ name: 'Maya', profile: profile(['a']) }}
-        partner2={{ name: 'Chris', profile: profile(['a']) }}
-      />,
-    );
-    expect(screen.queryByText(/top genres/i)).not.toBeInTheDocument();
-    expect(screen.queryByText(/steer clear/i)).not.toBeInTheDocument();
-    expect(screen.queryByText(/still analysing/i)).not.toBeInTheDocument();
-  });
-
   it('says "not enough listening history" rather than 0% when noData is set', () => {
     render(
       <TasteProfile
         partner1={{ name: 'Maya', profile: profile([]) }}
         partner2={{ name: 'Chris', profile: profile([]) }}
+        genresByArtistId={noGenres}
+        progress={noProgress}
       />,
     );
     expect(screen.getByText(/not enough listening history/i)).toBeInTheDocument();
@@ -67,6 +64,8 @@ describe('TasteProfile', () => {
       <TasteProfile
         partner1={{ name: 'Maya', profile: null }}
         partner2={{ name: 'Chris', profile: null }}
+        genresByArtistId={noGenres}
+        progress={noProgress}
       />,
     );
     expect(screen.getByText(/maya/i)).toBeInTheDocument();
@@ -79,6 +78,8 @@ describe('TasteProfile', () => {
       <TasteProfile
         partner1={{ name: 'Maya', profile: profile(['a', 'b']) }}
         partner2={{ name: 'Chris', profile: profile(['b', 'c']) }}
+        genresByArtistId={noGenres}
+        progress={noProgress}
       />,
     );
     expect(screen.getByText(/maya also loves/i)).toBeInTheDocument();
@@ -100,6 +101,8 @@ describe('TasteProfile', () => {
       <TasteProfile
         partner1={{ name: 'Maya', profile: profile(['a', 'b']) }}
         partner2={{ name: 'Chris', profile: profile(['b', 'c']) }}
+        genresByArtistId={noGenres}
+        progress={noProgress}
       />,
     );
 
@@ -112,5 +115,151 @@ describe('TasteProfile', () => {
     const chrisList = chrisHeading.nextElementSibling as HTMLElement;
     expect(within(chrisList).getByText('Artist c')).toBeInTheDocument();
     expect(within(chrisList).queryByText('Artist a')).not.toBeInTheDocument();
+  });
+
+  // --- Task 9: genre panels ---------------------------------------------
+
+  const genreArtist = (id: string, score: number) =>
+    ({ id, name: id, artworkUrl: null, score, ranges: ['medium_term' as const] });
+  const genreProfile = (id: string, artists: ReturnType<typeof genreArtist>[]) =>
+    ({ partnerId: id, computedAt: '2026-08-31T00:00:00Z', topArtists: artists });
+
+  const p1 = genreProfile('p1', [genreArtist('x', 3)]);
+  const p2 = genreProfile('p2', [genreArtist('y', 3)]);
+
+  it('shows "still analysing" while settled < total', () => {
+    render(
+      <TasteProfile
+        partner1={{ name: 'Maya', profile: p1 }}
+        partner2={{ name: 'Chris', profile: p2 }}
+        genresByArtistId={noGenres}
+        progress={{ settled: 4, total: 30 }}
+      />,
+    );
+    expect(screen.getByText(/still analysing/i)).toBeInTheDocument();
+    expect(screen.getByText('4 of 30')).toBeInTheDocument();
+  });
+
+  it('shows the genre bars once the queue is drained', () => {
+    // Deviation from the plan's literal snippet (unscoped screen.getByText):
+    // with this fixture (each partner's sole artist carries a DIFFERENT
+    // genre), mizrahi/pop are simultaneously the couple's pooled top genres
+    // AND asymmetric enough between the two partners to also qualify as
+    // "Only one of you" genres -- a real, intended product state (see the
+    // `SoloGenre` doc comment in tasteTypes.ts: this is exactly why the
+    // panel is framed as information, not a warning), not a bug. That means
+    // BOTH strings render twice on the page (once as a genre-bar, once as a
+    // solo-genre), which makes an unscoped getByText throw "multiple
+    // elements found" no matter how correct the implementation is. Scoping
+    // to the top-genres panel is what the test actually means to check.
+    render(
+      <TasteProfile
+        partner1={{ name: 'Maya', profile: p1 }}
+        partner2={{ name: 'Chris', profile: p2 }}
+        genresByArtistId={{ x: { mizrahi: 100 }, y: { pop: 100 } }}
+        progress={{ settled: 30, total: 30 }}
+      />,
+    );
+    const topGenres = screen.getByTestId('top-genres');
+    expect(within(topGenres).getByText('mizrahi')).toBeInTheDocument();
+    expect(within(topGenres).getByText('pop')).toBeInTheDocument();
+  });
+
+  it('renders at most four genre bars', () => {
+    const six = genreProfile('p1', [genreArtist('x', 3)]);
+    render(
+      <TasteProfile
+        partner1={{ name: 'Maya', profile: six }}
+        partner2={{ name: 'Chris', profile: p2 }}
+        genresByArtistId={{ x: { a: 6, b: 5, c: 4, d: 3, e: 2, f: 1 } }}
+        progress={{ settled: 30, total: 30 }}
+      />,
+    );
+    expect(screen.getAllByTestId('genre-bar')).toHaveLength(4);
+  });
+
+  it('says so plainly when enrichment finished and found nothing usable', () => {
+    render(
+      <TasteProfile
+        partner1={{ name: 'Maya', profile: p1 }}
+        partner2={{ name: 'Chris', profile: p2 }}
+        genresByArtistId={noGenres}
+        progress={{ settled: 30, total: 30 }}
+      />,
+    );
+    expect(screen.getByText(/couldn.t work out/i)).toBeInTheDocument();
+    expect(screen.queryByText(/still analysing/i)).not.toBeInTheDocument();
+  });
+
+  it('NEVER shows "still analysing" once settled === total, whatever the outcome', () => {
+    for (const genresByArtistId of [noGenres, { x: { pop: 100 } }]) {
+      const { unmount } = render(
+        <TasteProfile
+          partner1={{ name: 'Maya', profile: p1 }}
+          partner2={{ name: 'Chris', profile: p2 }}
+          genresByArtistId={genresByArtistId}
+          progress={{ settled: 30, total: 30 }}
+        />,
+      );
+      expect(screen.queryByText(/still analysing/i)).not.toBeInTheDocument();
+      unmount();
+    }
+  });
+
+  it('shows nothing genre-shaped when total is 0 -- nobody has connected yet', () => {
+    render(
+      <TasteProfile
+        partner1={{ name: 'Maya', profile: p1 }}
+        partner2={{ name: 'Chris', profile: p2 }}
+        genresByArtistId={noGenres}
+        progress={{ settled: 0, total: 0 }}
+      />,
+    );
+    expect(screen.queryByText(/still analysing/i)).not.toBeInTheDocument();
+    expect(screen.queryByTestId('genre-bar')).not.toBeInTheDocument();
+  });
+
+  it('renders soloGenres as its own "Only one of you" panel, distinct from top genres, capped at four', () => {
+    render(
+      <TasteProfile
+        partner1={{ name: 'Maya', profile: genreProfile('p1', [genreArtist('x', 3)]) }}
+        partner2={{ name: 'Chris', profile: genreProfile('p2', [genreArtist('y', 3)]) }}
+        genresByArtistId={{
+          x: { pop: 100, m1: 100, m2: 100, m3: 100, m4: 100, m5: 100 },
+          y: { pop: 100 },
+        }}
+        progress={{ settled: 30, total: 30 }}
+      />,
+    );
+    const solo = screen.getByTestId('solo-genres');
+    expect(within(solo).queryByText(/^pop/)).not.toBeInTheDocument(); // both partners have it
+    expect(within(solo).getAllByTestId('solo-genre')).toHaveLength(4); // six asymmetric, capped
+  });
+
+  it('names which partner listens, in the solo-genres copy', () => {
+    render(
+      <TasteProfile
+        partner1={{ name: 'Maya', profile: genreProfile('p1', [genreArtist('x', 3)]) }}
+        partner2={{ name: 'Chris', profile: genreProfile('p2', [genreArtist('y', 3)]) }}
+        genresByArtistId={{ x: { metal: 100 }, y: { pop: 100 } }}
+        progress={{ settled: 30, total: 30 }}
+      />,
+    );
+    const solo = screen.getByTestId('solo-genres');
+    expect(within(solo).getByText(/Maya listens, Chris doesn.t/)).toBeInTheDocument();
+  });
+
+  it('names the OTHER partner when the solo genre is partner2\'s, not always partner1\'s ' +
+     '(should-fix 15, mirrored from taste.test.ts)', () => {
+    render(
+      <TasteProfile
+        partner1={{ name: 'Maya', profile: genreProfile('p1', [genreArtist('x', 3)]) }}
+        partner2={{ name: 'Chris', profile: genreProfile('p2', [genreArtist('y', 3)]) }}
+        genresByArtistId={{ x: { pop: 100 }, y: { pop: 100, klezmer: 100 } }}
+        progress={{ settled: 30, total: 30 }}
+      />,
+    );
+    const solo = screen.getByTestId('solo-genres');
+    expect(within(solo).getByText(/Chris listens, Maya doesn.t/)).toBeInTheDocument();
   });
 });

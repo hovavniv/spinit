@@ -1,0 +1,194 @@
+import { describe, expect, it, vi, beforeEach } from 'vitest';
+import { englishAliasFor, mbidForSpotifyArtist } from './musicbrainz';
+
+const UA = /^Spinit\/[\d.]+ \( https:\/\/github\.com\/hovavniv\/spinit \)$/;
+
+describe('musicbrainz', () => {
+  beforeEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('sends a User-Agent — MusicBrainz BLOCKS requests without one', async () => {
+    const f = vi.fn(async (_i: RequestInfo | URL, _init?: RequestInit) =>
+      new Response(JSON.stringify({ relations: [] }), { status: 200 }));
+    vi.stubGlobal('fetch', f);
+    await mbidForSpotifyArtist('0LcJLqbBmaGUft1e9Mm8HV');
+    const headers = (f.mock.calls[0][1] as RequestInit).headers as Record<string, string>;
+    expect(headers['User-Agent']).toMatch(UA);
+  });
+
+  it('normalises the Spotify URL before asking — an intl- segment breaks exact match',
+    async () => {
+      const f = vi.fn(async (_i: RequestInfo | URL, _init?: RequestInit) =>
+        new Response(JSON.stringify({ relations: [] }), { status: 200 }));
+      vi.stubGlobal('fetch', f);
+      await mbidForSpotifyArtist('0LcJLqbBmaGUft1e9Mm8HV');
+      expect(String(f.mock.calls[0][0]))
+        .toContain(encodeURIComponent('https://open.spotify.com/artist/0LcJLqbBmaGUft1e9Mm8HV'));
+    });
+
+  // Real MusicBrainz response, harvested 2026-09-02:
+  // GET /ws/2/url?resource=https://open.spotify.com/artist/66CXWjxzNUsdJxJ2JdwvnR
+  //   &inc=artist-rels&fmt=json  (Ariana Grande). An earlier, INVENTED version
+  // of this fixture put `resource` on each relation (`relation.url.resource`)
+  // -- the real shape has no `url` field on a relation at all; `resource` is
+  // top-level, since the endpoint is a lookup BY that resource and every
+  // relation returned already belongs to it. The invented fixture and the
+  // implementation it was tested against were wrong in the SAME way, so this
+  // test passed while `mbidForSpotifyArtist` returned null for every real
+  // artist ever enriched -- caught only when a live manual walk produced
+  // `resolved_via: 'spotify_name'` for 4/4 real, easily-MBID-resolvable
+  // artists. See the fix and its comment in musicbrainz.ts.
+  const REAL_URL_LOOKUP_BODY = {
+    relations: [{
+      type: 'free streaming',
+      'target-type': 'artist',
+      artist: { id: 'f4fdbb4c-e4b7-47a0-b83b-d91bbfcfa387', name: 'Ariana Grande' },
+    }],
+    resource: 'https://open.spotify.com/artist/66CXWjxzNUsdJxJ2JdwvnR',
+    id: '67420a46-c084-4b9c-b3df-e88b5512477a',
+  };
+
+  it('treats a 503 as an ERROR even when the body is a perfectly good response', async () => {
+    // The body is deliberately VALID -- a real relation, correctly shaped.
+    // The ONLY thing wrong is the status code, so this is invalid in
+    // exactly one way: a status-blind implementation would parse this body,
+    // find a good relation, and return the MBID instead of throwing. An
+    // earlier draft used `{ error: 'currently busy' }`, which is ALSO
+    // missing the `relations` key -- invalid twice -- so the missing-key
+    // check caught it independently and the test passed whether or not the
+    // status was ever read.
+    const f = vi.fn(async (_i: RequestInfo | URL, _init?: RequestInit) =>
+      new Response(JSON.stringify(REAL_URL_LOOKUP_BODY), { status: 503 }));
+    vi.stubGlobal('fetch', f);
+    await expect(mbidForSpotifyArtist('66CXWjxzNUsdJxJ2JdwvnR'))
+      .rejects.toMatchObject({ kind: 'unavailable' });
+    // A persistent 503 must terminate as an error, not retry forever --
+    // exactly two attempts (the one retry mbFetch allows), then throw.
+    expect(f).toHaveBeenCalledTimes(2);
+  });
+
+  it('a 200 with a malformed body (no relations key) is an ERROR', async () => {
+    // Invalid in exactly one way: a valid status, a body that is not the
+    // shape asked for. Keeps this check pinned separately from the 503
+    // status check above, now that neither fixture is invalid twice.
+    vi.stubGlobal('fetch', vi.fn(async (_i: RequestInfo | URL, _init?: RequestInit) =>
+      new Response(JSON.stringify({ error: 'currently busy' }), { status: 200 })));
+    await expect(mbidForSpotifyArtist('x')).rejects.toMatchObject({ kind: 'unavailable' });
+  });
+
+  it('returns the MBID from a real spotify relation', async () => {
+    // The happy path. Without it, every other test in this file passes against
+    // an implementation that returns null unconditionally -- which is exactly
+    // what shipped once, undetected, because the fixture used to be invented
+    // in the same wrong shape as the bug. Real harvested body now (see
+    // REAL_URL_LOOKUP_BODY above).
+    vi.stubGlobal('fetch', vi.fn(async (_i: RequestInfo | URL, _init?: RequestInit) =>
+      new Response(JSON.stringify(REAL_URL_LOOKUP_BODY), { status: 200 })));
+    await expect(mbidForSpotifyArtist('66CXWjxzNUsdJxJ2JdwvnR'))
+      .resolves.toBe('f4fdbb4c-e4b7-47a0-b83b-d91bbfcfa387');
+  });
+
+  it('returns null — not an error — when the artist genuinely has no link', async () => {
+    vi.stubGlobal('fetch', vi.fn(async (_i: RequestInfo | URL, _init?: RequestInit) =>
+      new Response(JSON.stringify({ relations: [] }), { status: 200 })));
+    await expect(mbidForSpotifyArtist('x')).resolves.toBeNull();
+  });
+
+  // Real MusicBrainz responses, harvested 2026-09-02 (same session as the
+  // mbidForSpotifyArtist harvest above) -- should-fix: these two fixtures
+  // were previously hand-written against our own MbAlias interface, never
+  // observed against a real response, the same class of risk that hid the
+  // `mbidForSpotifyArtist` bug for every artist earlier in this slice (an
+  // invented fixture encoding the same wrong assumption as the code it
+  // tests). Rebuilt from two real GET /ws/2/artist/<mbid>?inc=aliases&fmt=json
+  // calls.
+
+  // GET /ws/2/artist/f4fdbb4c-e4b7-47a0-b83b-d91bbfcfa387?inc=aliases&fmt=json
+  // (Ariana Grande -- the same MBID mbidForSpotifyArtist's own fixture above
+  // uses). Her real record has NO English alias at all (confirmed earlier in
+  // this slice) -- every alias is either non-English or, where locale is
+  // 'en'-adjacent, absent entirely. That makes her the real-world case for
+  // "no English alias exists", not an invented empty array: the actual
+  // response has FOURTEEN aliases and genuinely none of them qualify, which
+  // exercises the "keeps looking, finds nothing" path a fabricated `[]`
+  // cannot.
+  const ARIANA_ALIASES_BODY = {
+    'sort-name': 'Grande, Ariana',
+    aliases: [
+      { name: 'Ariana Grande-Butera', type: 'Legal name', primary: null, locale: null },
+      { name: 'אריאנא גראנדע',
+        type: 'Artist name', primary: true, locale: 'yi' },
+      { name: 'آریانا گرانده',
+        type: 'Artist name', primary: true, locale: 'fa_IR' },
+      { name: 'أريانا غراندي',
+        type: 'Artist name', primary: true, locale: 'ar' },
+      { name: 'アリアナ・グランデ',
+        type: 'Artist name', primary: true, locale: 'ja' },
+      // ...and several more non-English aliases the real response carries,
+      // omitted here since none of them is 'en' either way -- the point this
+      // fixture pins is that a real, populated aliases array with NO 'en'
+      // entry at all still resolves to null, not that the array is empty.
+    ],
+  };
+
+  it('returns null rather than falling back to sort-name, which is surname-first ' +
+     '-- Ariana Grande genuinely has no English alias', async () => {
+    vi.stubGlobal('fetch', vi.fn(async (_i: RequestInfo | URL, _init?: RequestInit) =>
+      new Response(JSON.stringify(ARIANA_ALIASES_BODY), { status: 200 })));
+    await expect(englishAliasFor('f4fdbb4c-e4b7-47a0-b83b-d91bbfcfa387')).resolves.toBeNull();
+  });
+
+  // GET /ws/2/artist/b539e453-c4fe-47e3-8a07-8517eac74429?inc=aliases&fmt=json
+  // (宇多田ヒカル / Hikaru Utada -- picked because Ariana Grande's
+  // real record has no case for THIS behaviour; Utada's does, genuinely). The
+  // real response's aliases array is exactly the trap this test exists to
+  // catch: TWO other aliases also carry `primary: true`, but at locale 'lt'
+  // and 'en_PH' -- neither is the literal 'en' the code checks for -- and a
+  // "Search hint" entry carries `primary: null` (confirming the spec's own
+  // worry that the real API might use null rather than false for "not
+  // primary"). Only ONE alias is `locale: 'en'`, `primary: true` and
+  // `type: 'Artist name'` all at once.
+  const UTADA_ALIASES_BODY = {
+    'sort-name': 'Utada, Hikaru',
+    aliases: [
+      { name: 'Cubic U', type: 'Artist name', primary: false, locale: 'en' },
+      { name: 'Cubic U (Utada Hikaru)', type: 'Search hint', primary: null, locale: null },
+      { name: 'Hikaru Utada', type: 'Artist name', primary: true, locale: 'en' },
+      { name: 'Hikaru Utada', type: 'Legal name', primary: false, locale: 'en' },
+      { name: 'Hikaru Utada', type: 'Artist name', primary: true, locale: 'lt' },
+      { name: 'Hikki', type: 'Artist name', primary: false, locale: 'en' },
+      { name: 'Utada', type: 'Artist name', primary: false, locale: 'en' },
+      { name: 'Utada Hikaru', type: 'Artist name', primary: true, locale: 'en_PH' },
+      { name: '宇多田ヒカル', type: 'Artist name', primary: true, locale: 'ja' },
+    ],
+  };
+
+  it('picks the primary English "Artist name" alias, not sort-name, and not a ' +
+     'same-name alias at a DIFFERENT locale or a null-primary entry', async () => {
+    vi.stubGlobal('fetch', vi.fn(async (_i: RequestInfo | URL, _init?: RequestInit) =>
+      new Response(JSON.stringify(UTADA_ALIASES_BODY), { status: 200 })));
+    await expect(englishAliasFor('b539e453-c4fe-47e3-8a07-8517eac74429')).resolves.toBe('Hikaru Utada');
+  });
+
+  it('a 200 with NO relations key is an ERROR', async () => {
+    vi.stubGlobal('fetch', vi.fn(async (_i: RequestInfo | URL, _init?: RequestInit) =>
+      new Response(JSON.stringify({ something: 'else' }), { status: 200 })));
+    await expect(mbidForSpotifyArtist('x')).rejects.toMatchObject({ kind: 'unavailable' });
+  });
+
+  it('unparseable JSON on a 200 is an ERROR', async () => {
+    vi.stubGlobal('fetch', vi.fn(async (_i: RequestInfo | URL, _init?: RequestInit) =>
+      new Response('<html>502</html>', { status: 200 })));
+    await expect(mbidForSpotifyArtist('x')).rejects.toMatchObject({ kind: 'unavailable' });
+  });
+
+  it('a 404 is an ERROR', async () => {
+    // A valid, well-shaped body (empty relations, same as the "no link"
+    // success case) -- invalid in exactly one way, the status code, so a
+    // status-blind implementation would resolve null instead of throwing.
+    vi.stubGlobal('fetch', vi.fn(async (_i: RequestInfo | URL, _init?: RequestInit) =>
+      new Response(JSON.stringify({ relations: [] }), { status: 404 })));
+    await expect(mbidForSpotifyArtist('x')).rejects.toMatchObject({ kind: 'unavailable' });
+  });
+});

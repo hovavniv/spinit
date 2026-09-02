@@ -1,6 +1,6 @@
 // No `import 'server-only'` -- matches tasteTypes.ts: rendered client-side.
 
-import type { CombinedTaste, ScoredArtist, TimeRange } from './tasteTypes';
+import type { CombinedTaste, ScoredArtist, SoloGenre, TimeRange, WeightedGenre } from './tasteTypes';
 
 const RANGE_WEIGHT: Record<TimeRange, number> = {
   short_term: 1.0,
@@ -77,7 +77,7 @@ interface CombineArtistInput {
   artworkUrl?: string | null;
 }
 
-interface PartialProfile {
+export interface PartialProfile {
   topArtists: CombineArtistInput[];
 }
 
@@ -86,14 +86,114 @@ function toScoredArtist(a: CombineArtistInput): ScoredArtist {
 }
 
 /**
+ * Weights genres across a list of artists by each artist's own score, per
+ * design §6.1. Genres arrive as a SECOND argument keyed by artist id (they
+ * live in `artist_genres`, keyed per event, not on the artist itself) --
+ * an artist with no row in `genresByArtistId` contributes nothing, not an
+ * error. Each artist's full genre-count map is treated as a single unit
+ * scaled by that artist's score (contribution to a genre =
+ * `artist.score * count`, summed per genre across all artists), and the
+ * WHOLE resulting record is normalized at the end so it sums to 1 --
+ * NOT normalized per-artist first. Returns {} (never NaN) when the grand
+ * total is 0, e.g. no artist has any resolved genre data.
+ */
+export function genreWeights(
+  artists: ScoredArtist[],
+  genresByArtistId: Record<string, Record<string, number>>,
+): Record<string, number> {
+  const totals: Record<string, number> = {};
+  let grandTotal = 0;
+
+  for (const artist of artists) {
+    const genres = genresByArtistId[artist.id];
+    if (!genres) continue;
+
+    for (const [genre, count] of Object.entries(genres)) {
+      const contribution = artist.score * count;
+      totals[genre] = (totals[genre] ?? 0) + contribution;
+      grandTotal += contribution;
+    }
+  }
+
+  if (grandTotal === 0) return {};
+
+  const normalized: Record<string, number> = {};
+  for (const [genre, total] of Object.entries(totals)) {
+    normalized[genre] = total / grandTotal;
+  }
+  return normalized;
+}
+
+const TOP_GENRES_CAP = 10;
+const SOLO_GENRES_CAP = 4;
+const SOLO_GENRES_HIGH_THRESHOLD = 0.1;
+const SOLO_GENRES_LOW_THRESHOLD = 0.02;
+
+/**
+ * The ≤4 genres with the largest asymmetry between the two partners' OWN
+ * genreWeights (each computed from that partner's own topArtists, not the
+ * pooled list) -- a genre qualifies only when one side's weight is >= 0.10
+ * and the other's is < 0.02 (either direction), ranked by the gap size
+ * descending. This is a product decision this task makes, not something
+ * design revision 6 states outright: "genres neither partner listens to"
+ * (the plan's original wording) is unbounded (69 entries against today's
+ * vocabulary) and vacuous under every mutation, since a couple who share
+ * one genre already exclude it from an "neither of us" list regardless of
+ * what the rest of the array holds. "One partner loves it, the other never
+ * plays it" is bounded, uses both profiles, and is the actual dance-floor
+ * risk the panel exists to name.
+ *
+ * NAMED `soloGenres`, not `avoidGenres` (design deviation, see the
+ * `SoloGenre`/`CombinedTaste.soloGenres` doc comments in tasteTypes.ts for
+ * the full account): the computation here is UNCHANGED from the original
+ * `avoidGenres` -- only the name and the panel's framing changed, because
+ * this same asymmetric set can also be one of the couple's pooled
+ * `topGenres`, and labelling that overlap "avoid" was self-contradictory.
+ */
+function soloGenres(
+  weights1: Record<string, number>,
+  weights2: Record<string, number>,
+): SoloGenre[] {
+  const allGenres = new Set([...Object.keys(weights1), ...Object.keys(weights2)]);
+  const gaps: { genre: string; gap: number; partner: 'partner1' | 'partner2' }[] = [];
+
+  for (const genre of allGenres) {
+    const w1 = weights1[genre] ?? 0;
+    const w2 = weights2[genre] ?? 0;
+    if (w1 >= SOLO_GENRES_HIGH_THRESHOLD && w2 < SOLO_GENRES_LOW_THRESHOLD) {
+      gaps.push({ genre, gap: w1 - w2, partner: 'partner1' });
+    } else if (w2 >= SOLO_GENRES_HIGH_THRESHOLD && w1 < SOLO_GENRES_LOW_THRESHOLD) {
+      gaps.push({ genre, gap: w2 - w1, partner: 'partner2' });
+    }
+  }
+
+  return gaps
+    .sort((x, y) => y.gap - x.gap)
+    .slice(0, SOLO_GENRES_CAP)
+    .map((g) => ({ name: g.genre, partner: g.partner }));
+}
+
+function topGenres(weights: Record<string, number>): WeightedGenre[] {
+  return Object.entries(weights)
+    .map(([name, weight]) => ({ name, weight }))
+    .sort((x, y) => y.weight - x.weight)
+    .slice(0, TOP_GENRES_CAP);
+}
+
+/**
  * Combines two partners' merged top-artist lists into a shared-taste report.
  * `matchPercent` uses a weighted Jaccard overlap (intersection over union,
  * by min/max of each side's score for shared artists) so the result is
  * symmetric in its two arguments. Shared-artist combined score is the sum
  * of both sides' individual scores for that artist -- not spec'd exactly,
- * chosen only to produce a sane descending order.
+ * chosen only to produce a sane descending order. `genresByArtistId`
+ * defaults to `{}` so C1's 2-arg call sites keep compiling unchanged.
  */
-export function combineTaste(partner1: PartialProfile, partner2: PartialProfile): CombinedTaste {
+export function combineTaste(
+  partner1: PartialProfile,
+  partner2: PartialProfile,
+  genresByArtistId: Record<string, Record<string, number>> = {},
+): CombinedTaste {
   const list1 = partner1.topArtists;
   const list2 = partner2.topArtists;
 
@@ -128,11 +228,19 @@ export function combineTaste(partner1: PartialProfile, partner2: PartialProfile)
   const partner1Loves = list1.filter((a) => !sharedIdSet.has(a.id)).map(toScoredArtist);
   const partner2Loves = list2.filter((a) => !sharedIdSet.has(a.id)).map(toScoredArtist);
 
+  const scoredList1 = list1.map(toScoredArtist);
+  const scoredList2 = list2.map(toScoredArtist);
+  const weights1 = genreWeights(scoredList1, genresByArtistId);
+  const weights2 = genreWeights(scoredList2, genresByArtistId);
+  const pooledWeights = genreWeights([...scoredList1, ...scoredList2], genresByArtistId);
+
   return {
     matchPercent,
     noData,
     sharedArtists,
     partner1Loves,
     partner2Loves,
+    topGenres: topGenres(pooledWeights),
+    soloGenres: soloGenres(weights1, weights2),
   };
 }

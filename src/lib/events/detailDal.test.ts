@@ -20,8 +20,46 @@ const eq = vi.fn();
 const select = vi.fn();
 const from = vi.fn();
 
+/*
+ * artist_genres is a SEPARATE query (`.from('artist_genres')...`, no
+ * `.order()`/`.maybeSingle()`), so it needs its own chain, routed by table
+ * name through the shared `from` mock below. `genreEq2` is the terminal
+ * call -- its return value IS what `await ...eq(...).eq(...)` resolves to,
+ * since `await` on a plain (non-Promise) object just resolves to that object
+ * immediately. `genreEqCalls` records both `.eq()` calls' arguments, in
+ * order, so a test can assert on `event_id` and `status` independently
+ * without caring which position the implementation calls them in.
+ */
+const genreEqCalls: [string, unknown][] = [];
+const genreRows = vi.fn();
+const genreEq2 = vi.fn((col: string, val: unknown) => {
+  genreEqCalls.push([col, val]);
+  return genreRows();
+});
+const genreEq1 = vi.fn((col: string, val: unknown) => {
+  genreEqCalls.push([col, val]);
+  return { eq: genreEq2 };
+});
+const genreSelect = vi.fn(() => ({ eq: genreEq1 }));
+
+/*
+ * enrichment_queue is its own chain too (fix-spec Blocker 1): a plain
+ * `.select('partner_id, settled_at').in('partner_id', ids)`, no `.order()`/
+ * `.maybeSingle()` -- same reasoning as artist_genres above, routed through
+ * the same shared `from` mock by table name.
+ */
+const queueIn = vi.fn();
+const queueSelect = vi.fn(() => ({ in: queueIn }));
+
 vi.mock('@/lib/supabase/server', () => ({
-  createClient: vi.fn(async () => ({ from })),
+  createClient: vi.fn(async () => ({
+    from: (table: string) =>
+      table === 'artist_genres'
+        ? { select: genreSelect }
+        : table === 'enrichment_queue'
+          ? { select: queueSelect }
+          : from(table),
+  })),
 }));
 vi.mock('@/lib/auth/dal', () => ({
   requireUser: vi.fn(async () => ({ id: 'dj-1' })),
@@ -57,7 +95,6 @@ function row(overrides: Record<string, unknown> = {}) {
     id: EVENT,
     dj_id: 'dj-1',
     couple_names: 'Noa & Eitan',
-    couple_status: 'awaiting-couple',
     event_private_notes: { body: 'speech at 9pm' },
     event_shared_notes: { body: 'both of us agreed' },
     event_partners: [{ id: 'p1', slot: 1, display_name: 'Noa', user_id: null }],
@@ -69,7 +106,14 @@ function row(overrides: Record<string, unknown> = {}) {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  genreEqCalls.length = 0;
   builder();
+  // Default: no artist enriched yet. Individual tests override with
+  // genreRows.mockResolvedValue(...).
+  genreRows.mockResolvedValue({ data: [], error: null });
+  // Default: no queue rows yet. Individual tests override with
+  // queueIn.mockResolvedValue(...).
+  queueIn.mockResolvedValue({ data: [], error: null });
 });
 
 describe('getEventDetail', () => {
@@ -301,5 +345,119 @@ describe('getEventDetail', () => {
 
     expect(detail?.partners[0].connection).toBeNull();
     expect(detail?.partners[0].profile).toBeNull();
+  });
+
+  describe('genresByArtistId (plan task 8b)', () => {
+    // Without this block, TasteProfile would render `genresByArtistId={}` in
+    // production forever -- nothing upstream ever populated the field, even
+    // though the enrichment queue (tasks 1-8) runs correctly. See the plan's
+    // own framing of this task.
+
+    it('reads resolved genres for the event, keyed by artist id', async () => {
+      maybeSingle.mockResolvedValue({ data: row(), error: null });
+      genreRows.mockResolvedValue({
+        data: [
+          { spotify_artist_id: 'a1', genres: { mizrahi: 100, pop: 40 } },
+          { spotify_artist_id: 'a2', genres: { rock: 90 } },
+        ],
+        error: null,
+      });
+
+      const detail = await getEventDetail(EVENT);
+
+      expect(detail?.genresByArtistId).toEqual({
+        a1: { mizrahi: 100, pop: 40 },
+        a2: { rock: 90 },
+      });
+    });
+
+    it('filters to status resolved -- a failed row has no usable genres', async () => {
+      maybeSingle.mockResolvedValue({ data: row(), error: null });
+
+      await getEventDetail(EVENT);
+
+      expect(genreEqCalls).toContainEqual(['status', 'resolved']);
+    });
+
+    it('scopes to THIS event -- artist_genres is per-event since the C2 migration', async () => {
+      maybeSingle.mockResolvedValue({ data: row(), error: null });
+
+      await getEventDetail(EVENT);
+
+      expect(genreEqCalls).toContainEqual(['event_id', EVENT]);
+    });
+
+    it('returns {} rather than undefined when no artist has been enriched yet', async () => {
+      maybeSingle.mockResolvedValue({ data: row(), error: null });
+      genreRows.mockResolvedValue({ data: [], error: null });
+
+      const detail = await getEventDetail(EVENT);
+
+      expect(detail?.genresByArtistId).toEqual({});
+    });
+
+    it('surfaces a query error rather than silently returning {}', async () => {
+      // {} and "the query failed" render identically -- as no genre panels.
+      // They must not be the same value, or a real failure would silently
+      // read as "nothing enriched yet" forever.
+      maybeSingle.mockResolvedValue({ data: row(), error: null });
+      genreRows.mockResolvedValue({ data: null, error: { code: '42501' } });
+
+      await expect(getEventDetail(EVENT)).rejects.toThrow(/artist_genres/);
+    });
+  });
+
+  describe('enrichmentProgress (fix-spec Blocker 1)', () => {
+    // Without this, the DJ -- who cannot poll /api/spotify/enrich-next -- has
+    // no way to ever see real progress, and TasteProfile's `total === 0`
+    // branch reads as "nobody has connected yet" forever.
+
+    it('sums settled/total across BOTH partners queue rows', async () => {
+      maybeSingle.mockResolvedValue({
+        data: row({
+          event_partners: [
+            { id: 'p1', slot: 1, display_name: 'Noa', user_id: null },
+            { id: 'p2', slot: 2, display_name: 'Eitan', user_id: null },
+          ],
+        }),
+        error: null,
+      });
+      queueIn.mockResolvedValue({
+        data: [
+          { partner_id: 'p1', settled_at: '2026-01-01' },
+          { partner_id: 'p1', settled_at: null },
+          { partner_id: 'p2', settled_at: '2026-01-01' },
+        ],
+        error: null,
+      });
+
+      const detail = await getEventDetail(EVENT);
+
+      expect(detail?.enrichmentProgress).toEqual({ settled: 2, total: 3 });
+    });
+
+    it('queries enrichment_queue scoped to the event\'s own partner ids', async () => {
+      maybeSingle.mockResolvedValue({ data: row(), error: null });
+
+      await getEventDetail(EVENT);
+
+      expect(queueIn).toHaveBeenCalledWith('partner_id', ['p1']);
+    });
+
+    it('returns {settled: 0, total: 0} when no queue rows exist yet', async () => {
+      maybeSingle.mockResolvedValue({ data: row(), error: null });
+      queueIn.mockResolvedValue({ data: [], error: null });
+
+      const detail = await getEventDetail(EVENT);
+
+      expect(detail?.enrichmentProgress).toEqual({ settled: 0, total: 0 });
+    });
+
+    it('surfaces a query error rather than silently returning zero progress', async () => {
+      maybeSingle.mockResolvedValue({ data: row(), error: null });
+      queueIn.mockResolvedValue({ data: null, error: { code: '42501' } });
+
+      await expect(getEventDetail(EVENT)).rejects.toThrow(/enrichment_queue/);
+    });
   });
 });

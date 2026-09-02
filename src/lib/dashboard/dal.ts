@@ -6,7 +6,13 @@ import { requireUser } from '@/lib/auth/dal';
 import { createClient } from '@/lib/supabase/server';
 import type { DashboardEventRow, PastEventCountRow } from './fromDb';
 
-const EVENT_COLUMNS = 'id, couple_names, venue, event_date, status, phase, start_time, couple_status';
+// `couple_status` is derived, not selected: it has never been written by
+// anything (defaults to 'awaiting-couple' and no application code, trigger
+// or function ever sets it — a partner's own session cannot write `events`;
+// its UPDATE policy is `auth.uid() = dj_id`). fromDb.ts's coupleStatusOf()
+// computes it from these embedded connection rows instead.
+const EVENT_COLUMNS =
+  'id, couple_names, venue, event_date, status, phase, start_time, event_partners(spotify_connections(status))';
 const PAST_COLUMNS = 'id, couple_names, venue, event_date, songs_played';
 
 /**

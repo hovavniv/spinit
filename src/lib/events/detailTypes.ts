@@ -8,7 +8,6 @@
    --------------------------------------------------------------------------- */
 
 import type { ActionResult } from '@/lib/auth/errors';
-import type { CoupleStatus } from '@/lib/dashboard/types';
 import type { TasteProfile } from '@/lib/spotify/tasteTypes';
 
 export type EventSegment = 'ceremony' | 'reception' | 'party';
@@ -78,7 +77,6 @@ export interface EventDetail {
   /** The owner. The route needs it to resolve the viewer (design §4). */
   dj_id: string;
   couple_names: string;
-  couple_status: CoupleStatus;
   /**
    * The two note bodies (design §3, §5.2). Strings, never null: both tables
    * default the body to '' and the migration backfills a row per event.
@@ -96,4 +94,25 @@ export interface EventDetail {
   partners: PartnerRow[];
   mustPlay: MustPlayRow[];
   blocklist: BlocklistRow[];
+  /**
+   * Resolved genres for every artist enriched so far, keyed by
+   * spotify_artist_id (design §5.1, plan task 8b). `artist_genres` is its own
+   * query in the DAL, not an embed on `events` -- it has no foreign key to
+   * events, only a plain `event_id` column, so PostgREST has no relationship
+   * to traverse. `{}` means "nothing enriched yet", not "the query failed" --
+   * a failed query throws instead, so the two cases never collapse into the
+   * same value on the page.
+   *
+   * TASK 9 SEAM: not yet consumed anywhere. `TasteProfile` (task 9) is the
+   * first thing that reads this.
+   */
+  genresByArtistId: Record<string, Record<string, number>>;
+  /**
+   * `enrichment_queue` counts for BOTH partners, summed (fix-spec Blocker 1).
+   * The DJ cannot poll `/api/spotify/enrich-next` (partner-only by design),
+   * so this server-computed value is the ONLY way the DJ's `TasteProfile`
+   * ever sees real progress -- `TasteProfileClient` seeds from this and lets
+   * a successful poll (partner viewers only) override it.
+   */
+  enrichmentProgress: { settled: number; total: number };
 }

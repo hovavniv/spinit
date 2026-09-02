@@ -38,6 +38,8 @@ KEEP=0
 SEED=0
 SEEDED=0
 SEEDED_SONGS=0
+SEEDED_PARTNERS=0
+SEEDED_GENRES=0
 for arg in "$@"; do
   case "$arg" in
     --keep) KEEP=1 ;;
@@ -240,6 +242,118 @@ SQL
   echo "    [seeded mixed-id must-play/blocklist rows for the delete migration to prove itself against]"
 }
 
+# Seeded MID-RUN as soon as event_partners exists (20260831090000), which is
+# BEFORE 20260901090000_spotify_genre_enrichment.sql runs -- that migration's
+# claim_next_artist and enrichment_queue's new write policy both need a real
+# event_partners row to exist, via FK, and the pg-replica seed carried none of
+# those before this task. One claimed slot (partner-c), one still pending, on
+# 'Priya & Alex' -- matching the shape event_partners actually has once a
+# couple starts connecting accounts.
+seed_partners_if_ready() {
+  [ "$SEED" -eq 1 ] || return 0
+  [ "$SEEDED_PARTNERS" -eq 0 ] || return 0
+  local has_table
+  has_table=$(psql -tAq -d "$DB" -c "select to_regclass('public.event_partners') is not null")
+  [ "$has_table" = "t" ] || return 0
+  psql -q -v ON_ERROR_STOP=1 -d "$DB" <<'SQL'
+with target as (select id from public.events where couple_names = 'Priya & Alex')
+insert into public.event_partners (event_id, slot, display_name, invite_email, user_id)
+select id, 1, 'Priya', 'partner-c@example.com',
+       '33333333-3333-4333-8333-333333333333'::uuid from target
+union all
+-- Still pending: the DJ sent this invite, nobody has claimed it yet.
+select id, 2, 'Alex', 'alex@example.com', null::uuid from target;
+SQL
+  local landed
+  landed=$(psql -tAq -d "$DB" -c \
+    "select count(*) from public.event_partners p
+      join public.events e on e.id = p.event_id
+     where e.couple_names = 'Priya & Alex'")
+  if [ "$landed" != "2" ]; then
+    echo "seed_partners_if_ready: expected 2 event_partners rows for 'Priya & Alex', found $landed" >&2
+    exit 1
+  fi
+  SEEDED_PARTNERS=1
+  echo "    [seeded 2 event_partners rows for 'Priya & Alex' -- one claimed, one pending]"
+}
+
+# Seeded MID-RUN once artist_genres.event_id is NOT NULL, i.e. once
+# 20260901090000_spotify_genre_enrichment.sql has fully applied (that
+# migration's own 2a section makes it NOT NULL only at the end of the rekey --
+# probing for the column alone, rather than for it being required, would seed
+# between the ADD COLUMN and the DELETE FROM artist_genres a few lines later
+# in that same file and have the seed erased before the file even finishes).
+# The point mirrors seed_song_lists_if_ready's own reasoning: a seed that
+# leaves artist_genres empty, or leaves enrichment_queue with no rows FK'd to
+# a real event_partners row, proves nothing about the pkey swap or the new
+# write policy -- "exit 0 is as true of a delete that removed the wrong rows
+# as one that removed exactly the right ones."
+#
+# The SAME spotify_artist_id is seeded against TWO DIFFERENT events. Under the
+# OLD global pkey (spotify_artist_id alone) the second insert would raise
+# 23505; under the new compound pkey (event_id, spotify_artist_id) both rows
+# coexist. That is the one fact this seed exists to prove, and the landed-row
+# count below would silently pass even if the second insert had been rejected
+# and swallowed, so the failed-row seed particularly needs the explicit count.
+seed_genre_enrichment_if_ready() {
+  [ "$SEED" -eq 1 ] || return 0
+  [ "$SEEDED_GENRES" -eq 0 ] || return 0
+  local ready
+  ready=$(psql -tAq -d "$DB" -c \
+    "select exists (select 1 from information_schema.columns
+                     where table_schema='public' and table_name='artist_genres'
+                       and column_name='event_id' and is_nullable='NO')")
+  [ "$ready" = "t" ] || return 0
+  psql -q -v ON_ERROR_STOP=1 -d "$DB" <<'SQL'
+with pa as (select id from public.events where couple_names = 'Priya & Alex'),
+     c1 as (select id from public.events where couple_names = 'Couple 1')
+insert into public.artist_genres
+  (event_id, spotify_artist_id, artist_name, status, resolved_via, attempts,
+   last_attempt_at, fetched_at)
+select (select id from pa), '0LcJLqbBmaGUft1e9Mm8HV', 'Ed Sheeran',
+       'resolved'::public.enrichment_status, 'mbid'::public.enrichment_route,
+       1, now(), now()
+union all
+-- Same artist id, a DIFFERENT event: proves the pkey is (event_id,
+-- spotify_artist_id), not spotify_artist_id alone -- the old global pkey
+-- would raise 23505 on this second row.
+select (select id from c1), '0LcJLqbBmaGUft1e9Mm8HV', 'Ed Sheeran',
+       'pending'::public.enrichment_status, null::public.enrichment_route,
+       0, null, null
+union all
+-- Failed, and backdated past its own backoff window -- inside
+-- artist_genres_retry_idx's partial predicate, and what
+-- claim_next_artist's backoff clause should treat as claimable again.
+select (select id from pa), '3TVXtAsR1Inumwj472S9r4', 'Drake',
+       'failed'::public.enrichment_status, null::public.enrichment_route,
+       3, now() - interval '1 hour', null;
+
+with partner as (
+  select p.id from public.event_partners p
+   join public.events e on e.id = p.event_id
+  where e.couple_names = 'Priya & Alex' and p.slot = 1
+)
+insert into public.enrichment_queue (partner_id, artist_id, position, claimed_at, settled_at)
+select id, '0LcJLqbBmaGUft1e9Mm8HV', 1, null::timestamptz, now() from partner
+union all
+select id, '3TVXtAsR1Inumwj472S9r4', 2, null::timestamptz, null::timestamptz from partner
+union all
+-- Unsettled, unclaimed, no artist_genres row at all: what a fresh
+-- claim_next_artist call should pick up first.
+select id, '6z5Yh7kOKeLjqIsNdokIpU', 3, null::timestamptz, null::timestamptz from partner;
+SQL
+  local landed
+  landed=$(psql -tAq -d "$DB" -c \
+    "select (select count(*) from public.artist_genres)
+          + (select count(*) from public.enrichment_queue)")
+  if [ "$landed" != "6" ]; then
+    echo "seed_genre_enrichment_if_ready: expected 6 rows total (3 artist_genres + 3 enrichment_queue), found $landed" >&2
+    exit 1
+  fi
+  SEEDED_GENRES=1
+  echo "    [seeded artist_genres (same artist, two events -- pins the pkey swap) and enrichment_queue rows]"
+}
+
 echo "==> applying migrations"
 shopt -s nullglob
 FILES=("$MIGRATIONS"/*.sql)
@@ -257,6 +371,8 @@ for f in $(printf '%s\n' "${FILES[@]}" | sort); do
     echo "ok"
     seed_if_ready
     seed_song_lists_if_ready
+    seed_partners_if_ready
+    seed_genre_enrichment_if_ready
   else
     echo "FAILED"
     echo ""
@@ -272,8 +388,13 @@ rm -f /tmp/pg-replica-err.$$
 # a run that reports success while quietly seeding nothing is worse than a
 # run that fails loudly, because everything after it inherits the false
 # confidence.
-if [ "$SEED" -eq 1 ] && { [ "$SEEDED" -eq 0 ] || [ "$SEEDED_SONGS" -eq 0 ]; }; then
-  echo "--seed was requested but seeding never completed (SEEDED=$SEEDED, SEEDED_SONGS=$SEEDED_SONGS)" >&2
+if [ "$SEED" -eq 1 ] && {
+  [ "$SEEDED" -eq 0 ] || [ "$SEEDED_SONGS" -eq 0 ] ||
+  [ "$SEEDED_PARTNERS" -eq 0 ] || [ "$SEEDED_GENRES" -eq 0 ];
+}; then
+  echo "--seed was requested but seeding never completed" \
+    "(SEEDED=$SEEDED, SEEDED_SONGS=$SEEDED_SONGS," \
+    "SEEDED_PARTNERS=$SEEDED_PARTNERS, SEEDED_GENRES=$SEEDED_GENRES)" >&2
   exit 1
 fi
 
@@ -297,6 +418,13 @@ select '    event_blocklist: '||count(*)||' rows, '
        ||' artist/song with no id, '
        ||count(*) filter (where entry_type = 'genre')||' genre'
   from public.event_blocklist;
+select '    artist_genres:    '||count(*)||' rows, '
+       ||count(distinct spotify_artist_id)||' distinct artist ids -- '
+       ||'fewer distinct ids than rows proves the compound (event_id, spotify_artist_id) pkey'
+  from public.artist_genres;
+select '    enrichment_queue: '||count(*)||' rows, '
+       ||count(*) filter (where settled_at is not null)||' settled'
+  from public.enrichment_queue;
 SQL
 
 echo ""
