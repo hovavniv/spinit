@@ -875,6 +875,25 @@ describe.skipIf(!hasSupabaseConfig || !hasTestUsers || !hasPartnerUser)(
       expect(error!.code).toBe('42501');
     });
 
+    // Pre-push review nit 1, promoted to should-fix: claim_next_artist is
+    // SECURITY DEFINER (bypasses RLS entirely), so its own inline
+    // "not your partner row" check is the ONLY thing between a caller and
+    // another partner's enrichment_queue. It had never run against the live
+    // database -- the only other reference to this function is
+    // route.test.ts, against a mocked `rpc`.
+    test('claim_next_artist refuses a caller who is not that partner', async () => {
+      const stranger = await clientB.rpc('claim_next_artist', { p_partner: claimedPartnerId });
+      expect(stranger.error?.code).toBe('42501');
+
+      // Positive control -- without it this test passes even if the
+      // function does not exist (42883) or errors for any unrelated reason.
+      // C's own queue is empty (the slot above was just freshly claimed), so
+      // this legitimately claims nothing -- the point is that the OWNERSHIP
+      // check passes and the call does not error, not that a row comes back.
+      const own = await clientC.rpc('claim_next_artist', { p_partner: claimedPartnerId });
+      expect(own.error).toBeNull();
+    });
+
     test('a partner cannot re-parent a song-list row onto an event they do not participate in', async () => {
       const ins = await clientC
         .from('event_blocklist')
