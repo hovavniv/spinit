@@ -194,4 +194,32 @@ describe('EventDetailScreen', () => {
       screen.getByRole('button', { name: /connect .*spotify/i }),
     ).toBeInTheDocument();
   });
+
+  test('renders genre bars from the genres the DAL fetched', () => {
+    // The ONLY test that proves the fetch reaches the panel. TasteProfile's
+    // own tests (TasteProfile.test.tsx) hand it a fixture directly via
+    // props, so they stay green whether or not anything in the app actually
+    // supplies genresByArtistId -- this test exercises the real wiring path
+    // through EventDetailScreen instead.
+    const ARTIST_ID = 'artist-1';
+    const genreProfile = (partnerId: string) => ({
+      partnerId,
+      computedAt: '2026-08-30T10:00:00Z',
+      topArtists: [
+        { id: ARTIST_ID, name: 'Artist', artworkUrl: null, score: 1, ranges: ['medium_term' as const] },
+      ],
+    });
+
+    const event: EventDetail = {
+      ...buildEvent(),
+      partners: [
+        { id: 'p1', slot: 1, display_name: 'Noa', user_id: null, connection: null, profile: genreProfile('p1') },
+        { id: 'p2', slot: 2, display_name: 'Eitan', user_id: null, connection: null, profile: genreProfile('p2') },
+      ],
+      genresByArtistId: { [ARTIST_ID]: { mizrahi: 100 } },
+    };
+
+    render(<EventDetailScreen event={event} viewer={{ role: 'dj' }} />);
+    expect(screen.getByTestId('genre-bar')).toBeInTheDocument();
+  });
 });

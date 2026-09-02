@@ -52,15 +52,6 @@ export function EventDetailScreen({ event, viewer }: EventDetailScreenProps) {
 
   const [partner1, partner2] = event.partners;
 
-  // TASK 9 SEAM: `event.genresByArtistId` is fetched by the DAL as of plan
-  // task 8b (own query against artist_genres, keyed by spotify_artist_id).
-  // It is NOT threaded into <TasteProfile> below yet: TasteProfile's current
-  // prop type (task 9's own file, out of this task's scope) is
-  // `{ partner1, partner2 }` with no `genresByArtistId` field, so passing it
-  // here would fail TypeScript's excess-property check on the JSX call
-  // below. Task 9 must both add that prop to TasteProfileProps AND pass
-  // `genresByArtistId={event.genresByArtistId}` at the call site below.
-
   return (
     <div className={styles.page}>
       <Link href="/dashboard" className={styles.backLink}>
@@ -78,6 +69,15 @@ export function EventDetailScreen({ event, viewer }: EventDetailScreenProps) {
           <TasteProfile
             partner1={{ name: partner1.display_name, profile: partner1.profile }}
             partner2={{ name: partner2.display_name, profile: partner2.profile }}
+            genresByArtistId={event.genresByArtistId}
+            // Placeholder until plan task 10 wires useEnrichmentPoll's real
+            // settled/total (queueCounts, per partner, is not yet combined
+            // for a couple anywhere in this codebase). A nonzero equal pair
+            // keeps TasteProfile in its "queue drained" state so the genre
+            // panels reflect whatever `genresByArtistId` already holds,
+            // without this task inventing enrichment-queue arithmetic it
+            // does not own.
+            progress={{ settled: 1, total: 1 }}
           />
         )}
 
