@@ -248,4 +248,18 @@ describe('TasteProfile', () => {
     const solo = screen.getByTestId('solo-genres');
     expect(within(solo).getByText(/Maya listens, Chris doesn.t/)).toBeInTheDocument();
   });
+
+  it('names the OTHER partner when the solo genre is partner2\'s, not always partner1\'s ' +
+     '(should-fix 15, mirrored from taste.test.ts)', () => {
+    render(
+      <TasteProfile
+        partner1={{ name: 'Maya', profile: genreProfile('p1', [genreArtist('x', 3)]) }}
+        partner2={{ name: 'Chris', profile: genreProfile('p2', [genreArtist('y', 3)]) }}
+        genresByArtistId={{ x: { pop: 100 }, y: { pop: 100, klezmer: 100 } }}
+        progress={{ settled: 30, total: 30 }}
+      />,
+    );
+    const solo = screen.getByTestId('solo-genres');
+    expect(within(solo).getByText(/Chris listens, Maya doesn.t/)).toBeInTheDocument();
+  });
 });

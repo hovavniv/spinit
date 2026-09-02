@@ -200,6 +200,17 @@ describe('combineTaste — genre fields, per design §6.1 / plan task 8', () => 
     });
   });
 
+  it("attributes a genre only partner2 loves to partner2 -- should-fix 15: every fixture " +
+     'above only ever produced a partner1-attributed solo genre; deleting the ' +
+     "else-if branch for partner2 left 338 tests green", () => {
+    const combined = combineTaste(
+      { topArtists: [sa('x', 3)] },
+      { topArtists: [sa('y', 3)] },
+      { x: { pop: 100 }, y: { pop: 100, klezmer: 100 } },
+    );
+    expect(combined.soloGenres).toContainEqual({ name: 'klezmer', partner: 'partner2' });
+  });
+
   it('caps soloGenres at four', () => {
     const combined = combineTaste(
       { topArtists: [sa('x', 3)] },
