@@ -71,6 +71,33 @@ export const getEventDetail = cache(async (eventId: string): Promise<EventDetail
 
   if (!data) return null;
 
+  // artist_genres is its own query, not an embed on `events`: it is keyed
+  // (event_id, spotify_artist_id) with no foreign key to events, so
+  // PostgREST has no relationship to traverse (design §5.1, plan task 8b).
+  // Select only the two columns the taste panel reads -- `origins` and
+  // `eras` are stored but nothing draws them yet, and fetching them here
+  // would be over-fetching on the event page's hot path (scale doc).
+  const genres = await supabase
+    .from('artist_genres')
+    .select('spotify_artist_id, genres')
+    .eq('event_id', eventId)
+    .eq('status', 'resolved');
+
+  // Deliberately NOT the same failure mode as the query above: `{}` and "the
+  // query failed" both render as no genre panels, so collapsing them into
+  // the same return value would hide a real failure behind an empty-state
+  // UI forever. This throws instead of returning null/{} so the page's error
+  // boundary sees it, rather than treating a genre-read failure as if the
+  // event itself did not exist.
+  if (genres.error) {
+    throw new Error(`artist_genres read failed: ${genres.error.code}`);
+  }
+
+  const genresByArtistId: Record<string, Record<string, number>> = {};
+  for (const row of genres.data ?? []) {
+    genresByArtistId[row.spotify_artist_id] = row.genres;
+  }
+
   return {
     id: data.id,
     dj_id: data.dj_id,
@@ -93,6 +120,7 @@ export const getEventDetail = cache(async (eventId: string): Promise<EventDetail
     partners: (data.event_partners ?? []).map(mapPartnerRow),
     mustPlay: data.event_must_play ?? [],
     blocklist: data.event_blocklist ?? [],
+    genresByArtistId,
   };
 });
 

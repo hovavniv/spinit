@@ -96,4 +96,17 @@ export interface EventDetail {
   partners: PartnerRow[];
   mustPlay: MustPlayRow[];
   blocklist: BlocklistRow[];
+  /**
+   * Resolved genres for every artist enriched so far, keyed by
+   * spotify_artist_id (design §5.1, plan task 8b). `artist_genres` is its own
+   * query in the DAL, not an embed on `events` -- it has no foreign key to
+   * events, only a plain `event_id` column, so PostgREST has no relationship
+   * to traverse. `{}` means "nothing enriched yet", not "the query failed" --
+   * a failed query throws instead, so the two cases never collapse into the
+   * same value on the page.
+   *
+   * TASK 9 SEAM: not yet consumed anywhere. `TasteProfile` (task 9) is the
+   * first thing that reads this.
+   */
+  genresByArtistId: Record<string, Record<string, number>>;
 }

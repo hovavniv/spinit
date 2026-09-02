@@ -74,6 +74,7 @@ function buildEvent(): EventDetail {
         created_at: '2026-08-30T10:00:00Z',
       },
     ],
+    genresByArtistId: {},
   };
 }
 

@@ -52,6 +52,15 @@ export function EventDetailScreen({ event, viewer }: EventDetailScreenProps) {
 
   const [partner1, partner2] = event.partners;
 
+  // TASK 9 SEAM: `event.genresByArtistId` is fetched by the DAL as of plan
+  // task 8b (own query against artist_genres, keyed by spotify_artist_id).
+  // It is NOT threaded into <TasteProfile> below yet: TasteProfile's current
+  // prop type (task 9's own file, out of this task's scope) is
+  // `{ partner1, partner2 }` with no `genresByArtistId` field, so passing it
+  // here would fail TypeScript's excess-property check on the JSX call
+  // below. Task 9 must both add that prop to TasteProfileProps AND pass
+  // `genresByArtistId={event.genresByArtistId}` at the call site below.
+
   return (
     <div className={styles.page}>
       <Link href="/dashboard" className={styles.backLink}>
