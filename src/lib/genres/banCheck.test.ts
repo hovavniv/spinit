@@ -82,13 +82,23 @@ describe('genreBanVerdict', () => {
     expect(out.reason).toContain('pop');
   });
 
-  it('a band called Disco does not ban the disco genre', async () => {
-    const d = bcDeps({
-      readGenres: vi.fn(async (_e: string, _a: string) =>
-        ({ genres: { disco: 80 }, origins: {}, eras: {} })),
-      blockedGenres: vi.fn(async (_e: string) => []),  // the 'Disco' ARTIST row is filtered out
-    });
-    await expect(genreBanVerdict('e-1', { id: 'a-1', name: 'X' }, d))
-      .resolves.toMatchObject({ banned: false });
-  });
+  // "A band called Disco does not ban the disco genre" WAS tested here and
+  // was a no-op (fix-spec should-fix): the mocked `blockedGenres` returned
+  // `[]`, so `matched` was `undefined` unconditionally and `banned: false`
+  // held for any input or matching logic -- it could not have failed under
+  // any mutation to genreBanVerdict.
+  //
+  // DELETED rather than rewritten: the behaviour it names -- an artist named
+  // "Disco" blocklisted by NAME must not ban the "disco" GENRE -- is not
+  // something genreBanVerdict can protect against at all. It has no
+  // name-vs-genre distinction of its own; that filtering happens entirely
+  // upstream, in genresDal.blockedGenres's `.eq('entry_type', 'genre')`
+  // (genresDal.test.ts:224, "resolves the blocked genre values, filtered to
+  // entry_type = genre"). Mocking THIS function's `blockedGenres` dep to
+  // return `['Disco']` (as the spec's literal suggestion would) does not
+  // reproduce that upstream filtering -- normaliseGenre('Disco') lowercases
+  // to 'disco', which exactly matches the genre key 'disco', so
+  // genreBanVerdict would correctly report `banned: true` against that
+  // fixture. Asserting `banned: false` against it would pin a WRONG
+  // expectation, not a real one.
 });
