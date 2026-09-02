@@ -95,25 +95,81 @@ describe('musicbrainz', () => {
     await expect(mbidForSpotifyArtist('x')).resolves.toBeNull();
   });
 
-  it('picks the primary English "Artist name" alias, not sort-name', async () => {
+  // Real MusicBrainz responses, harvested 2026-09-02 (same session as the
+  // mbidForSpotifyArtist harvest above) -- should-fix: these two fixtures
+  // were previously hand-written against our own MbAlias interface, never
+  // observed against a real response, the same class of risk that hid the
+  // `mbidForSpotifyArtist` bug for every artist earlier in this slice (an
+  // invented fixture encoding the same wrong assumption as the code it
+  // tests). Rebuilt from two real GET /ws/2/artist/<mbid>?inc=aliases&fmt=json
+  // calls.
+
+  // GET /ws/2/artist/f4fdbb4c-e4b7-47a0-b83b-d91bbfcfa387?inc=aliases&fmt=json
+  // (Ariana Grande -- the same MBID mbidForSpotifyArtist's own fixture above
+  // uses). Her real record has NO English alias at all (confirmed earlier in
+  // this slice) -- every alias is either non-English or, where locale is
+  // 'en'-adjacent, absent entirely. That makes her the real-world case for
+  // "no English alias exists", not an invented empty array: the actual
+  // response has FOURTEEN aliases and genuinely none of them qualify, which
+  // exercises the "keeps looking, finds nothing" path a fabricated `[]`
+  // cannot.
+  const ARIANA_ALIASES_BODY = {
+    'sort-name': 'Grande, Ariana',
+    aliases: [
+      { name: 'Ariana Grande-Butera', type: 'Legal name', primary: null, locale: null },
+      { name: 'אריאנא גראנדע',
+        type: 'Artist name', primary: true, locale: 'yi' },
+      { name: 'آریانا گرانده',
+        type: 'Artist name', primary: true, locale: 'fa_IR' },
+      { name: 'أريانا غراندي',
+        type: 'Artist name', primary: true, locale: 'ar' },
+      { name: 'アリアナ・グランデ',
+        type: 'Artist name', primary: true, locale: 'ja' },
+      // ...and several more non-English aliases the real response carries,
+      // omitted here since none of them is 'en' either way -- the point this
+      // fixture pins is that a real, populated aliases array with NO 'en'
+      // entry at all still resolves to null, not that the array is empty.
+    ],
+  };
+
+  it('returns null rather than falling back to sort-name, which is surname-first ' +
+     '-- Ariana Grande genuinely has no English alias', async () => {
     vi.stubGlobal('fetch', vi.fn(async (_i: RequestInfo | URL, _init?: RequestInit) =>
-      new Response(JSON.stringify({
-        'sort-name': 'Adam, Omer',
-        aliases: [
-          { name: 'Omer Adam', locale: 'en', primary: true, type: 'Artist name' },
-          { name: 'O. Adam', locale: 'en', primary: false, type: 'Artist name' },
-        ],
-      }), { status: 200 })));
-    await expect(englishAliasFor('mbid-1')).resolves.toBe('Omer Adam');
+      new Response(JSON.stringify(ARIANA_ALIASES_BODY), { status: 200 })));
+    await expect(englishAliasFor('f4fdbb4c-e4b7-47a0-b83b-d91bbfcfa387')).resolves.toBeNull();
   });
 
-  it('returns null rather than falling back to sort-name, which is surname-first',
-    async () => {
-      vi.stubGlobal('fetch', vi.fn(async (_i: RequestInfo | URL, _init?: RequestInit) =>
-        new Response(JSON.stringify({ 'sort-name': 'Adam, Omer', aliases: [] }),
-                     { status: 200 })));
-      await expect(englishAliasFor('mbid-1')).resolves.toBeNull();
-    });
+  // GET /ws/2/artist/b539e453-c4fe-47e3-8a07-8517eac74429?inc=aliases&fmt=json
+  // (宇多田ヒカル / Hikaru Utada -- picked because Ariana Grande's
+  // real record has no case for THIS behaviour; Utada's does, genuinely). The
+  // real response's aliases array is exactly the trap this test exists to
+  // catch: TWO other aliases also carry `primary: true`, but at locale 'lt'
+  // and 'en_PH' -- neither is the literal 'en' the code checks for -- and a
+  // "Search hint" entry carries `primary: null` (confirming the spec's own
+  // worry that the real API might use null rather than false for "not
+  // primary"). Only ONE alias is `locale: 'en'`, `primary: true` and
+  // `type: 'Artist name'` all at once.
+  const UTADA_ALIASES_BODY = {
+    'sort-name': 'Utada, Hikaru',
+    aliases: [
+      { name: 'Cubic U', type: 'Artist name', primary: false, locale: 'en' },
+      { name: 'Cubic U (Utada Hikaru)', type: 'Search hint', primary: null, locale: null },
+      { name: 'Hikaru Utada', type: 'Artist name', primary: true, locale: 'en' },
+      { name: 'Hikaru Utada', type: 'Legal name', primary: false, locale: 'en' },
+      { name: 'Hikaru Utada', type: 'Artist name', primary: true, locale: 'lt' },
+      { name: 'Hikki', type: 'Artist name', primary: false, locale: 'en' },
+      { name: 'Utada', type: 'Artist name', primary: false, locale: 'en' },
+      { name: 'Utada Hikaru', type: 'Artist name', primary: true, locale: 'en_PH' },
+      { name: '宇多田ヒカル', type: 'Artist name', primary: true, locale: 'ja' },
+    ],
+  };
+
+  it('picks the primary English "Artist name" alias, not sort-name, and not a ' +
+     'same-name alias at a DIFFERENT locale or a null-primary entry', async () => {
+    vi.stubGlobal('fetch', vi.fn(async (_i: RequestInfo | URL, _init?: RequestInit) =>
+      new Response(JSON.stringify(UTADA_ALIASES_BODY), { status: 200 })));
+    await expect(englishAliasFor('b539e453-c4fe-47e3-8a07-8517eac74429')).resolves.toBe('Hikaru Utada');
+  });
 
   it('a 200 with NO relations key is an ERROR', async () => {
     vi.stubGlobal('fetch', vi.fn(async (_i: RequestInfo | URL, _init?: RequestInit) =>
