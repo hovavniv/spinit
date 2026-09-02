@@ -29,13 +29,21 @@ function wait(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+/** The client's output contract: every consumer can trust `count: number`. */
 interface LastfmTag {
   name: string;
   count: number;
 }
 
+/** The wire shape. Last.fm sends `count` as a STRING -- coerced to `LastfmTag`
+ *  before this module returns anything, so nothing downstream sees this type. */
+interface RawTag {
+  name: string;
+  count: string | number;
+}
+
 interface LastfmTopTagsBody {
-  toptags?: { tag?: LastfmTag[] };
+  toptags?: { tag?: RawTag[] };
   error?: number;
   message?: string;
 }
@@ -118,5 +126,12 @@ export async function topTagsByMbid(mbid: string): Promise<LastfmTag[]> {
     throw new GenreError('unavailable', 'lastfm response missing toptags');
   }
 
-  return body.toptags.tag;
+  // Last.fm returns `count` as a STRING on the wire. Coerce here so the Tag
+  // contract holds for every consumer -- filterTags SUMS counts when merging
+  // aliases, and "52" + "3" is "523", not 55. Number(undefined) is NaN, so
+  // default the missing case.
+  return body.toptags.tag.map((t) => ({
+    name: String(t.name),
+    count: Number(t.count ?? 0),
+  }));
 }

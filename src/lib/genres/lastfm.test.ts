@@ -50,6 +50,16 @@ describe('lastfm', () => {
     ]);
   });
 
+  it('coerces a string count to a number -- Last.fm sends strings on the wire', async () => {
+    vi.stubGlobal('fetch', vi.fn(async (_i: RequestInfo | URL, _init?: RequestInit) =>
+      new Response(JSON.stringify({ toptags: { tag: [
+        { name: 'pop', count: '100' }, { name: 'disco', count: '72' },
+      ] } }), { status: 200 })));
+    await expect(topTagsByMbid('m')).resolves.toEqual([
+      { name: 'pop', count: 100 }, { name: 'disco', count: 72 },
+    ]);
+  });
+
   it('a 200 with NO toptags key is an ERROR -- design §2.10 names this input', async () => {
     vi.stubGlobal('fetch', vi.fn(async (_i: RequestInfo | URL, _init?: RequestInit) =>
       new Response(JSON.stringify({ something: 'else' }), { status: 200 })));
