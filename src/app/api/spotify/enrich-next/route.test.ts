@@ -240,3 +240,41 @@ it('503s when settle landed zero rows', async () => {
   settle.mockResolvedValue({ rowCount: 0 });
   expect((await POST(post({ partnerId: 'p-1' }))).status).toBe(503);
 });
+
+/**
+ * SHOULD-FIX: `agEq` was hardcoded `{ data: [] }` in every other test in this
+ * file (the `beforeEach` default), so `route.ts`'s recompute block
+ * (genresByArtistId/originsByArtistId/erasByArtistId, all built from real
+ * artist_genres rows) always looped zero rows and `weights` was always
+ * `{genres: {}, origins: {}, eras: {}}` -- swapping which facet goes to
+ * which weights key, or passing `[]` instead of `topArtists`, would be
+ * invisible. This test gives `agEq` a real row and asserts the ACTUAL
+ * computed weights reach `writeGenreWeights`.
+ *
+ * DEVIATION FROM THE SPEC'S PASTED SNIPPET: the pasted assertion expects
+ * `writeGenreWeights` to be called with `{ genre_weights: ..., origin_weights:
+ * ... }` -- those are the DB COLUMN names `writeGenreWeights` itself writes
+ * internally (genresDal.ts), not the shape `route.ts` passes INTO it. The
+ * route constructs `{ genres, origins, eras }` (see `weights` in route.ts)
+ * and calls `writeGenreWeights(partnerId, weights)` with that shape. Asserted
+ * against the real keys instead.
+ */
+it('writes the ACTUALLY recomputed weights from real artist_genres rows, not an always-empty object', async () => {
+  // mockResolvedValueONCE, not mockResolvedValue: artistGenresTable() (this
+  // file's own from('artist_genres') handler) unconditionally calls
+  // agEq.mockReturnValue(...) with the empty-array default every time it
+  // runs, which happens INSIDE POST -- after this line, not before -- and a
+  // plain (non-once) override here would be clobbered by that reset before
+  // route.ts ever calls agEq(). The once-queue survives that reset.
+  agEq.mockResolvedValueOnce({
+    data: [
+      { spotify_artist_id: 'a-1', genres: { pop: 100 }, origins: { israeli: 50 }, eras: {} },
+    ],
+    error: null,
+  });
+  await POST(post({ partnerId: 'p-1' }));
+  expect(writeGenreWeights).toHaveBeenCalledWith('p-1', expect.objectContaining({
+    genres: { pop: 1 },
+    origins: { israeli: 1 },
+  }));
+});
