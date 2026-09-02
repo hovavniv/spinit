@@ -19,10 +19,13 @@ export interface TasteProfile {
   computedAt: string;
 }
 
-/** Derived at render time from two profiles. C1 carries NO genre fields:
- *  design §6.1 lists topGenres and avoidGenres, and this slice deliberately
- *  omits them because genres do not exist until C2. Stated so the omission
- *  reads as a decision rather than a gap. */
+/** A genre with its 0-1 fraction weight in a combined or per-partner profile. */
+export interface WeightedGenre {
+  name: string;
+  weight: number;
+}
+
+/** Derived at render time from two profiles. */
 export interface CombinedTaste {
   matchPercent: number;
   /** True when either side has no artists. Distinguishes "0% match" from
@@ -31,4 +34,11 @@ export interface CombinedTaste {
   sharedArtists: ScoredArtist[];
   partner1Loves: ScoredArtist[];
   partner2Loves: ScoredArtist[];
+  /** Both partners' artists pooled together, weighted by genreWeights, sorted
+   *  descending, capped at 10. */
+  topGenres: WeightedGenre[];
+  /** At most 4 genres with the largest asymmetry between the two partners'
+   *  individual genreWeights -- see combineTaste in taste.ts for the exact
+   *  qualifying condition and ranking. */
+  avoidGenres: string[];
 }

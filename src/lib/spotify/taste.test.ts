@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { mergeRanges, combineTaste } from './taste';
+import { mergeRanges, combineTaste, genreWeights } from './taste';
+import type { ScoredArtist } from './tasteTypes';
 
 const a = (id: string, name: string) => ({ id, name, artworkUrl: null });
 
@@ -132,5 +133,86 @@ describe('combineTaste — artist-derived, per design §6.1', () => {
       { id: 'y', name: 'Y', score: 0.1, ranges: [] },
     ] };
     expect(combineTaste(partner1, partner2).sharedArtists.map((s) => s.id)).toEqual(['x', 'y']);
+  });
+});
+
+const sa = (id: string, score: number): ScoredArtist =>
+  ({ id, name: id, artworkUrl: null, score, ranges: ['medium_term'] });
+
+describe('genreWeights — design §6.1', () => {
+  it("scales each artist's tags by that artist's score", () => {
+    const out = genreWeights([sa('x', 3), sa('y', 1)], {
+      x: { pop: 100 },
+      y: { rock: 100 },
+    });
+    // x contributes 3x what y does, so pop is 0.75 and rock 0.25
+    expect(out.pop).toBeCloseTo(0.75, 6);
+    expect(out.rock).toBeCloseTo(0.25, 6);
+  });
+
+  it('normalises to fractions summing to 1', () => {
+    const out = genreWeights([sa('x', 2), sa('y', 5)], {
+      x: { pop: 60, disco: 40 },
+      y: { rock: 90 },
+    });
+    const sum = Object.values(out).reduce((t, v) => t + v, 0);
+    expect(sum).toBeCloseTo(1, 6);
+  });
+
+  it('contributes nothing for an artist with no resolved row', () => {
+    const out = genreWeights([sa('x', 3), sa('missing', 99)], { x: { pop: 100 } });
+    expect(out).toEqual({ pop: 1 });
+  });
+
+  it('returns {} for no resolved artists, without dividing by zero', () => {
+    expect(genreWeights([sa('x', 3)], {})).toEqual({});
+    expect(genreWeights([], {})).toEqual({});
+  });
+
+  it('an artist with a resolved but EMPTY genre map contributes nothing, not NaN', () => {
+    const out = genreWeights([sa('x', 3), sa('y', 1)], { x: {}, y: { rock: 100 } });
+    expect(out).toEqual({ rock: 1 });
+    expect(Object.values(out).every(Number.isFinite)).toBe(true);
+  });
+});
+
+describe('combineTaste — genre fields, per design §6.1 / plan task 8', () => {
+  it('topGenres surfaces what both partners share', () => {
+    const combined = combineTaste(
+      { topArtists: [sa('x', 3)] },
+      { topArtists: [sa('y', 3)] },
+      { x: { pop: 100 }, y: { pop: 100 } },
+    );
+    expect(combined.topGenres.map((g) => g.name)).toContain('pop');
+  });
+
+  it('avoidGenres names the asymmetric genres, never one they share', () => {
+    const combined = combineTaste(
+      { topArtists: [sa('x', 3)] },
+      { topArtists: [sa('y', 3)] },
+      { x: { pop: 100, metal: 100 }, y: { pop: 100 } },
+    );
+    expect(combined.avoidGenres).toContain('metal');   // x loves it, y has none
+    expect(combined.avoidGenres).not.toContain('pop'); // both love it
+  });
+
+  it('caps avoidGenres at four', () => {
+    const combined = combineTaste(
+      { topArtists: [sa('x', 3)] },
+      { topArtists: [sa('y', 3)] },
+      // six genres x loves and y has none of, plus one they share
+      { x: { pop: 100, metal: 90, jazz: 80, techno: 70, punk: 60, ska: 50, opera: 40 },
+        y: { pop: 100 } },
+    );
+    expect(combined.avoidGenres).toHaveLength(4);
+    expect(combined.avoidGenres).not.toContain('pop');
+  });
+
+  it('is empty when both partners like exactly the same things', () => {
+    const combined = combineTaste(
+      { topArtists: [sa('x', 3)] }, { topArtists: [sa('y', 3)] },
+      { x: { pop: 100 }, y: { pop: 100 } },
+    );
+    expect(combined.avoidGenres).toEqual([]);
   });
 });
