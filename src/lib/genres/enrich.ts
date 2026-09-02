@@ -101,6 +101,15 @@ export async function enrichArtist(input: EnrichInput, deps: EnrichDeps): Promis
     if (mbid !== null) {
       const tagsByMbid = await deps.topTagsByMbid(mbid);
       if (tagsByMbid.length > 0) {
+        // NOTE, recorded rather than fixed (pre-push review nit 4): `mbName`
+        // is still null here -- the alias is only fetched on rung 2, below.
+        // `resolveAndWrite` passes it to `filterTags` as the artist's own
+        // name to drop as noise, so on THIS rung only the Spotify spelling
+        // is filtered, not the MusicBrainz one. Impact is genuinely low: a
+        // differently-spelled own-name tag just fails `facetOf` and is
+        // dropped as noise anyway. Resolving the alias eagerly here would
+        // cost one extra MusicBrainz call per artist on the hot path,
+        // against the ladder's whole cost design.
         return await resolveAndWrite('mbid', tagsByMbid);
       }
 
