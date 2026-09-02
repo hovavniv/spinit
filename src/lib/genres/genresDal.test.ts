@@ -116,6 +116,33 @@ describe('writeGenres', () => {
       expect('eras' in sent).toBe(false);
     },
   );
+
+  it("sends a resolved row's facets through to the upsert", async () => {
+    // Should-fix 13's positive control: the failed-row test above only
+    // proves an ABSENT key stays absent, which is true by construction and
+    // cannot fail. Nothing else asserted that a RESOLVED row's genres,
+    // origins and eras actually reach Supabase -- the reviewer proved it by
+    // stripping all three columns from every row and watching 242 tests stay
+    // green.
+    await writeGenres({
+      ...resolvedRow,
+      genres: { pop: 100 },
+      origins: { israeli: 40 },
+      eras: { '80s': 12 },
+    });
+
+    expect(agUpsert.mock.calls[0][0]).toMatchObject({
+      genres: { pop: 100 },
+      origins: { israeli: 40 },
+      eras: { '80s': 12 },
+    });
+  });
+
+  it('conflicts on the COMPOUND key -- a bare artist id would collide across events', async () => {
+    await writeGenres(resolvedRow);
+
+    expect(agUpsert.mock.calls[0][1]).toEqual({ onConflict: 'event_id,spotify_artist_id' });
+  });
 });
 
 describe('writeGenreWeights', () => {
