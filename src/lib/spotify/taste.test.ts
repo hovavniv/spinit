@@ -186,17 +186,21 @@ describe('combineTaste — genre fields, per design §6.1 / plan task 8', () => 
     expect(combined.topGenres.map((g) => g.name)).toContain('pop');
   });
 
-  it('avoidGenres names the asymmetric genres, never one they share', () => {
+  it('soloGenres names the asymmetric genres, never one they share, and says WHOSE', () => {
     const combined = combineTaste(
       { topArtists: [sa('x', 3)] },
       { topArtists: [sa('y', 3)] },
       { x: { pop: 100, metal: 100 }, y: { pop: 100 } },
     );
-    expect(combined.avoidGenres).toContain('metal');   // x loves it, y has none
-    expect(combined.avoidGenres).not.toContain('pop'); // both love it
+    const names = combined.soloGenres.map((g) => g.name);
+    expect(names).toContain('metal');   // x loves it, y has none
+    expect(names).not.toContain('pop'); // both love it
+    expect(combined.soloGenres.find((g) => g.name === 'metal')).toMatchObject({
+      partner: 'partner1', // x is partner1
+    });
   });
 
-  it('caps avoidGenres at four', () => {
+  it('caps soloGenres at four', () => {
     const combined = combineTaste(
       { topArtists: [sa('x', 3)] },
       { topArtists: [sa('y', 3)] },
@@ -204,8 +208,8 @@ describe('combineTaste — genre fields, per design §6.1 / plan task 8', () => 
       { x: { pop: 100, metal: 90, jazz: 80, techno: 70, punk: 60, ska: 50, opera: 40 },
         y: { pop: 100 } },
     );
-    expect(combined.avoidGenres).toHaveLength(4);
-    expect(combined.avoidGenres).not.toContain('pop');
+    expect(combined.soloGenres).toHaveLength(4);
+    expect(combined.soloGenres.map((g) => g.name)).not.toContain('pop');
   });
 
   it('is empty when both partners like exactly the same things', () => {
@@ -213,6 +217,18 @@ describe('combineTaste — genre fields, per design §6.1 / plan task 8', () => 
       { topArtists: [sa('x', 3)] }, { topArtists: [sa('y', 3)] },
       { x: { pop: 100 }, y: { pop: 100 } },
     );
-    expect(combined.avoidGenres).toEqual([]);
+    expect(combined.soloGenres).toEqual([]);
+  });
+
+  it('a genre can be BOTH a pooled top genre and one partner\'s solo genre -- not contradictory', () => {
+    // The reason this panel is "Only one of you", not "Probably steer clear
+    // of": mizrahi carries the pooled weight (x's score dominates the pool)
+    // while y has none of it -- both true statements about the same genre.
+    const combined = combineTaste(
+      { topArtists: [sa('x', 5)] }, { topArtists: [sa('y', 1)] },
+      { x: { mizrahi: 100 }, y: { pop: 100 } },
+    );
+    expect(combined.topGenres.map((g) => g.name)).toContain('mizrahi');
+    expect(combined.soloGenres.map((g) => g.name)).toContain('mizrahi');
   });
 });

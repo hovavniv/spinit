@@ -1,5 +1,10 @@
 import { combineTaste } from '@/lib/spotify/taste';
-import type { ScoredArtist, TasteProfile as TasteProfileType, WeightedGenre } from '@/lib/spotify/tasteTypes';
+import type {
+  ScoredArtist,
+  SoloGenre,
+  TasteProfile as TasteProfileType,
+  WeightedGenre,
+} from '@/lib/spotify/tasteTypes';
 import styles from './TasteProfile.module.css';
 
 interface PartnerTaste {
@@ -38,17 +43,37 @@ function GenreBars({ genres }: { genres: WeightedGenre[] }) {
   );
 }
 
-function AvoidGenres({ genres }: { genres: string[] }) {
+/**
+ * "Only one of you" -- NOT "Probably steer clear of" (design deviation, see
+ * `SoloGenre` in tasteTypes.ts for the full account). The same asymmetric
+ * set can also appear in `topGenres` (one partner's love of a genre can
+ * carry the pooled weight even though the other has none of it), so this
+ * panel frames it as information a DJ needs, not a warning that would
+ * contradict the Top genres panel showing the same name.
+ */
+function SoloGenres({
+  genres,
+  partner1Name,
+  partner2Name,
+}: {
+  genres: SoloGenre[];
+  partner1Name: string;
+  partner2Name: string;
+}) {
   if (genres.length === 0) return null;
   return (
-    <div data-testid="avoid-genres">
-      <h4 className={styles.subheading}>Probably steer clear of</h4>
+    <div data-testid="solo-genres">
+      <h4 className={styles.subheading}>Only one of you</h4>
       <ul className={styles.artistList}>
-        {genres.map((genre) => (
-          <li key={genre} className={styles.artist} data-testid="avoid-genre">
-            {genre}
-          </li>
-        ))}
+        {genres.map((genre) => {
+          const [listens, doesnt] =
+            genre.partner === 'partner1' ? [partner1Name, partner2Name] : [partner2Name, partner1Name];
+          return (
+            <li key={genre.name} className={styles.artist} data-testid="solo-genre">
+              {genre.name} — {listens} listens, {doesnt} doesn&apos;t
+            </li>
+          );
+        })}
       </ul>
     </div>
   );
@@ -70,9 +95,13 @@ function AvoidGenres({ genres }: { genres: string[] }) {
 function GenrePanels({
   progress,
   combined,
+  partner1Name,
+  partner2Name,
 }: {
   progress: EnrichmentProgress;
   combined: ReturnType<typeof combineTaste>;
+  partner1Name: string;
+  partner2Name: string;
 }) {
   if (progress.total === 0) return null;
 
@@ -97,7 +126,7 @@ function GenrePanels({
           <GenreBars genres={combined.topGenres} />
         )}
       </div>
-      <AvoidGenres genres={combined.avoidGenres} />
+      <SoloGenres genres={combined.soloGenres} partner1Name={partner1Name} partner2Name={partner2Name} />
     </>
   );
 }
@@ -159,7 +188,12 @@ export function TasteProfile({ partner1, partner2, genresByArtistId, progress }:
       <h4 className={styles.subheading}>{partner2.name} also loves</h4>
       <ArtistList artists={combined.partner2Loves} />
 
-      <GenrePanels progress={progress} combined={combined} />
+      <GenrePanels
+        progress={progress}
+        combined={combined}
+        partner1Name={partner1.name}
+        partner2Name={partner2.name}
+      />
     </div>
   );
 }

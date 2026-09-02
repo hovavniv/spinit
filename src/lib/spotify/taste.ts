@@ -1,6 +1,6 @@
 // No `import 'server-only'` -- matches tasteTypes.ts: rendered client-side.
 
-import type { CombinedTaste, ScoredArtist, TimeRange, WeightedGenre } from './tasteTypes';
+import type { CombinedTaste, ScoredArtist, SoloGenre, TimeRange, WeightedGenre } from './tasteTypes';
 
 const RANGE_WEIGHT: Record<TimeRange, number> = {
   short_term: 1.0,
@@ -125,9 +125,9 @@ export function genreWeights(
 }
 
 const TOP_GENRES_CAP = 10;
-const AVOID_GENRES_CAP = 4;
-const AVOID_GENRES_HIGH_THRESHOLD = 0.1;
-const AVOID_GENRES_LOW_THRESHOLD = 0.02;
+const SOLO_GENRES_CAP = 4;
+const SOLO_GENRES_HIGH_THRESHOLD = 0.1;
+const SOLO_GENRES_LOW_THRESHOLD = 0.02;
 
 /**
  * The ≤4 genres with the largest asymmetry between the two partners' OWN
@@ -142,28 +142,35 @@ const AVOID_GENRES_LOW_THRESHOLD = 0.02;
  * what the rest of the array holds. "One partner loves it, the other never
  * plays it" is bounded, uses both profiles, and is the actual dance-floor
  * risk the panel exists to name.
+ *
+ * NAMED `soloGenres`, not `avoidGenres` (design deviation, see the
+ * `SoloGenre`/`CombinedTaste.soloGenres` doc comments in tasteTypes.ts for
+ * the full account): the computation here is UNCHANGED from the original
+ * `avoidGenres` -- only the name and the panel's framing changed, because
+ * this same asymmetric set can also be one of the couple's pooled
+ * `topGenres`, and labelling that overlap "avoid" was self-contradictory.
  */
-function avoidGenres(
+function soloGenres(
   weights1: Record<string, number>,
   weights2: Record<string, number>,
-): string[] {
+): SoloGenre[] {
   const allGenres = new Set([...Object.keys(weights1), ...Object.keys(weights2)]);
-  const gaps: { genre: string; gap: number }[] = [];
+  const gaps: { genre: string; gap: number; partner: 'partner1' | 'partner2' }[] = [];
 
   for (const genre of allGenres) {
     const w1 = weights1[genre] ?? 0;
     const w2 = weights2[genre] ?? 0;
-    const asymmetric =
-      (w1 >= AVOID_GENRES_HIGH_THRESHOLD && w2 < AVOID_GENRES_LOW_THRESHOLD) ||
-      (w2 >= AVOID_GENRES_HIGH_THRESHOLD && w1 < AVOID_GENRES_LOW_THRESHOLD);
-    if (!asymmetric) continue;
-    gaps.push({ genre, gap: Math.abs(w1 - w2) });
+    if (w1 >= SOLO_GENRES_HIGH_THRESHOLD && w2 < SOLO_GENRES_LOW_THRESHOLD) {
+      gaps.push({ genre, gap: w1 - w2, partner: 'partner1' });
+    } else if (w2 >= SOLO_GENRES_HIGH_THRESHOLD && w1 < SOLO_GENRES_LOW_THRESHOLD) {
+      gaps.push({ genre, gap: w2 - w1, partner: 'partner2' });
+    }
   }
 
   return gaps
     .sort((x, y) => y.gap - x.gap)
-    .slice(0, AVOID_GENRES_CAP)
-    .map((g) => g.genre);
+    .slice(0, SOLO_GENRES_CAP)
+    .map((g) => ({ name: g.genre, partner: g.partner }));
 }
 
 function topGenres(weights: Record<string, number>): WeightedGenre[] {
@@ -234,6 +241,6 @@ export function combineTaste(
     partner1Loves,
     partner2Loves,
     topGenres: topGenres(pooledWeights),
-    avoidGenres: avoidGenres(weights1, weights2),
+    soloGenres: soloGenres(weights1, weights2),
   };
 }

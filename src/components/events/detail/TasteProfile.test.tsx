@@ -144,13 +144,14 @@ describe('TasteProfile', () => {
     // Deviation from the plan's literal snippet (unscoped screen.getByText):
     // with this fixture (each partner's sole artist carries a DIFFERENT
     // genre), mizrahi/pop are simultaneously the couple's pooled top genres
-    // AND asymmetric enough between the two partners to also qualify for
-    // avoidGenres -- a real, intended product state (see the avoidGenres
-    // doc comment in taste.ts), not a bug. That means BOTH strings render
-    // twice on the page (once as a genre-bar, once as an avoid-genre), which
-    // makes an unscoped getByText throw "multiple elements found" no matter
-    // how correct the implementation is. Scoping to the top-genres panel is
-    // what the test actually means to check.
+    // AND asymmetric enough between the two partners to also qualify as
+    // "Only one of you" genres -- a real, intended product state (see the
+    // `SoloGenre` doc comment in tasteTypes.ts: this is exactly why the
+    // panel is framed as information, not a warning), not a bug. That means
+    // BOTH strings render twice on the page (once as a genre-bar, once as a
+    // solo-genre), which makes an unscoped getByText throw "multiple
+    // elements found" no matter how correct the implementation is. Scoping
+    // to the top-genres panel is what the test actually means to check.
     render(
       <TasteProfile
         partner1={{ name: 'Maya', profile: p1 }}
@@ -218,7 +219,7 @@ describe('TasteProfile', () => {
     expect(screen.queryByTestId('genre-bar')).not.toBeInTheDocument();
   });
 
-  it('renders avoidGenres as its own panel, distinct from top genres, capped at four', () => {
+  it('renders soloGenres as its own "Only one of you" panel, distinct from top genres, capped at four', () => {
     render(
       <TasteProfile
         partner1={{ name: 'Maya', profile: genreProfile('p1', [genreArtist('x', 3)]) }}
@@ -230,8 +231,21 @@ describe('TasteProfile', () => {
         progress={{ settled: 30, total: 30 }}
       />,
     );
-    const avoid = screen.getByTestId('avoid-genres');
-    expect(within(avoid).queryByText('pop')).not.toBeInTheDocument(); // both partners have it
-    expect(within(avoid).getAllByTestId('avoid-genre')).toHaveLength(4); // six asymmetric, capped
+    const solo = screen.getByTestId('solo-genres');
+    expect(within(solo).queryByText(/^pop/)).not.toBeInTheDocument(); // both partners have it
+    expect(within(solo).getAllByTestId('solo-genre')).toHaveLength(4); // six asymmetric, capped
+  });
+
+  it('names which partner listens, in the solo-genres copy', () => {
+    render(
+      <TasteProfile
+        partner1={{ name: 'Maya', profile: genreProfile('p1', [genreArtist('x', 3)]) }}
+        partner2={{ name: 'Chris', profile: genreProfile('p2', [genreArtist('y', 3)]) }}
+        genresByArtistId={{ x: { metal: 100 }, y: { pop: 100 } }}
+        progress={{ settled: 30, total: 30 }}
+      />,
+    );
+    const solo = screen.getByTestId('solo-genres');
+    expect(within(solo).getByText(/Maya listens, Chris doesn.t/)).toBeInTheDocument();
   });
 });
