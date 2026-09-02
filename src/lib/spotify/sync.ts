@@ -1,6 +1,7 @@
 import 'server-only';
 
 import { createClient } from '@/lib/supabase/server';
+import { existingArtistIds, insertQueueRows, settleMany } from '@/lib/genres/queueDal';
 import { spotifyFetch } from './client';
 import { withUserToken } from './connectionDal';
 import { mergeRanges, type ByRange } from './taste';
@@ -22,11 +23,21 @@ interface TopArtistsResponse {
  * Phase-1 sync: fetches the partner's Spotify top artists across all three
  * time ranges, merges them into one ranked list (task 4's `mergeRanges`),
  * and stores that list on `taste_profiles`. Deliberately writes ONLY
- * `partner_id`, `top_artists`, and `computed_at` -- genre/origin/era weights
- * and `enriched_at` are C2's, once genre enrichment exists. This function
- * must never write `events.couple_status` (that write is a silent no-op
- * under the partner's own session -- see design review) or seed
- * `enrichment_queue` (nothing drains it yet).
+ * `partner_id`, `top_artists`, and `computed_at` on `taste_profiles` --
+ * genre/origin/era weights and `enriched_at` are C2's, once genre
+ * enrichment exists. This function must never write `events.couple_status`
+ * (that write is a silent no-op under the partner's own session -- see
+ * design review).
+ *
+ * It DOES reconcile `enrichment_queue` (task 7b) against the same merged
+ * list, in one pass against one read of the existing queue: insert a new row
+ * (with `position` = that artist's index in the score-ordered list) for
+ * every fresh-list artist not already queued, and settle every existing
+ * queue row whose artist dropped off the fresh list. Never touches a row
+ * that is already present -- settled or not -- so a re-sync can never
+ * un-settle completed enrichment work, and an existing row's `position`
+ * never changes once written. Without this write, `claim_next_artist`
+ * (task 2d) has nothing to claim, ever.
  *
  * PRECONDITION: the caller has verified that the signed-in user owns
  * `partnerId` (requireUser + partnerOwner), as connectSpotify, resyncSpotify
@@ -66,5 +77,20 @@ export async function syncTasteProfile(partnerId: string): Promise<void> {
     if (!written.data?.length) {
       throw new Error(`taste_profiles upsert wrote no row for partner ${partnerId}`);
     }
+
+    // Reconcile enrichment_queue against the SAME merged list, one read of
+    // the existing queue, one diff, two writes -- see this function's header
+    // comment and the "three rules" recorded there (never un-settle, seed
+    // position from rank, never renumber an existing row).
+    const existingIds = await existingArtistIds(partnerId);
+    const freshIds = new Set(topArtists.map((a) => a.id));
+
+    const staleIds = [...existingIds].filter((id) => !freshIds.has(id));
+    await settleMany(partnerId, staleIds);
+
+    const newRows = topArtists
+      .map((artist, position) => ({ artistId: artist.id, position }))
+      .filter((row) => !existingIds.has(row.artistId));
+    await insertQueueRows(partnerId, newRows);
   });
 }

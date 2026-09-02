@@ -122,6 +122,92 @@ export async function releaseClaim(partnerId: string, artistId: string): Promise
 }
 
 /**
+ * Reads the artist ids already present in a partner's queue -- settled or
+ * not, this is a set membership check, not a status read. `sync.ts`'s
+ * reconciliation (task 7b) uses this to decide which fresh-list artists are
+ * genuinely new (insert) versus already known (never touched, whatever their
+ * settled state -- rule #1: a blanket upsert here would un-settle completed
+ * work on every re-sync).
+ */
+export async function existingArtistIds(partnerId: string): Promise<Set<string>> {
+  const supabase = await createClient();
+
+  const read = await supabase
+    .from('enrichment_queue')
+    .select('artist_id')
+    .eq('partner_id', partnerId);
+  if (read.error) {
+    throw new Error(`enrichment_queue read failed: ${read.error.code}`);
+  }
+
+  return new Set((read.data ?? []).map((row) => (row as { artist_id: string }).artist_id));
+}
+
+/**
+ * Inserts new queue rows for artists newly seen on a partner's fresh
+ * top-artist list -- never called with an artist already present (caller's
+ * job, via `existingArtistIds`), so this never touches an existing row's
+ * `position` (rule #2 -- old rows keep their old rank) or its `settled_at`.
+ * A no-op (returns `{ rowCount: 0 }` without a write) when `rows` is empty --
+ * that is the "list unchanged" case, not a failed insert, so it must not
+ * trip the zero-row check a genuine attempted insert would.
+ */
+export async function insertQueueRows(
+  partnerId: string,
+  rows: { artistId: string; position: number }[],
+): Promise<{ rowCount: number }> {
+  if (rows.length === 0) return { rowCount: 0 };
+
+  const supabase = await createClient();
+  const write = await supabase
+    .from('enrichment_queue')
+    .insert(rows.map((r) => ({ partner_id: partnerId, artist_id: r.artistId, position: r.position })))
+    .select();
+  if (write.error) {
+    throw new Error(`enrichment_queue insert failed: ${write.error.code}`);
+  }
+  if (!write.data?.length) {
+    throw new Error(`enrichment_queue insert wrote no rows for partner ${partnerId}`);
+  }
+
+  return { rowCount: write.data.length };
+}
+
+/**
+ * Settles every queue row for the given artist ids in one batch -- used for
+ * artists that dropped off a partner's fresh top-artist list between syncs
+ * (task 7b). Marks settled rather than deleting: `enrichment_queue` has no
+ * DELETE grant (task 2 deliberately withheld it) and `artist_genres` may
+ * already hold the cached result, so settling preserves that history while
+ * still letting `queueCounts`'s `settled` catch up to `total` -- the "still
+ * analysing" state this whole task exists to make clearable again.
+ * A no-op (returns `{ rowCount: 0 }` without a write) when `artistIds` is
+ * empty -- the "nothing dropped off" case, not a failed settle.
+ */
+export async function settleMany(
+  partnerId: string,
+  artistIds: string[],
+): Promise<{ rowCount: number }> {
+  if (artistIds.length === 0) return { rowCount: 0 };
+
+  const supabase = await createClient();
+  const write = await supabase
+    .from('enrichment_queue')
+    .update({ settled_at: new Date().toISOString() })
+    .eq('partner_id', partnerId)
+    .in('artist_id', artistIds)
+    .select();
+  if (write.error) {
+    throw new Error(`enrichment_queue settle-many failed: ${write.error.code}`);
+  }
+  if (!write.data?.length) {
+    throw new Error(`enrichment_queue settle-many wrote no rows for partner ${partnerId}`);
+  }
+
+  return { rowCount: write.data.length };
+}
+
+/**
  * `count(*)` and `count(*) where settled_at is not null`, both over
  * `enrichment_queue` for that partner -- NOT over `top_artists` (design
  * §2.10 records that counting the artist list instead made "analysing"

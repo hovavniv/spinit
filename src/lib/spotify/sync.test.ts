@@ -50,6 +50,37 @@ function tasteProfilesTable() {
   return { upsert: profileUpsertMock };
 }
 
+/**
+ * `enrichment_queue` builder for the reconciliation added by task 7b:
+ * `select('artist_id').eq(...)` (the existing-queue read), `insert(...).select()`
+ * (new rows), `update(...).eq(...).in(...).select()` (batch settle of stale rows).
+ * All three are stubbed here rather than via queueDal's own mocks: sync.ts
+ * calls `existingArtistIds`/`insertQueueRows`/`settleMany` from
+ * `@/lib/genres/queueDal`, which is real, unmocked code in this test file --
+ * it is `queueDal.ts`'s OWN `createClient` that resolves to this same
+ * `fromMock`, since `@/lib/supabase/server` is mocked once, module-wide.
+ */
+const queueSelectEq = vi.fn();
+const queueInsertMock = vi.fn();
+const queueInsertSelect = vi.fn();
+const queueUpdateMock = vi.fn();
+const queueUpdateEq1 = vi.fn();
+const queueUpdateIn = vi.fn();
+const queueSettleSelect = vi.fn();
+
+function enrichmentQueueTable() {
+  queueInsertMock.mockReturnValue({ select: queueInsertSelect });
+  queueUpdateEq1.mockReturnValue({ in: queueUpdateIn });
+  queueUpdateIn.mockReturnValue({ select: queueSettleSelect });
+  queueUpdateMock.mockReturnValue({ eq: queueUpdateEq1 });
+
+  return {
+    select: vi.fn().mockReturnValue({ eq: queueSelectEq }),
+    insert: queueInsertMock,
+    update: queueUpdateMock,
+  };
+}
+
 beforeEach(() => {
   vi.clearAllMocks();
   spotifyFetchMock.mockResolvedValue({ items: [] });
@@ -58,9 +89,15 @@ beforeEach(() => {
   tokenSingle.mockResolvedValue({ data: { refresh_token: encryptToken('R') }, error: null });
   refreshAccessTokenMock.mockResolvedValue({ accessToken: 'A', refreshToken: 'R' });
   profileUpsertSelect.mockResolvedValue({ data: [{}], error: null });
+
+  queueSelectEq.mockResolvedValue({ data: [], error: null });
+  queueInsertSelect.mockResolvedValue({ data: [{ id: 'q1' }], error: null });
+  queueSettleSelect.mockResolvedValue({ data: [{ id: 'q1' }], error: null });
+
   fromMock.mockImplementation((table: string) => {
     if (table === 'spotify_tokens') return tokensTable();
     if (table === 'taste_profiles') return tasteProfilesTable();
+    if (table === 'enrichment_queue') return enrichmentQueueTable();
     throw new Error(`unexpected table ${table}`);
   });
 });
@@ -113,9 +150,122 @@ it('UPSERTS the profile, so a re-sync does not fail on an existing row', async (
                                              { onConflict: 'partner_id' });
 });
 
-it('does not seed enrichment_queue — that is C2', async () => {
+/**
+ * `spotifyFetchMock` answers every range call identically, so `mergeRanges`
+ * merges the same list three times -- an artist's contribution is then
+ * strictly decreasing by input rank across all three ranges (short_term's
+ * weight of 1.0 always dominates), so the merged, score-sorted order equals
+ * this input order. That is what lets these tests assert on fixed ids/
+ * positions without re-deriving mergeRanges' own scoring.
+ */
+function freshArtists(ids: string[]) {
+  spotifyFetchMock.mockResolvedValue({
+    items: ids.map((id) => ({ id, name: id, images: [] })),
+  });
+}
+
+/**
+ * TASK 7b. `sync.ts` used to guarantee it NEVER touched `enrichment_queue`
+ * (C1's boundary, when nothing drained the queue). C2 added
+ * `claim_next_artist` (task 2d) and the enrich-next route (task 7), both of
+ * which read that queue -- so the old guard now pins the exact bug this task
+ * exists to fix (an empty queue forever) rather than a real invariant.
+ * Deliberately inverted here, replacing the old
+ * "does not seed enrichment_queue — that is C2" test.
+ */
+it('DOES seed enrichment_queue — reconciliation is C2 task 7b, not deferred anymore',
+  async () => {
+    freshArtists(['a1']);
+    await syncTasteProfile('p1');
+    expect(fromMock).toHaveBeenCalledWith('enrichment_queue');
+  });
+
+it('inserts a new queue row for a fresh-list artist not already queued', async () => {
+  queueSelectEq.mockResolvedValue({ data: [], error: null }); // empty existing queue
+  freshArtists(['a1']);
   await syncTasteProfile('p1');
-  expect(fromMock).not.toHaveBeenCalledWith('enrichment_queue');
+  expect(queueInsertMock).toHaveBeenCalledWith([
+    { partner_id: 'p1', artist_id: 'a1', position: 0 },
+  ]);
+});
+
+it('does NOT insert a row for an artist already present in the queue, ' +
+   'settled or not (rule #1\'s positive control)', async () => {
+  queueSelectEq.mockResolvedValue({ data: [{ artist_id: 'a1' }], error: null });
+  freshArtists(['a1']);
+  await syncTasteProfile('p1');
+  expect(queueInsertMock).not.toHaveBeenCalled();
+});
+
+it("a new row's position matches its index in the score-ordered merged list", async () => {
+  queueSelectEq.mockResolvedValue({ data: [], error: null });
+  freshArtists(['a1', 'a2', 'a3']);
+  await syncTasteProfile('p1');
+  expect(queueInsertMock).toHaveBeenCalledWith([
+    { partner_id: 'p1', artist_id: 'a1', position: 0 },
+    { partner_id: 'p1', artist_id: 'a2', position: 1 },
+    { partner_id: 'p1', artist_id: 'a3', position: 2 },
+  ]);
+});
+
+it("an existing row's position is unchanged on re-sync, even if its rank shifted", async () => {
+  // a2 was queued at position 5 (some earlier sync); the fresh list now
+  // ranks it first. Only a1 (new) gets inserted -- a2's row is never touched,
+  // so its stored position cannot have changed.
+  queueSelectEq.mockResolvedValue({ data: [{ artist_id: 'a2' }], error: null });
+  freshArtists(['a2', 'a1']);
+  await syncTasteProfile('p1');
+  expect(queueInsertMock).toHaveBeenCalledWith([
+    { partner_id: 'p1', artist_id: 'a1', position: 1 },
+  ]);
+});
+
+it('surfaces a zero-row insert as an error rather than reporting success', async () => {
+  queueSelectEq.mockResolvedValue({ data: [], error: null });
+  queueInsertSelect.mockResolvedValue({ data: [], error: null });
+  freshArtists(['a1']);
+  await expect(syncTasteProfile('p1')).rejects.toThrow(/enrichment_queue insert wrote no rows/);
+});
+
+it('settles queue rows for artists that dropped off the new top-artist list', async () => {
+  // p1 previously had artists a1, a2, a3 queued. The fresh sync returns only a1, a3.
+  queueSelectEq.mockResolvedValue({
+    data: [{ artist_id: 'a1' }, { artist_id: 'a2' }, { artist_id: 'a3' }],
+    error: null,
+  });
+  freshArtists(['a1', 'a3']);
+  await syncTasteProfile('p1');
+  expect(queueUpdateIn).toHaveBeenCalledWith('artist_id', ['a2']);
+});
+
+it('settles nothing when the list is unchanged', async () => {
+  queueSelectEq.mockResolvedValue({ data: [{ artist_id: 'a1' }], error: null });
+  freshArtists(['a1']);
+  await syncTasteProfile('p1');
+  expect(queueUpdateMock).not.toHaveBeenCalled();
+});
+
+it('leaves an UNSETTLED row for an artist still on the list alone', async () => {
+  // the positive control: settling everything unsettled would also make the
+  // previous test pass, and would silently skip enrichment for a1.
+  queueSelectEq.mockResolvedValue({
+    data: [{ artist_id: 'a1' }, { artist_id: 'a2' }],
+    error: null,
+  });
+  freshArtists(['a1']);
+  await syncTasteProfile('p1');
+  expect(queueUpdateIn).toHaveBeenCalledWith('artist_id', ['a2']);
+  expect(queueUpdateIn).not.toHaveBeenCalledWith('artist_id', expect.arrayContaining(['a1']));
+});
+
+it('surfaces a zero-row settle rather than reporting success', async () => {
+  queueSelectEq.mockResolvedValue({
+    data: [{ artist_id: 'a1' }, { artist_id: 'a2' }],
+    error: null,
+  });
+  freshArtists(['a1']);
+  queueSettleSelect.mockResolvedValue({ data: [], error: null });
+  await expect(syncTasteProfile('p1')).rejects.toThrow(/enrichment_queue settle-many wrote no rows/);
 });
 
 it('throws when the taste_profiles upsert errors', async () => {
