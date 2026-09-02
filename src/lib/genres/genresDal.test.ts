@@ -22,13 +22,15 @@ vi.mock('@/lib/supabase/server', () => ({ createClient: async () => ({ from }) }
 import { writeGenres, readGenres, blockedGenres, writeGenreWeights } from './genresDal';
 import type { ArtistGenresRow } from './enrich';
 
-// taste_profiles: upsert(row, opts).select()
-const tpUpsert = vi.fn();
-const tpUpsertSelect = vi.fn();
+// taste_profiles: update(row).eq('partner_id', p).select()
+const tpUpdate = vi.fn();
+const tpUpdateEq = vi.fn();
+const tpUpdateSelect = vi.fn();
 
 function tasteProfilesTable() {
-  tpUpsert.mockReturnValue({ select: tpUpsertSelect });
-  return { upsert: tpUpsert };
+  tpUpdateEq.mockReturnValue({ select: tpUpdateSelect });
+  tpUpdate.mockReturnValue({ eq: tpUpdateEq });
+  return { update: tpUpdate };
 }
 
 function artistGenresTable() {
@@ -50,7 +52,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   agUpsertSelect.mockResolvedValue({ data: [{ event_id: 'e1' }], error: null });
   agReadMaybeSingle.mockResolvedValue({ data: null, error: null });
-  tpUpsertSelect.mockResolvedValue({ data: [{ partner_id: 'p1' }], error: null });
+  tpUpdateSelect.mockResolvedValue({ data: [{ partner_id: 'p1' }], error: null });
   from.mockImplementation((table: string) => {
     if (table === 'artist_genres') return artistGenresTable();
     if (table === 'event_blocklist') return eventBlocklistTable();
@@ -119,33 +121,45 @@ describe('writeGenres', () => {
 describe('writeGenreWeights', () => {
   const weights = { genres: { pop: 0.6 }, origins: { israeli: 0.4 }, eras: { '2010s': 1 } };
 
-  it('resolves the row count from the upsert', async () => {
-    tpUpsertSelect.mockResolvedValueOnce({ data: [{ partner_id: 'p1' }], error: null });
+  it('resolves the row count from the update', async () => {
+    tpUpdateSelect.mockResolvedValueOnce({ data: [{ partner_id: 'p1' }], error: null });
     await expect(writeGenreWeights('p1', weights)).resolves.toEqual({ rowCount: 1 });
   });
 
   it('surfaces a zero row count rather than throwing -- the caller decides what that means', async () => {
-    tpUpsertSelect.mockResolvedValueOnce({ data: [], error: null });
+    tpUpdateSelect.mockResolvedValueOnce({ data: [], error: null });
     await expect(writeGenreWeights('p1', weights)).resolves.toEqual({ rowCount: 0 });
   });
 
-  it('throws when the upsert itself errors', async () => {
-    tpUpsertSelect.mockResolvedValueOnce({ data: null, error: { code: '42501' } });
-    await expect(writeGenreWeights('p1', weights)).rejects.toThrow(/genre-weights upsert failed/);
+  it('throws when the update itself errors', async () => {
+    tpUpdateSelect.mockResolvedValueOnce({ data: null, error: { code: '42501' } });
+    await expect(writeGenreWeights('p1', weights)).rejects.toThrow(/genre-weights update failed/);
   });
 
   it(
+    'scopes the update to this partner, via .eq, never by including partner_id in the payload',
+    async () => {
+      await writeGenreWeights('p1', weights);
+      expect(tpUpdateEq).toHaveBeenCalledWith('partner_id', 'p1');
+    },
+  );
+
+  it(
     'sends a payload that NEVER carries top_artists or computed_at -- sync.ts owns those two ' +
-      'columns exclusively, and an upsert from here carrying them would clobber the artist ' +
-      'list with whatever this caller happens to hold',
+      'columns exclusively, and a write from here carrying them would clobber the artist ' +
+      'list with whatever this caller happens to hold. Also a PLAIN UPDATE, not an upsert -- ' +
+      'top_artists is NOT NULL with no default, and Postgres validates NOT NULL on an upsert\'s ' +
+      'candidate insert row before conflict resolution, so a 4-column upsert 23502s even ' +
+      'against an existing row',
     async () => {
       await writeGenreWeights('p1', weights);
 
-      const sent = tpUpsert.mock.calls[0][0] as Record<string, unknown>;
+      expect(tpUpdate).toHaveBeenCalledTimes(1);
+      const sent = tpUpdate.mock.calls[0][0] as Record<string, unknown>;
       expect('top_artists' in sent).toBe(false);
       expect('computed_at' in sent).toBe(false);
+      expect('partner_id' in sent).toBe(false);
       expect(sent).toMatchObject({
-        partner_id: 'p1',
         genre_weights: weights.genres,
         origin_weights: weights.origins,
         era_weights: weights.eras,

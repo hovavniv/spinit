@@ -43,7 +43,7 @@ export async function writeGenres(row: ArtistGenresRow): Promise<{ rowCount: num
  * `top_artists` and `computed_at` exclusively -- two writers, one table,
  * disjoint column sets, same single-writer discipline that fixed the
  * `attempts`/`last_attempt_at` collision between `enrich.ts` and
- * `releaseClaim` (queueDal.ts). An upsert from here that also carried
+ * `releaseClaim` (queueDal.ts). A write from here that also carried
  * `top_artists` would clobber the artist list with whatever THIS caller
  * happened to hold -- the same class of silent data loss `writeGenres`'s own
  * omitted-keys discipline exists to prevent, one table over.
@@ -51,6 +51,16 @@ export async function writeGenres(row: ArtistGenresRow): Promise<{ rowCount: num
  * Named `writeGenreWeights`, not the plan's original `writeTasteProfile` --
  * task 6b's file list omitted this function entirely; the rename records
  * that it writes a narrow slice of the row, not the whole profile.
+ *
+ * PLAIN UPDATE, not upsert -- found live, not in review: `top_artists` is
+ * NOT NULL with no default, and Postgres validates NOT NULL on an
+ * `INSERT ... ON CONFLICT DO UPDATE`'s candidate row BEFORE conflict
+ * resolution, so an upsert carrying only the four genre-side columns fails
+ * `23502` even when the row already exists and the conflict would have
+ * resolved as an UPDATE. `sync.ts` always creates the row first (this
+ * function is only ever called after a successful `enrichArtist` settle,
+ * downstream of at least one prior sync), so there is no legitimate
+ * "row doesn't exist yet" case for this function to insert against.
  */
 export async function writeGenreWeights(
   partnerId: string,
@@ -60,19 +70,16 @@ export async function writeGenreWeights(
 
   const write = await supabase
     .from('taste_profiles')
-    .upsert(
-      {
-        partner_id: partnerId,
-        genre_weights: weights.genres,
-        origin_weights: weights.origins,
-        era_weights: weights.eras,
-        enriched_at: new Date().toISOString(),
-      },
-      { onConflict: 'partner_id' },
-    )
+    .update({
+      genre_weights: weights.genres,
+      origin_weights: weights.origins,
+      era_weights: weights.eras,
+      enriched_at: new Date().toISOString(),
+    })
+    .eq('partner_id', partnerId)
     .select();
   if (write.error) {
-    throw new Error(`taste_profiles genre-weights upsert failed: ${write.error.code}`);
+    throw new Error(`taste_profiles genre-weights update failed: ${write.error.code}`);
   }
 
   return { rowCount: write.data?.length ?? 0 };
