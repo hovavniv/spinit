@@ -196,15 +196,21 @@ export async function settleMany(
     .update({ settled_at: new Date().toISOString() })
     .eq('partner_id', partnerId)
     .in('artist_id', artistIds)
+    // Pre-push review nit 5: without this, a re-sync re-stamps settled_at on
+    // artists that were ALREADY settled -- existingArtistIds returns rows
+    // "settled or not", so every sync re-touches every stale id it has ever
+    // seen. Worse, that kept the row count non-zero and masked a genuinely
+    // empty diff from the zero-row check below.
+    .is('settled_at', null)
     .select();
   if (write.error) {
     throw new Error(`enrichment_queue settle-many failed: ${write.error.code}`);
   }
-  if (!write.data?.length) {
-    throw new Error(`enrichment_queue settle-many wrote no rows for partner ${partnerId}`);
-  }
-
-  return { rowCount: write.data.length };
+  // A zero-row result is a NORMAL outcome now, not an error: with the filter
+  // above, "every stale id was already settled" (or the diff was empty)
+  // looks exactly like "nothing to settle" -- both are fine. This function
+  // only throws on a genuine query error, above.
+  return { rowCount: write.data?.length ?? 0 };
 }
 
 /**

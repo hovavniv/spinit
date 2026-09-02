@@ -3,11 +3,12 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 const from = vi.fn();
 
 // enrichment_queue: update(...).eq(...).eq(...).select() [settle/releaseClaim]
-//               and: update(...).eq(...).in(...).select() [settleMany]
+//               and: update(...).eq(...).in(...).is(...).select() [settleMany]
 const qUpdate = vi.fn();
 const qUpdateEq1 = vi.fn();
 const qUpdateEq2 = vi.fn();
 const qUpdateIn = vi.fn();
+const qUpdateIs = vi.fn();
 const qUpdateSelect = vi.fn();
 
 // enrichment_queue: select('*', {count, head}).eq(...) [.not(...)]
@@ -45,7 +46,8 @@ import { settle, releaseClaim, queueCounts, existingArtistIds, insertQueueRows, 
 
 function enrichmentQueueTable() {
   qUpdateEq2.mockReturnValue({ select: qUpdateSelect });
-  qUpdateIn.mockReturnValue({ select: qUpdateSelect });
+  qUpdateIs.mockReturnValue({ select: qUpdateSelect });
+  qUpdateIn.mockReturnValue({ is: qUpdateIs });
   qUpdateEq1.mockReturnValue({ eq: qUpdateEq2, in: qUpdateIn });
   qUpdate.mockReturnValue({ eq: qUpdateEq1 });
 
@@ -288,6 +290,14 @@ describe('settleMany', () => {
     expect(qUpdateIn).toHaveBeenCalledWith('artist_id', ['a1', 'a2']);
   });
 
+  it('only touches rows NOT already settled, so a re-sync cannot re-stamp settled_at', async () => {
+    // Pre-push review nit 5: existingArtistIds returns rows settled or not,
+    // so without this filter every re-sync re-touches every stale id it has
+    // ever seen.
+    await settleMany('p1', ['a1']);
+    expect(qUpdateIs).toHaveBeenCalledWith('settled_at', null);
+  });
+
   it('is a no-op that never touches the table when artistIds is empty', async () => {
     await expect(settleMany('p1', [])).resolves.toEqual({ rowCount: 0 });
     expect(qUpdate).not.toHaveBeenCalled();
@@ -298,8 +308,12 @@ describe('settleMany', () => {
     await expect(settleMany('p1', ['a1'])).rejects.toThrow(/enrichment_queue settle-many failed/);
   });
 
-  it('surfaces a zero-row settle as an error rather than reporting success', async () => {
-    qUpdateSelect.mockResolvedValueOnce({ data: [], error: null });
-    await expect(settleMany('p1', ['a1'])).rejects.toThrow(/enrichment_queue settle-many wrote no rows/);
-  });
+  it(
+    'a zero-row settle is now a NORMAL outcome, not an error -- ' +
+      'everything stale may already be settled (nit 5 changes this contract)',
+    async () => {
+      qUpdateSelect.mockResolvedValueOnce({ data: [], error: null });
+      await expect(settleMany('p1', ['a1'])).resolves.toEqual({ rowCount: 0 });
+    },
+  );
 });

@@ -66,12 +66,14 @@ const queueInsertSelect = vi.fn();
 const queueUpdateMock = vi.fn();
 const queueUpdateEq1 = vi.fn();
 const queueUpdateIn = vi.fn();
+const queueUpdateIs = vi.fn();
 const queueSettleSelect = vi.fn();
 
 function enrichmentQueueTable() {
   queueInsertMock.mockReturnValue({ select: queueInsertSelect });
   queueUpdateEq1.mockReturnValue({ in: queueUpdateIn });
-  queueUpdateIn.mockReturnValue({ select: queueSettleSelect });
+  queueUpdateIn.mockReturnValue({ is: queueUpdateIs });
+  queueUpdateIs.mockReturnValue({ select: queueSettleSelect });
   queueUpdateMock.mockReturnValue({ eq: queueUpdateEq1 });
 
   return {
@@ -258,14 +260,28 @@ it('leaves an UNSETTLED row for an artist still on the list alone', async () => 
   expect(queueUpdateIn).not.toHaveBeenCalledWith('artist_id', expect.arrayContaining(['a1']));
 });
 
-it('surfaces a zero-row settle rather than reporting success', async () => {
+it(
+  'does NOT throw on a zero-row settle -- everything stale may already be ' +
+    'settled (fix-spec nit 5 replaces the old throw-on-zero-rows contract)',
+  async () => {
+    queueSelectEq.mockResolvedValue({
+      data: [{ artist_id: 'a1' }, { artist_id: 'a2' }],
+      error: null,
+    });
+    freshArtists(['a1']);
+    queueSettleSelect.mockResolvedValue({ data: [], error: null });
+    await expect(syncTasteProfile('p1')).resolves.toBeUndefined();
+  },
+);
+
+it('settles only rows NOT already settled, so a re-sync cannot re-stamp settled_at', async () => {
   queueSelectEq.mockResolvedValue({
     data: [{ artist_id: 'a1' }, { artist_id: 'a2' }],
     error: null,
   });
   freshArtists(['a1']);
-  queueSettleSelect.mockResolvedValue({ data: [], error: null });
-  await expect(syncTasteProfile('p1')).rejects.toThrow(/enrichment_queue settle-many wrote no rows/);
+  await syncTasteProfile('p1');
+  expect(queueUpdateIs).toHaveBeenCalledWith('settled_at', null);
 });
 
 it('throws when the taste_profiles upsert errors', async () => {
