@@ -43,7 +43,7 @@ export const getEventDetail = cache(async (eventId: string): Promise<EventDetail
   const { data, error } = await supabase
     .from('events')
     .select(
-      `id, dj_id, couple_names, couple_status,
+      `id, dj_id, couple_names,
        event_partners (id, slot, display_name, user_id,
          spotify_connections (status),
          taste_profiles (top_artists, computed_at)),
@@ -129,7 +129,6 @@ export const getEventDetail = cache(async (eventId: string): Promise<EventDetail
     id: data.id,
     dj_id: data.dj_id,
     couple_names: data.couple_names,
-    couple_status: data.couple_status,
     // Both note tables declare `event_id` as PRIMARY KEY and FOREIGN KEY,
     // which is PostgREST's documented condition for detecting a one-to-one
     // relationship: a to-one embed comes back as an OBJECT (`{ body }`), not

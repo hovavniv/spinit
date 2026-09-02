@@ -8,7 +8,6 @@
    --------------------------------------------------------------------------- */
 
 import type { ActionResult } from '@/lib/auth/errors';
-import type { CoupleStatus } from '@/lib/dashboard/types';
 import type { TasteProfile } from '@/lib/spotify/tasteTypes';
 
 export type EventSegment = 'ceremony' | 'reception' | 'party';
@@ -78,7 +77,6 @@ export interface EventDetail {
   /** The owner. The route needs it to resolve the viewer (design §4). */
   dj_id: string;
   couple_names: string;
-  couple_status: CoupleStatus;
   /**
    * The two note bodies (design §3, §5.2). Strings, never null: both tables
    * default the body to '' and the migration backfills a row per event.

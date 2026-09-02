@@ -95,7 +95,6 @@ function row(overrides: Record<string, unknown> = {}) {
     id: EVENT,
     dj_id: 'dj-1',
     couple_names: 'Noa & Eitan',
-    couple_status: 'awaiting-couple',
     event_private_notes: { body: 'speech at 9pm' },
     event_shared_notes: { body: 'both of us agreed' },
     event_partners: [{ id: 'p1', slot: 1, display_name: 'Noa', user_id: null }],

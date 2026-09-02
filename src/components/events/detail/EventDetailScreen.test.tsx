@@ -41,7 +41,6 @@ function buildEvent(): EventDetail {
   return {
     id: EVENT_ID,
     couple_names: 'Noa & Eitan',
-    couple_status: 'awaiting-couple',
     dj_id: 'dj-1',
     privateNotes: 'DJ private note',
     sharedNotes: 'Couple shared note',
