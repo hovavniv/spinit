@@ -84,9 +84,8 @@ async function lastfmFetch(url: URL): Promise<unknown> {
 }
 
 /**
- * Resolves an MBID to Last.fm's top tags for that artist. Queries by MBID
- * only, never by name -- name lookups are ambiguous across artists sharing a
- * name and are not what this ladder step is for.
+ * Parses a `lastfmFetch` body shared by every `artist.gettoptags` caller,
+ * regardless of whether the lookup was by MBID or by name.
  *
  * Last.fm reports failure INSIDE a 200 response: `{ error, message }`.
  * Error 6 ("not found") is a real answer -- the artist genuinely is not in
@@ -94,20 +93,7 @@ async function lastfmFetch(url: URL): Promise<unknown> {
  * other `error` code, and a 200 missing the `toptags` key entirely, means
  * Last.fm did not do the lookup we asked for and is 'unavailable'.
  */
-export async function topTagsByMbid(mbid: string): Promise<Tag[]> {
-  const apiKey = process.env.LASTFM_API_KEY;
-  if (!apiKey) {
-    throw new GenreError('unavailable', 'lastfm api key not configured');
-  }
-
-  const url = new URL(BASE);
-  url.searchParams.set('method', 'artist.gettoptags');
-  url.searchParams.set('mbid', mbid);
-  url.searchParams.set('api_key', apiKey);
-  url.searchParams.set('format', 'json');
-
-  const body = (await lastfmFetch(url)) as LastfmTopTagsBody;
-
+function parseTopTags(body: LastfmTopTagsBody): Tag[] {
   if (typeof body.error === 'number') {
     if (body.error === 6) {
       return [];
@@ -129,4 +115,59 @@ export async function topTagsByMbid(mbid: string): Promise<Tag[]> {
     name: String(t.name),
     count: Number(t.count ?? 0),
   }));
+}
+
+function requireApiKey(): string {
+  const apiKey = process.env.LASTFM_API_KEY;
+  if (!apiKey) {
+    throw new GenreError('unavailable', 'lastfm api key not configured');
+  }
+  return apiKey;
+}
+
+/**
+ * Resolves an MBID to Last.fm's top tags for that artist. Queries by MBID
+ * only, never by name -- name lookups are ambiguous across artists sharing a
+ * name and are not what this ladder step is for.
+ */
+export async function topTagsByMbid(mbid: string): Promise<Tag[]> {
+  const apiKey = requireApiKey();
+
+  const url = new URL(BASE);
+  url.searchParams.set('method', 'artist.gettoptags');
+  url.searchParams.set('mbid', mbid);
+  url.searchParams.set('api_key', apiKey);
+  url.searchParams.set('format', 'json');
+
+  const body = (await lastfmFetch(url)) as LastfmTopTagsBody;
+  return parseTopTags(body);
+}
+
+/**
+ * Fallback rung: resolves an artist NAME to Last.fm's top tags. Less
+ * trustworthy than `topTagsByMbid` -- an ambiguous name can return a
+ * completely different artist's tags (design §2.10) -- so it carries two
+ * defenses `topTagsByMbid` doesn't need:
+ *
+ *  - `autocorrect=0`: Last.fm's `autocorrect=1` silently maps an
+ *    unrecognized name onto its own "best guess" match, which is the same
+ *    wrong-artist failure mode arriving through a different door. An
+ *    unresolvable name must come back as a genuine miss, not a confident
+ *    wrong answer.
+ *  - `URLSearchParams` encodes the name correctly for both `&` (which would
+ *    otherwise truncate the query string) and non-ASCII scripts (Hebrew
+ *    artist names are a real case in this product).
+ */
+export async function topTagsByName(name: string): Promise<Tag[]> {
+  const apiKey = requireApiKey();
+
+  const url = new URL(BASE);
+  url.searchParams.set('method', 'artist.gettoptags');
+  url.searchParams.set('artist', name);
+  url.searchParams.set('autocorrect', '0');
+  url.searchParams.set('api_key', apiKey);
+  url.searchParams.set('format', 'json');
+
+  const body = (await lastfmFetch(url)) as LastfmTopTagsBody;
+  return parseTopTags(body);
 }
