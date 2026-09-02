@@ -118,6 +118,13 @@ describe('settle', () => {
     qUpdateSelect.mockResolvedValueOnce({ data: null, error: { code: '500' } });
     await expect(settle('p1', 'a1')).rejects.toThrow(/enrichment_queue settle failed/);
   });
+
+  it('targets the row by BOTH partner_id and artist_id -- ' +
+     'should-fix 14: no assertion here inspected the .eq() columns before', async () => {
+    await settle('p1', 'a1');
+    expect(qUpdateEq1).toHaveBeenCalledWith('partner_id', 'p1');
+    expect(qUpdateEq2).toHaveBeenCalledWith('artist_id', 'a1');
+  });
 });
 
 describe('releaseClaim', () => {
@@ -149,6 +156,38 @@ describe('releaseClaim', () => {
     epSingle.mockResolvedValueOnce({ data: null, error: { code: 'PGRST116' } });
     await expect(releaseClaim('missing', 'a1')).rejects.toThrow(/no event_partners row/);
   });
+
+  it('clears the claim by BOTH partner_id and artist_id', async () => {
+    await releaseClaim('p1', 'a1');
+    expect(qUpdateEq1).toHaveBeenCalledWith('partner_id', 'p1');
+    expect(qUpdateEq2).toHaveBeenCalledWith('artist_id', 'a1');
+  });
+
+  it("looks up the partner's event id by the partner's OWN id", async () => {
+    await releaseClaim('p1', 'a1');
+    expect(epEq).toHaveBeenCalledWith('id', 'p1');
+  });
+
+  it(
+    'reads the current attempts count scoped to event_id, not partner_id -- ' +
+      'mutating this to partnerId would reintroduce the attempts hot loop this ' +
+      'file\'s own header comment documents fixing once already',
+    async () => {
+      await releaseClaim('p1', 'a1');
+      expect(agReadEq1).toHaveBeenCalledWith('event_id', 'e1');
+      expect(agReadEq2).toHaveBeenCalledWith('spotify_artist_id', 'a1');
+    },
+  );
+
+  it(
+    'writes the advanced backoff scoped to event_id, not partner_id -- ' +
+      'same hot-loop risk one write over',
+    async () => {
+      await releaseClaim('p1', 'a1');
+      expect(agUpdateEq1).toHaveBeenCalledWith('event_id', 'e1');
+      expect(agUpdateEq2).toHaveBeenCalledWith('spotify_artist_id', 'a1');
+    },
+  );
 });
 
 describe('queueCounts', () => {
@@ -179,6 +218,21 @@ describe('queueCounts', () => {
     qCountNot.mockResolvedValueOnce({ count: null, error: { code: '500' } });
     await expect(queueCounts('p1')).rejects.toThrow(/enrichment_queue settled count failed/);
   });
+
+  it('scopes both counts to the partner id', async () => {
+    await queueCounts('p1');
+    expect(qCountEq).toHaveBeenCalledWith('partner_id', 'p1');
+  });
+
+  it(
+    'counts SETTLED rows via not(settled_at, is, null), not claimed rows -- ' +
+      'the mutation the reviewer found made "still analysing" never clear ' +
+      '(exactly the §2.10 defect this function\'s own docstring claims to prevent)',
+    async () => {
+      await queueCounts('p1');
+      expect(qCountNot).toHaveBeenCalledWith('settled_at', 'is', null);
+    },
+  );
 });
 
 describe('existingArtistIds', () => {
