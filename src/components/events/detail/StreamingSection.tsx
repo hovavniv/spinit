@@ -47,24 +47,43 @@ export function StreamingSection({ partners, connections, viewer }: StreamingSec
       {partners.map((partner) => {
         const connection = connections[partner.id] ?? null;
         const status = connection?.status ?? null;
+        const hasJoined = partner.user_id !== null;
         const isOwnRow = viewer.role === 'partner' && viewer.partnerId === partner.id;
-        const isConnected = status === 'connected';
-        const isFailed = status === 'failed';
+        const isConnected = hasJoined && status === 'connected';
+        const isFailed = hasJoined && status === 'failed';
+
+        // Acceptance (has this partner opened their invite and joined
+        // Spinit?) and Spotify status are two independent facts -- a DJ
+        // needs to tell "hasn't opened the link" apart from "joined but
+        // hasn't connected Spotify" because the follow-up differs (chase
+        // the invite vs. chase the Spotify connection). The detail line
+        // carries acceptance; the chip stays Spotify-status-only and is
+        // omitted entirely for a partner who hasn't joined yet, since
+        // "Spotify not connected" would be a category error for someone
+        // who hasn't even opened Spinit (fix spec, live-walk finding 1).
+        let detailText: string;
+        if (!hasJoined) {
+          detailText = 'Invitation not opened yet';
+        } else if (isConnected) {
+          detailText = 'Joined · Spotify connected';
+        } else if (isFailed) {
+          detailText = 'Joined — Spotify connection failed';
+        } else {
+          detailText = 'Joined — Spotify not connected';
+        }
 
         return (
           <div key={partner.id} className={styles.statusRow}>
             <div>
               <div className={styles.statusTitle}>{partner.display_name}</div>
-              <div className={styles.statusDetail}>
-                {isConnected && 'Spotify connected.'}
-                {isFailed && "Couldn't connect. Retry to link their account."}
-                {!isConnected && !isFailed && 'Not connected yet.'}
-              </div>
+              <div className={styles.statusDetail}>{detailText}</div>
             </div>
 
-            <span className={isConnected ? styles.pillConnected : styles.pillAwaiting}>
-              {isConnected ? 'Connected' : isFailed ? 'Try again' : 'Not connected'}
-            </span>
+            {hasJoined && (
+              <span className={isConnected ? styles.pillConnected : styles.pillAwaiting}>
+                {isConnected ? 'Connected' : isFailed ? 'Failed' : 'Not connected'}
+              </span>
+            )}
 
             {isOwnRow && isConnected && (
               <form action={resyncSpotify} className={styles.actionForm}>

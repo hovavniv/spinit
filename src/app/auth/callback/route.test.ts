@@ -7,16 +7,46 @@ import { NextRequest } from 'next/server';
  * is never evaluated, and the exchange is fully test-doubled.
  */
 
-const { exchangeCodeForSession } = vi.hoisted(() => ({
-  exchangeCodeForSession: vi.fn(),
-}));
+const { exchangeCodeForSession, getUser, eventsLimit, partnersLimit, from, cookieGet, cookieDelete } =
+  vi.hoisted(() => {
+    const eventsLimit = vi.fn();
+    const partnersLimit = vi.fn();
+    const limitByTable: Record<string, typeof eventsLimit> = {
+      events: eventsLimit,
+      event_partners: partnersLimit,
+    };
+    const from = vi.fn((table: string) => ({
+      select: vi.fn(() => ({ eq: vi.fn(() => ({ limit: limitByTable[table] })) })),
+    }));
+    return {
+      exchangeCodeForSession: vi.fn(),
+      getUser: vi.fn(),
+      eventsLimit,
+      partnersLimit,
+      from,
+      cookieGet: vi.fn(),
+      cookieDelete: vi.fn(),
+    };
+  });
 
 const supabaseClient = {
-  auth: { exchangeCodeForSession },
+  auth: { exchangeCodeForSession, getUser },
+  from,
 };
 
 vi.mock('@/lib/supabase/server', () => ({
   createClient: vi.fn(async () => supabaseClient),
+}));
+
+// The invite cookie (plan task 14 / design §4.7-§4.8). Same shape as the
+// spotify/callback route's own next/headers double (src/app/api/spotify/
+// callback/route.test.ts) -- a plain get/delete pair backed by hoisted
+// vi.fn()s, not a real cookie jar.
+vi.mock('next/headers', () => ({
+  cookies: vi.fn(async () => ({
+    get: (name: string) => cookieGet(name),
+    delete: (name: string) => cookieDelete(name),
+  })),
 }));
 
 import { GET } from './route';
@@ -25,6 +55,10 @@ beforeEach(() => {
   vi.clearAllMocks();
   process.env.SITE_URL = 'http://localhost:3000';
   exchangeCodeForSession.mockResolvedValue({ data: {}, error: null });
+  cookieGet.mockReturnValue(undefined);
+  getUser.mockResolvedValue({ data: { user: { id: 'user-1' } }, error: null });
+  eventsLimit.mockResolvedValue({ data: [], error: null });
+  partnersLimit.mockResolvedValue({ data: [], error: null });
 });
 
 describe('auth/callback — open-redirect control', () => {
@@ -131,5 +165,67 @@ describe('auth/callback — failure branch', () => {
     const url = new URL(location!);
     expect(url.pathname).toBe('/login');
     expect(url.searchParams.get('error')).toBeTruthy();
+  });
+});
+
+describe('auth/callback — invite cookie (plan task 14 / design §4.7-§4.8)', () => {
+  it('honours a valid invite cookie and clears it', async () => {
+    const invitePath = '/invite/3fa85f64-5717-4562-b3fc-2c963f66afa6/1';
+    cookieGet.mockImplementation((name: string) =>
+      name === 'spinit_invite' ? { value: invitePath } : undefined,
+    );
+    const request = new NextRequest('http://localhost:3000/auth/callback?code=abc');
+
+    const response = await GET(request);
+
+    const location = response.headers.get('location');
+    expect(location).toBeTruthy();
+    expect(new URL(location!).pathname).toBe(invitePath);
+    expect(cookieDelete).toHaveBeenCalledWith('spinit_invite');
+  });
+
+  it('falls back to postLoginPath, not the literal /dashboard, when no cookie is present', async () => {
+    // A partner: no owned events, one event_partners row.
+    eventsLimit.mockResolvedValue({ data: [], error: null });
+    partnersLimit.mockResolvedValue({ data: [{ id: 'link-1' }], error: null });
+    const request = new NextRequest('http://localhost:3000/auth/callback?code=abc');
+
+    const response = await GET(request);
+
+    const location = response.headers.get('location');
+    expect(location).toBeTruthy();
+    expect(new URL(location!).pathname).toBe('/my-event');
+  });
+
+  it('ignores a tampered/invalid cookie value and falls back to /dashboard', async () => {
+    cookieGet.mockImplementation((name: string) =>
+      name === 'spinit_invite' ? { value: '//evil.com' } : undefined,
+    );
+    const request = new NextRequest('http://localhost:3000/auth/callback?code=abc');
+
+    const response = await GET(request);
+
+    const location = response.headers.get('location');
+    expect(location).toBeTruthy();
+    expect(new URL(location!).pathname).toBe('/dashboard');
+    // Consumed once regardless -- a stale invitation must not hijack the
+    // next unrelated signup in the same browser.
+    expect(cookieDelete).toHaveBeenCalledWith('spinit_invite');
+  });
+
+  it('never reads the invite cookie before the exchange succeeds', async () => {
+    exchangeCodeForSession.mockResolvedValueOnce({
+      data: {},
+      error: { message: 'invalid grant', code: 'invalid_grant' },
+    });
+    const request = new NextRequest('http://localhost:3000/auth/callback?code=used-already');
+
+    const response = await GET(request);
+
+    const location = response.headers.get('location');
+    expect(location).toBeTruthy();
+    expect(new URL(location!).pathname).toBe('/login');
+    expect(cookieGet).not.toHaveBeenCalled();
+    expect(cookieDelete).not.toHaveBeenCalled();
   });
 });

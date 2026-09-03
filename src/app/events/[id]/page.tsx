@@ -66,7 +66,11 @@ export default async function EventPage({ params }: PageProps<'/events/[id]'>) {
     // back to '' renders an EMPTY chip where the artboard always draws a line,
     // which reads as a broken component rather than as absent data — the same
     // fallback src/app/events/past/page.tsx applies.
-    company: profile?.business_name || 'Independent DJ',
+    //
+    // A partner viewer has no business_name at all, so the fallback used to
+    // read as a DJ label to the couple viewing their own event (design §9.5,
+    // now fixed). A partner viewer gets the couple-facing line instead.
+    company: viewer.role === 'partner' ? 'Getting married' : profile?.business_name || 'Independent DJ',
   };
 
   return (

@@ -59,7 +59,7 @@ describe('StreamingSection', () => {
     expect(screen.queryByRole('button', { name: /connect/i })).not.toBeInTheDocument();
   });
 
-  it("renders Couldn't connect with Try again for a failed connection", () => {
+  it('renders the joined-but-failed detail line with Try again for a failed connection', () => {
     render(
       <StreamingSection
         partners={partners}
@@ -67,7 +67,7 @@ describe('StreamingSection', () => {
         viewer={{ role: 'partner', partnerId: 'p1' }}
       />,
     );
-    expect(screen.getByText(/couldn.t connect/i)).toBeInTheDocument();
+    expect(screen.getByText('Joined — Spotify connection failed')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /try again/i })).toBeInTheDocument();
   });
 
@@ -130,5 +130,105 @@ describe('StreamingSection', () => {
     fireEvent.click(screen.getByRole('button', { name: /re-?sync/i }));
     expect(resyncSpotify).toHaveBeenCalledTimes(1);
     expect(connectSpotify).not.toHaveBeenCalled();
+  });
+
+  describe('acceptance vs. Spotify-connected (fix spec, live-walk finding 1)', () => {
+    const notJoined: PartnerRow = {
+      id: 'p1',
+      slot: 1,
+      display_name: 'Maya',
+      user_id: null,
+      connection: null,
+      profile: null,
+    };
+    const joined: PartnerRow = {
+      id: 'p2',
+      slot: 2,
+      display_name: 'Chris',
+      user_id: 'user-chris',
+      connection: null,
+      profile: null,
+    };
+
+    it('user_id null: "Invitation not opened yet", regardless of any spotify status', () => {
+      render(
+        <StreamingSection
+          partners={[notJoined]}
+          connections={{ p1: { status: 'connected' } }}
+          viewer={{ role: 'dj' }}
+        />,
+      );
+      expect(screen.getByText('Invitation not opened yet')).toBeInTheDocument();
+    });
+
+    it('user_id set, no connection row: "Joined — Spotify not connected" with a Not connected chip', () => {
+      render(<StreamingSection partners={[joined]} connections={{}} viewer={{ role: 'dj' }} />);
+      expect(screen.getByText('Joined — Spotify not connected')).toBeInTheDocument();
+      expect(screen.getByText('Not connected')).toBeInTheDocument();
+    });
+
+    it('user_id set, status invited: "Joined — Spotify not connected" with a Not connected chip', () => {
+      render(
+        <StreamingSection
+          partners={[joined]}
+          connections={{ p2: { status: 'invited' } }}
+          viewer={{ role: 'dj' }}
+        />,
+      );
+      expect(screen.getByText('Joined — Spotify not connected')).toBeInTheDocument();
+      expect(screen.getByText('Not connected')).toBeInTheDocument();
+    });
+
+    it('user_id set, status connected: "Joined · Spotify connected" with a Connected chip', () => {
+      render(
+        <StreamingSection
+          partners={[joined]}
+          connections={{ p2: { status: 'connected' } }}
+          viewer={{ role: 'dj' }}
+        />,
+      );
+      expect(screen.getByText('Joined · Spotify connected')).toBeInTheDocument();
+      expect(screen.getByText('Connected')).toBeInTheDocument();
+    });
+
+    it('user_id set, status failed: "Joined — Spotify connection failed" with a Failed chip', () => {
+      render(
+        <StreamingSection
+          partners={[joined]}
+          connections={{ p2: { status: 'failed' } }}
+          viewer={{ role: 'dj' }}
+        />,
+      );
+      expect(screen.getByText('Joined — Spotify connection failed')).toBeInTheDocument();
+      expect(screen.getByText('Failed')).toBeInTheDocument();
+    });
+
+    it('a not-yet-joined partner renders no Connect button, for the DJ or for the other partner', () => {
+      // `isOwnRow` (viewer.partnerId === partner.id) can only be true for a
+      // partner `resolveViewer` matched via `user_id` -- a not-yet-joined
+      // partner (user_id null) is never that match in production, so the
+      // realistic "any viewer" space here is the DJ and the OTHER partner,
+      // not this same row's own id (which resolveViewer can never produce
+      // for a null user_id, and which fixtures elsewhere in this codebase
+      // deliberately reuse to simulate "own row" for unrelated form-nesting
+      // assertions -- see EventDetailScreen.test.tsx).
+      render(
+        <StreamingSection
+          partners={[notJoined, joined]}
+          connections={{}}
+          viewer={{ role: 'dj' }}
+        />,
+      );
+      expect(screen.queryByRole('button', { name: /connect maya/i })).not.toBeInTheDocument();
+
+      render(
+        <StreamingSection
+          partners={[notJoined, joined]}
+          connections={{}}
+          viewer={{ role: 'partner', partnerId: 'p2' }}
+        />,
+      );
+      expect(screen.queryByRole('button', { name: /connect maya/i })).not.toBeInTheDocument();
+    });
   });
 });

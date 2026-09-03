@@ -28,6 +28,11 @@ interface AuthScreenProps {
    * relevant in login mode; threaded straight to `LoginForm`.
    */
   callbackMessage?: string;
+  /**
+   * Non-null only when the visitor arrived from an invitation; threaded
+   * straight to `RegisterForm`.
+   */
+  invitePath?: string | null;
 }
 
 /**
@@ -40,13 +45,27 @@ interface AuthScreenProps {
  * switchMode. The mode swap itself is immediate client state; router.replace
  * only catches the address bar up afterwards, it is not awaited.
  */
-export function AuthScreen({ defaultMode, loginAction, registerAction, callbackMessage }: AuthScreenProps) {
+export function AuthScreen({
+  defaultMode,
+  loginAction,
+  registerAction,
+  callbackMessage,
+  invitePath,
+}: AuthScreenProps) {
   const [mode, setMode] = useState<Mode>(defaultMode);
   const router = useRouter();
 
+  // Parsed back out of invitePath (shape `/invite/{uuid}/{slot}`) rather than
+  // threading raw `invite`/`slot` values down as separate props: invitePath
+  // is already the one piece of invite state this component receives, so
+  // reconstructing the query string from it avoids adding a second prop pair
+  // that would need to stay in sync with it.
+  const inviteQuery = invitePath ? invitePath.match(/^\/invite\/([^/]+)\/([12])$/) : null;
+  const inviteSearch = inviteQuery ? `?invite=${inviteQuery[1]}&slot=${inviteQuery[2]}` : '';
+
   function switchMode(next: Mode) {
     setMode(next);
-    router.replace(next === 'login' ? '/login' : '/register');
+    router.replace((next === 'login' ? '/login' : '/register') + inviteSearch);
   }
 
   return (
@@ -81,9 +100,14 @@ export function AuthScreen({ defaultMode, loginAction, registerAction, callbackM
               onSwitchToRegister={() => switchMode('register')}
               action={loginAction}
               callbackMessage={callbackMessage}
+              invitePath={invitePath}
             />
           ) : (
-            <RegisterForm onSwitchToLogin={() => switchMode('login')} action={registerAction} />
+            <RegisterForm
+              onSwitchToLogin={() => switchMode('login')}
+              action={registerAction}
+              invitePath={invitePath}
+            />
           )}
         </div>
       </div>

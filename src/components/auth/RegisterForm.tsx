@@ -2,7 +2,7 @@
 
 import { useActionState, useState } from 'react';
 import { Field } from './Field';
-import { registerSchema } from '@/lib/validation';
+import { registerSchema, partnerRegisterSchema } from '@/lib/validation';
 import type { ActionResult } from '@/lib/auth/errors';
 import styles from './AuthForm.module.css';
 
@@ -27,6 +27,15 @@ interface RegisterFormProps {
    * 6, design 10.3).
    */
   action: (prevState: ActionResult, formData: FormData) => Promise<ActionResult>;
+  /**
+   * Non-null only when the visitor arrived from an invitation
+   * (`/register?invite={eventId}&slot={1|2}`, resolved by
+   * `app/register/page.tsx`). Hides the two DJ-only fields (business name,
+   * phone) and carries the invite through the signup as two hidden inputs, so
+   * `/auth/callback` can send the new partner straight to their claim page
+   * (design §4.6-§4.8).
+   */
+  invitePath?: string | null;
 }
 
 /**
@@ -81,7 +90,11 @@ const initialState: ActionResult = { ok: false, formErrors: {} };
  * note). A successful submit renders a "check your email" state instead of
  * the fields, per design 4.1 step 7.
  */
-export function RegisterForm({ onSwitchToLogin, action }: RegisterFormProps) {
+export function RegisterForm({ onSwitchToLogin, action, invitePath }: RegisterFormProps) {
+  const isPartner = !!invitePath;
+  const activeFieldOrder = isPartner
+    ? (['name', 'email', 'confirmEmail', 'password', 'confirmPassword'] as (keyof RegisterValues)[])
+    : fieldOrder;
   const [values, setValues] = useState<RegisterValues>(emptyValues);
   const [clientErrors, setClientErrors] = useState<RegisterErrors>({});
   const [state, formAction, pending] = useActionState(action, initialState);
@@ -101,7 +114,8 @@ export function RegisterForm({ onSwitchToLogin, action }: RegisterFormProps) {
    * is satisfied.
    */
   function submitAction(formData: FormData) {
-    const result = registerSchema.safeParse(values);
+    const schema = isPartner ? partnerRegisterSchema : registerSchema;
+    const result = schema.safeParse(values);
     const nextErrors: RegisterErrors = {};
     if (!result.success) {
       for (const issue of result.error.issues) {
@@ -113,7 +127,7 @@ export function RegisterForm({ onSwitchToLogin, action }: RegisterFormProps) {
     }
     setClientErrors(nextErrors);
 
-    const firstInvalid = fieldOrder.find((name) => nextErrors[name]);
+    const firstInvalid = activeFieldOrder.find((name) => nextErrors[name]);
     if (firstInvalid) {
       document.getElementById(firstInvalid)?.focus();
       return;
@@ -142,9 +156,11 @@ export function RegisterForm({ onSwitchToLogin, action }: RegisterFormProps) {
 
   return (
     <>
-      <h2 className={styles.heading}>Set up your account</h2>
+      <h2 className={styles.heading}>{isPartner ? 'Create your account' : 'Set up your account'}</h2>
       <p className={styles.subheading}>
-        Takes about two minutes. You&apos;ll connect your first couple&apos;s streaming profile next.
+        {isPartner
+          ? 'Then claim your invitation and start building your list.'
+          : "Takes about two minutes. You'll connect your first couple's streaming profile next."}
       </p>
 
       {generalMessage && (
@@ -164,15 +180,17 @@ export function RegisterForm({ onSwitchToLogin, action }: RegisterFormProps) {
             onChange={(e) => handleChange('name', e.target.value)}
             error={errors.name}
           />
-          <Field
-            label="DJ business name"
-            name="businessName"
-            type="text"
-            placeholder="Ellis Sound Co."
-            value={values.businessName}
-            onChange={(e) => handleChange('businessName', e.target.value)}
-            error={errors.businessName}
-          />
+          {!isPartner && (
+            <Field
+              label="DJ business name"
+              name="businessName"
+              type="text"
+              placeholder="Ellis Sound Co."
+              value={values.businessName}
+              onChange={(e) => handleChange('businessName', e.target.value)}
+              error={errors.businessName}
+            />
+          )}
           <Field
             label="Email"
             name="email"
@@ -191,44 +209,46 @@ export function RegisterForm({ onSwitchToLogin, action }: RegisterFormProps) {
             onChange={(e) => handleChange('confirmEmail', e.target.value)}
             error={errors.confirmEmail}
           />
-          <div className={styles.phoneField}>
-            <span className={styles.phoneLabel} id="phone-label">
-              Phone number
-            </span>
-            <div className={styles.phoneRow}>
-              <select
-                className={styles.dialCode}
-                aria-label="Dial code"
-                name="dialCode"
-                defaultValue={dialCodes[0].value}
-              >
-                {dialCodes.map(({ value, label }, index) => (
-                  <option key={`${value}-${index}`} value={value}>
-                    {label}
-                  </option>
-                ))}
-              </select>
-              <div className={styles.phoneInputWrap}>
-                <input
-                  id="phone"
-                  name="phone"
-                  type="tel"
-                  placeholder="(555) 123-4567"
-                  value={values.phone}
-                  onChange={(e) => handleChange('phone', e.target.value)}
-                  className={`${styles.phoneInput} ${errors.phone ? styles.phoneInputInvalid : ''}`}
-                  aria-labelledby="phone-label"
-                  aria-invalid={!!errors.phone}
-                  aria-describedby={errors.phone ? 'phone-error' : undefined}
-                />
-              </div>
-            </div>
-            {errors.phone && (
-              <span id="phone-error" role="alert" className={styles.phoneError}>
-                {errors.phone}
+          {!isPartner && (
+            <div className={styles.phoneField}>
+              <span className={styles.phoneLabel} id="phone-label">
+                Phone number
               </span>
-            )}
-          </div>
+              <div className={styles.phoneRow}>
+                <select
+                  className={styles.dialCode}
+                  aria-label="Dial code"
+                  name="dialCode"
+                  defaultValue={dialCodes[0].value}
+                >
+                  {dialCodes.map(({ value, label }, index) => (
+                    <option key={`${value}-${index}`} value={value}>
+                      {label}
+                    </option>
+                  ))}
+                </select>
+                <div className={styles.phoneInputWrap}>
+                  <input
+                    id="phone"
+                    name="phone"
+                    type="tel"
+                    placeholder="(555) 123-4567"
+                    value={values.phone}
+                    onChange={(e) => handleChange('phone', e.target.value)}
+                    className={`${styles.phoneInput} ${errors.phone ? styles.phoneInputInvalid : ''}`}
+                    aria-labelledby="phone-label"
+                    aria-invalid={!!errors.phone}
+                    aria-describedby={errors.phone ? 'phone-error' : undefined}
+                  />
+                </div>
+              </div>
+              {errors.phone && (
+                <span id="phone-error" role="alert" className={styles.phoneError}>
+                  {errors.phone}
+                </span>
+              )}
+            </div>
+          )}
           <Field
             label="Password"
             name="password"
@@ -248,6 +268,13 @@ export function RegisterForm({ onSwitchToLogin, action }: RegisterFormProps) {
             error={errors.confirmPassword}
           />
         </div>
+
+        {isPartner && (
+          <>
+            <input type="hidden" name="mode" value="partner" />
+            <input type="hidden" name="invitePath" value={invitePath ?? ''} />
+          </>
+        )}
 
         <button type="submit" className={styles.submit} disabled={pending}>
           Create account

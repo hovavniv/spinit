@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import { AuthScreen } from '@/components/auth/AuthScreen';
 import { signInWithPassword, signUpWithPassword } from '@/lib/auth/actions';
+import { isUuid } from '@/lib/validation';
 
 export const metadata: Metadata = {
   title: 'Log in — Spinit',
@@ -18,12 +19,25 @@ const CALLBACK_ERROR_MESSAGES: Record<string, string> = {
 };
 
 interface LoginPageProps {
-  searchParams: Promise<{ error?: string }>;
+  searchParams: Promise<{ error?: string; invite?: string; slot?: string }>;
 }
 
+/**
+ * Partner mode is driven by ?invite={eventId}&slot={1|2}, reached from the
+ * "Log in" link on the invite claim page when the visitor is signed out
+ * (design §4.4, §9.3, closed). Validated the same way /register/page.tsx
+ * validates it; `LoginForm` carries it through as a hidden field so
+ * `signInWithPassword` can redirect straight back here on success instead of
+ * always landing on `postLoginPath`'s destination.
+ */
 export default async function LoginPage({ searchParams }: LoginPageProps) {
-  const { error } = await searchParams;
+  const { error, invite, slot } = await searchParams;
   const callbackMessage = error ? (CALLBACK_ERROR_MESSAGES[error] ?? CALLBACK_ERROR_MESSAGES.confirmation_failed) : undefined;
+
+  const invitePath =
+    invite && isUuid(invite) && (slot === '1' || slot === '2')
+      ? `/invite/${invite}/${slot}`
+      : null;
 
   return (
     <AuthScreen
@@ -31,6 +45,7 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
       loginAction={signInWithPassword}
       registerAction={signUpWithPassword}
       callbackMessage={callbackMessage}
+      invitePath={invitePath}
     />
   );
 }

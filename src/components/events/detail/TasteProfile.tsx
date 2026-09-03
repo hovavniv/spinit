@@ -10,6 +10,11 @@ import styles from './TasteProfile.module.css';
 interface PartnerTaste {
   name: string;
   profile: TasteProfileType | null;
+  /** The partner has claimed their invitation (event_partners.user_id is
+   *  set) -- distinct from having connected Spotify. Lets the "waiting on"
+   *  message below tell a DJ who hasn't opened the link apart from who has
+   *  joined but not connected, mirroring StreamingSection's table. */
+  joined: boolean;
 }
 
 interface EnrichmentProgress {
@@ -159,10 +164,25 @@ export function TasteProfile({ partner1, partner2, genresByArtistId, progress }:
   const outstanding = [partner1, partner2].filter((p) => p.profile === null);
 
   if (outstanding.length > 0) {
-    const names = outstanding.map((p) => p.name).join(' and ');
+    const notJoined = outstanding.filter((p) => !p.joined);
+    const joined = outstanding.filter((p) => p.joined);
+
+    // Composed, not enumerated. `outstanding` shrinks as partners connect,
+    // so a branch keyed on notJoined.length silently assumed both partners
+    // were still outstanding -- which is how joined[0] came to be read when
+    // joined was empty (pre-push review, 2026-09-03).
+    const clauses: string[] = [];
+    if (notJoined.length > 0) {
+      const names = notJoined.map((p) => p.name).join(' and ');
+      clauses.push(`${names} to open their invitation${notJoined.length > 1 ? 's' : ''}`);
+    }
+    if (joined.length > 0) {
+      clauses.push(`${joined.map((p) => p.name).join(' and ')} to connect Spotify`);
+    }
+
     return (
       <div className={styles.waiting}>
-        <p>Waiting on {names} to connect Spotify.</p>
+        <p>Waiting on {clauses.join(', and on ')}.</p>
       </div>
     );
   }

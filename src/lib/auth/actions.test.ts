@@ -19,6 +19,9 @@ const {
   partnersLimit,
   requireUser,
   redirect,
+  cookieSet,
+  cookieStore,
+  selectEqCalls,
 } = vi.hoisted(() => {
   const updateEq = vi.fn();
   const update = vi.fn<(payload: Record<string, unknown>) => { eq: typeof updateEq }>(() => ({
@@ -33,10 +36,21 @@ const {
     events: eventsLimit,
     event_partners: partnersLimit,
   };
+  // Records the actual (table, column, value) triple each .eq() call after
+  // .select() was made with, so a test can assert the real predicate value --
+  // not just which tables were queried.
+  const selectEqCalls: [string, string, unknown][] = [];
   const from = vi.fn((table: string) => ({
     update,
-    select: vi.fn(() => ({ eq: vi.fn(() => ({ limit: limitByTable[table] })) })),
+    select: vi.fn(() => ({
+      eq: vi.fn((column: string, value: unknown) => {
+        selectEqCalls.push([table, column, value]);
+        return { limit: limitByTable[table] };
+      }),
+    })),
   }));
+  const cookieSet = vi.fn();
+  const cookieStore = { set: cookieSet };
   return {
     signUp: vi.fn(),
     signInWithPassword: vi.fn(),
@@ -50,6 +64,9 @@ const {
     redirect: vi.fn((path: string) => {
       throw new Error(`REDIRECT:${path}`);
     }),
+    cookieSet,
+    cookieStore,
+    selectEqCalls,
   };
 });
 
@@ -78,6 +95,7 @@ vi.mock('next/headers', () => ({
     ['host', 'evil.com'],
     ['x-forwarded-host', 'evil.com'],
   ])),
+  cookies: vi.fn(async () => cookieStore),
 }));
 
 vi.mock('next/cache', () => ({
@@ -140,6 +158,7 @@ function profileFormData(overrides: Record<string, string> = {}): FormData {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  selectEqCalls.length = 0;
   process.env.SITE_URL = 'http://localhost:3000';
   update.mockImplementation(() => ({ eq: updateEq }));
   updateEq.mockResolvedValue({ error: null });
@@ -190,6 +209,77 @@ describe('signOut', () => {
   });
 });
 
+function partnerFormData(overrides: Record<string, string> = {}): FormData {
+  const fd = new FormData();
+  const base: Record<string, string> = {
+    mode: 'partner',
+    name: 'Jordan Ellis',
+    email: 'jordan@example.com',
+    confirmEmail: 'jordan@example.com',
+    password: 'correct-horse-battery',
+    confirmPassword: 'correct-horse-battery',
+  };
+  for (const [key, value] of Object.entries({ ...base, ...overrides })) {
+    fd.set(key, value);
+  }
+  return fd;
+}
+
+// §8's test table claims a unit test exists pinning: "a non-uuid invite or a
+// slot outside {1,2} sets no cookie at all." It did not exist before this
+// fix-spec (design doc §8 correction, 2026-09-03). Written here because the
+// validation this claims to pin lives inside signUpWithPassword itself
+// (`safeRedirect` falling back to the literal '/dashboard'), not in the
+// /register page component.
+describe('signUpWithPassword — invalid invitePath sets no cookie', () => {
+  it('never calls cookies().set when invitePath is not a valid /invite/<uuid>/{1,2} path', async () => {
+    const fd = partnerFormData({ invitePath: '/invite/not-a-uuid/1' });
+
+    await signUpWithPassword({ ok: true }, fd);
+
+    expect(cookieSet).not.toHaveBeenCalled();
+  });
+
+  it('never calls cookies().set when the slot is outside {1,2}', async () => {
+    const fd = partnerFormData({
+      invitePath: '/invite/11111111-1111-4111-8111-111111111111/3',
+    });
+
+    await signUpWithPassword({ ok: true }, fd);
+
+    expect(cookieSet).not.toHaveBeenCalled();
+  });
+
+  it('DOES call cookies().set for a genuinely valid invite path, so the two tests above are pinning the guard and not a permanently-off branch', async () => {
+    const fd = partnerFormData({
+      invitePath: '/invite/11111111-1111-4111-8111-111111111111/1',
+    });
+
+    await signUpWithPassword({ ok: true }, fd);
+
+    expect(cookieSet).toHaveBeenCalledWith(
+      expect.any(String),
+      '/invite/11111111-1111-4111-8111-111111111111/1',
+      expect.anything(),
+    );
+  });
+
+  // Fix-spec item 4 (2026-09-03): the cookie write moved to AFTER signUp
+  // succeeds. Before the fix it ran unconditionally ahead of the signUp
+  // call, so a failed signup still left the cookie set -- a stray 30-minute
+  // misroute for the next person to sign up in the same browser.
+  it('does not call cookies().set when signUp itself fails, even with a valid invite path', async () => {
+    signUp.mockResolvedValue({ data: {}, error: { message: 'boom', code: 'unexpected_failure' } });
+    const fd = partnerFormData({
+      invitePath: '/invite/11111111-1111-4111-8111-111111111111/1',
+    });
+
+    await signUpWithPassword({ ok: true }, fd);
+
+    expect(cookieSet).not.toHaveBeenCalled();
+  });
+});
+
 describe('signUpWithPassword — emailRedirectTo origin', () => {
   it('builds emailRedirectTo from SITE_URL even with hostile Host headers present', async () => {
     const fd = registerFormData();
@@ -237,10 +327,35 @@ describe('signInWithPassword', () => {
   });
 
   it('scopes both existence checks to the signed-in user, not the form', async () => {
+    // Asserting only WHICH tables were queried (the previous version of this
+    // test) would still pass if the predicate were swapped to filter on form
+    // data instead of the signed-in user's id -- neither `from('events')` nor
+    // `from('event_partners')` changes. Capture the actual .eq() column/value
+    // pairs instead, so the real filter is what's pinned.
     await expect(signInAction({ ok: true }, loginFormData())).rejects.toThrow();
 
-    expect(from).toHaveBeenCalledWith('events');
-    expect(from).toHaveBeenCalledWith('event_partners');
+    expect(selectEqCalls).toContainEqual(['events', 'dj_id', 'session-user-id']);
+    expect(selectEqCalls).toContainEqual(['event_partners', 'user_id', 'session-user-id']);
+  });
+
+  it('redirects to a valid invite path from the hidden invitePath field, bypassing postLoginPath', async () => {
+    const fd = loginFormData({ invitePath: '/invite/11111111-1111-4111-8111-111111111111/1' });
+
+    await expect(signInAction({ ok: true }, fd)).rejects.toThrow(
+      'REDIRECT:/invite/11111111-1111-4111-8111-111111111111/1',
+    );
+  });
+
+  it('falls through to postLoginPath when invitePath is a tampered open-redirect attempt', async () => {
+    const fd = loginFormData({ invitePath: '//evil.com' });
+
+    await expect(signInAction({ ok: true }, fd)).rejects.toThrow('REDIRECT:/dashboard');
+  });
+
+  it('falls through to postLoginPath when invitePath names an invalid slot', async () => {
+    const fd = loginFormData({ invitePath: '/invite/11111111-1111-4111-8111-111111111111/3' });
+
+    await expect(signInAction({ ok: true }, fd)).rejects.toThrow('REDIRECT:/dashboard');
   });
 });
 

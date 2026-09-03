@@ -4,6 +4,7 @@ const requireUser = vi.fn();
 const from = vi.fn();
 const select = vi.fn();
 const eq = vi.fn();
+const inFn = vi.fn();
 
 vi.mock('@/lib/auth/dal', () => ({ requireUser: () => requireUser() }));
 vi.mock('@/lib/supabase/server', () => ({ createClient: async () => ({ from }) }));
@@ -21,11 +22,13 @@ function builder(result: { data: unknown[] | null; error: { code?: string; messa
   const chain = {
     select,
     eq,
+    in: inFn,
     order: vi.fn(() => chain),
     then: (resolve: (value: unknown) => void) => resolve(result),
   };
   select.mockReturnValue(chain);
   eq.mockReturnValue(chain);
+  inFn.mockReturnValue(chain);
   from.mockReturnValue(chain);
   return chain;
 }
@@ -73,5 +76,13 @@ describe('listPartnerEvents', () => {
 
     expect(chain.eq).toHaveBeenCalledWith('event_partners.user_id', 'partner-1');
     expect(chain.eq).not.toHaveBeenCalledWith('dj_id', expect.anything());
+  });
+
+  it('excludes drafts and cancelled events', async () => {
+    const chain = builder({ data: [], error: null });
+
+    await listPartnerEvents();
+
+    expect(chain.in).toHaveBeenCalledWith('status', ['upcoming', 'live', 'completed']);
   });
 });

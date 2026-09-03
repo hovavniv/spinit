@@ -80,8 +80,8 @@ export function TasteProfileClient({
 
   return (
     <TasteProfile
-      partner1={{ name: partner1.display_name, profile: partner1.profile }}
-      partner2={{ name: partner2.display_name, profile: partner2.profile }}
+      partner1={{ name: partner1.display_name, profile: partner1.profile, joined: partner1.user_id !== null }}
+      partner2={{ name: partner2.display_name, profile: partner2.profile, joined: partner2.user_id !== null }}
       genresByArtistId={genresByArtistId}
       progress={progress}
     />

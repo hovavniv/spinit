@@ -25,6 +25,13 @@ interface LoginFormProps {
    * from how they arrived at the page.
    */
   callbackMessage?: string;
+  /**
+   * Non-null only when the visitor arrived from an invitation
+   * (`/login?invite={eventId}&slot={1|2}`, resolved by `app/login/page.tsx`).
+   * Carried through as a hidden field so `signInWithPassword` can redirect
+   * straight back to the claim page on success (design §9.3, closed).
+   */
+  invitePath?: string | null;
 }
 
 interface LoginValues {
@@ -46,7 +53,7 @@ const initialState: ActionResult = { ok: false, formErrors: {} };
  * for immediate feedback, then submitted to the real server action via
  * `useActionState` (design 4.2, design 4.1's form-conversion note).
  */
-export function LoginForm({ onSwitchToRegister, action, callbackMessage }: LoginFormProps) {
+export function LoginForm({ onSwitchToRegister, action, callbackMessage, invitePath }: LoginFormProps) {
   const [values, setValues] = useState<LoginValues>({ email: '', password: '' });
   const [clientErrors, setClientErrors] = useState<LoginErrors>({});
   const [state, formAction, pending] = useActionState(action, initialState);
@@ -123,6 +130,8 @@ export function LoginForm({ onSwitchToRegister, action, callbackMessage }: Login
             error={errors.password}
           />
         </div>
+
+        {invitePath && <input type="hidden" name="invitePath" value={invitePath} />}
 
         <div className={styles.forgotRow}>
           <a href="#" className={styles.forgotLink}>

@@ -1,9 +1,11 @@
 import { NextResponse, type NextRequest } from 'next/server';
+import { cookies } from 'next/headers';
 
 import { createClient } from '@/lib/supabase/server';
-import { safeRedirect } from '@/lib/auth/redirects';
+import { safeRedirect, postLoginPath } from '@/lib/auth/redirects';
 import { logAuthError } from '@/lib/auth/errors';
 import { siteUrl } from '@/lib/auth/site-url';
+import { INVITE_COOKIE } from '@/lib/auth/inviteCookie';
 
 /**
  * design 4.1 / 4.3 step 3, plan task 8. One route handler serves both the
@@ -56,6 +58,35 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     return loginRedirect(REASON_CONFIRMATION_FAILED);
   }
 
-  const next = searchParams.get('next');
-  return NextResponse.redirect(new URL(safeRedirect(next), siteUrl()));
+  // Read only AFTER the exchange succeeds: consuming an invitation on a failed
+  // confirmation would burn it for nothing.
+  const cookieStore = await cookies();
+  const pending = cookieStore.get(INVITE_COOKIE)?.value ?? null;
+  if (pending) cookieStore.delete(INVITE_COOKIE);
+
+  const invitePath = safeRedirect(pending);
+  if (pending && invitePath !== '/dashboard') {
+    return NextResponse.redirect(new URL(invitePath, siteUrl()));
+  }
+
+  // No usable invitation. Fall back to where this user actually belongs, not
+  // to the literal /dashboard: a partner landing there is asked for a DJ
+  // business name they will never have (design §4.8). Same two parallel
+  // existence checks signInWithPassword already runs.
+  const { data: userData } = await supabase.auth.getUser();
+  const userId = userData.user?.id ?? '';
+  const [ownedEvents, partnerLinks] = await Promise.all([
+    supabase.from('events').select('id').eq('dj_id', userId).limit(1),
+    supabase.from('event_partners').select('id').eq('user_id', userId).limit(1),
+  ]);
+
+  return NextResponse.redirect(
+    new URL(
+      postLoginPath({
+        ownsEvents: (ownedEvents.data?.length ?? 0) > 0,
+        isPartner: (partnerLinks.data?.length ?? 0) > 0,
+      }),
+      siteUrl(),
+    ),
+  );
 }

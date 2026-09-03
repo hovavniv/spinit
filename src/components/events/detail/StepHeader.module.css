@@ -53,3 +53,14 @@
   color: var(--ink-dark);
   white-space: nowrap;
 }
+
+.pipDone {
+  background: var(--accent);
+  color: white;
+}
+
+.pipTodo {
+  background: var(--surface);
+  color: var(--text-muted);
+  border: 1.5px solid var(--border-input);
+}

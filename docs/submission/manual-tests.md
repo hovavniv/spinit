@@ -125,6 +125,59 @@ collide (commit `b53eda8`).
 rate limit above) — everything else in the suite passes, 5/6 RLS cases
 included.
 
+### Cases 5 and 6 (signUp mailer cases) are now opt-in, not part of the gate
+
+The above flakiness had two independent causes, not one: `@example.com` is
+an RFC 2606 reserved domain that Supabase's validator sometimes rejects
+outright (`email_address_invalid`), and — separately — every real run of
+either test sends a genuine confirmation email against the project's
+2-emails/hour mailer budget, shared with every other signup on the
+project. A gate that runs on every commit cannot depend on a shared
+external resource capped that low; renaming the domain alone does not fix
+that second cause, it just makes the failure differently shaped and less
+frequent.
+
+Both cases in `src/lib/auth/rls.integration.test.ts` (`signUp creates a
+profile row with metadata carried through by the trigger` and `signUp
+with over-length full_name is rejected and creates no user`) are now
+skipped by default (`test.skipIf`) and only run when explicitly opted
+into. Their local-part email domain was also changed from `@example.com`
+to `@gmail.com` (still a synthetic local part, `spinit-rls-test+<ts>-<uuid>`,
+not a real inbox) — `gmail.com` is not one of the RFC 2606 reserved
+domains, so it does not hit the validator's reserved-domain rejection.
+
+**To run them:**
+
+1. Set `RUN_MAILER_TESTS=1` as an environment variable before running the
+   command below.
+2. Run: `RUN_MAILER_TESTS=1 npx vitest run src/lib/auth/rls.integration.test.ts`
+3. A pass looks like: all 6 cases in the file pass, including case 5
+   (confirming a real `signUp` call correctly triggers profile-row
+   creation with metadata) and case 6 (confirming a real `signUp` call
+   correctly rejects/rolls back on a check-constraint violation).
+
+**Warning: this spends two of the project's 2 emails/hour mailer budget.**
+Running it twice within the same hour will hit the rate limit on the
+second run. Running it alongside any other signup activity on this
+project (a live manual walk, a demo, fixture creation) contends for the
+same limited budget and can make either activity fail for a reason that
+has nothing to do with the code under test.
+
+**Result of the one opt-in run performed while making this change**
+(2026-09-03): 5 of 6 passed. Case 6 (the negative, over-length-name case)
+passed — confirming the domain change did not introduce a rejection, since
+this case's own assertion specifically distinguishes a genuine trigger
+rejection from a rate-limit false pass. Case 5 failed, but with
+`AuthApiError` `over_email_send_rate_limit` (429/`over_email_send_rate_limit`),
+not `email_address_invalid` — i.e. the project's 2-emails/hour budget was
+already exhausted before this run started (from unrelated activity earlier
+in the same hour), not a domain rejection. This is the same failure mode
+already documented above for the pre-existing case 5 flake, now something
+this opt-in gate makes an explicit, deliberate choice rather than an
+accidental one every commit pays for. Re-running case 5 alone, in a fresh
+hour, would be needed to see it pass outright; not done here, to avoid
+spending a third email against the same budget window.
+
 ### Definition of done walk-through (design section 11)
 
 - **A DJ can register with email and password, confirm by email, and reach
@@ -637,3 +690,133 @@ before drawing conclusions rather than worked around.
    at 1280px. Check the header row, the 3-column stat grid with the wide
    bottom-right tile, and the card's two dotted perforation rules.
 8. Narrow the window to ~700px and confirm nothing scrolls sideways.
+
+## New Event wizard (design 2026-09-02, plan 2026-09-03) — the flows a mock cannot pin
+
+Everything below needs a real browser with a real cookie jar walking a real
+Server Action across a real redirect chain — none of it is expressible against
+a mocked Supabase client, which is exactly why it is written up here instead of
+only asserted in a unit test. Sign-in for steps 1–11 is with the seeded test
+accounts (`TEST_USER_A`–`TEST_USER_D` in `.env.local`; README §P6: A and B are
+DJs, C and D are partners, all four already confirmed). Using already-confirmed
+accounts for everything except step 12 means the whole walk costs at most one
+email against Supabase's 2/hour project-wide mailer cap.
+
+Do steps 1–11 first and completely. If the mailer budget is spent, step 12 can
+wait an hour with everything else already confirmed — do not attempt step 12
+first and risk a half-finished walk.
+
+**No-session paths (curl-testable, no browser needed) — re-verified 2026-09-03:**
+
+- `GET /invite/<uuid>/3` (slot outside 1/2) → **404**, before any auth check
+  runs (`isUuid`/slot validation in the page short-circuits ahead of
+  `requireUser()`).
+- `GET /invite/<uuid>/1` (valid shape, no session) → **200** — commit
+  `803dbeb` made this page's read public, so a signed-out visitor now gets
+  the page rendered in place (with a signed-out view) instead of a redirect.
+  This was previously recorded here as 307 to `/login`; that is no longer
+  true.
+- `GET /events/new` (no session) → **307** to `/login` — confirms the route
+  exists and no longer 404s, without needing to sign in.
+- `GET` of a route that never existed → **404**, confirming the app's 404
+  handling is real rather than the redirect above masking every miss as a
+  login prompt.
+
+**Authenticated walk (needs a browser — attested by whoever runs it, not
+machine-verified):**
+
+1. Sign in as DJ A. From `/dashboard`, click **+ New event**. *Expected:* the
+   step-1 form renders — it must not 404 (this button has 404'd since
+   `feat/dashboard-data`).
+2. Fill partner 1, partner 2, a wedding date, a venue, and a guest count.
+   Press **Continue**. *Expected:* you land on `…/invite` (a
+   `/events/new/<uuid>/invite` URL), and a `draft` row for this event now
+   exists (visible via `/events/[id]` if you navigate there directly, or via
+   `supabase db query --linked` on the `events` table).
+3. Press **← Back**. *Expected:* step 1 re-renders with all five fields
+   already filled with exactly what you typed in step 2 — not blank, not a
+   different draft.
+4. Press **Continue** again, then fill both partner emails — use
+   `TEST_USER_C_EMAIL` for partner 1's address (already confirmed, so no
+   *signup* email is needed for C at step 8 — `sendInvites` itself never
+   emails anyone, for either address; nothing in this repo can send mail,
+   which is the entire reason step 2 produces copyable links instead). For
+   partner 2, use an address you can receive mail at that has **no Spinit
+   account yet**, and **write it down exactly** — step 12 must register with
+   this precise address, because `claim_partner_slot` matches the invitation
+   on `lower(invite_email) = <the claiming account's own email>`
+   (`20260831090000_spotify_foundation.sql`). Registering a different address
+   in step 12 fails the claim with the same generic refusal a real defect
+   would produce, after already spending the one email this walk budgets
+   for. Press **Send invites**. *Expected:* you land on the confirmation
+   screen showing the guest count you typed, both invited addresses, and two
+   links differing only in their final path segment (`/1` vs `/2`).
+5. **Go back to `…/invite` (browser back, or re-navigate to the same URL) and
+   press Send invites again, unchanged.** *Expected:* it succeeds and returns
+   you to the same confirmation screen — **it must not show an error.** This
+   is the only live check that the `event_partners` upsert uses
+   `ignoreDuplicates` rather than `ON CONFLICT DO UPDATE`; the latter passes
+   on the first run and fails `42501` only on the second, which is exactly
+   the defect that killed the first revision of this design. **If this step
+   errors, stop the walk and report it before doing anything else.**
+6. Press **← Back to streaming step**. *Expected:* you land on `/events/[id]`
+   for this event (step 3, already shipped).
+7. Return to `/dashboard`. *Expected:* the event now appears in the upcoming
+   list (it was promoted from `draft` to `upcoming` by step 5).
+8. Sign out, sign in as C, and open C's invite link from step 4 directly (copy
+   it from step 4's confirmation screen, or re-visit `…/sent` as DJ A to
+   re-read it — the links are durable). Press **Claim your invitation**.
+   *Expected:* you land on `/events/[id]` for the event C was invited to.
+9. Sign in as B or D — neither was invited to this event. Open either of the
+   two invite links from step 4. Press **Claim your invitation**. *Expected:*
+   the same generic refusal text every other claim failure shows (starting
+   "That invitation isn't for this account…") — nothing on screen or in the
+   URL confirms whether the event exists.
+10. As DJ A, navigate directly to `/events/new/<a-completed-event-id>` (any
+    event in **Past events**). *Expected:* **404** — the wizard must refuse to
+    reopen a delivered recap, not render a pre-filled edit form.
+11. As DJ A, navigate directly to `/events/new/<a-cancelled-event-id>` if one
+    exists in the seed data. *Expected:* **404**, same reasoning as step 10.
+    If no cancelled event exists in the seed data, record this step as **not
+    run** — not as passed. A skipped step recorded as a pass hides exactly
+    the gap this note exists to prevent.
+
+**One-email step, do last:**
+
+12. Open partner 2's invite link (from step 4) in a private/incognito window.
+    *Expected:* the invite page renders in place for the signed-out visitor
+    (no redirect — `803dbeb` made this read public) with a **Create an
+    account** link on that same page. Click it.
+    *Expected:* the register form shows name, email, confirm email, password,
+    confirm password — **no business name field, no phone field.** Register
+    with **exactly the address you wrote down as partner 2's invited email in
+    step 4** — not a new one. (The claim matches on that exact address;
+    registering a different one produces the same generic refusal a real
+    defect would, and is not a sign of a bug — see step 4's note.) Confirm
+    the email **in the same browser window** (private windows keep separate
+    cookies, so opening the confirmation link in a different browser/profile
+    is expected to fail this step for an unrelated reason — the PKCE code
+    verifier lives in a cookie too). *Expected:* after confirming, you land
+    back on the invite/claim page for partner 2's slot — **not** `/dashboard`
+    and not asked for a DJ business name. Press **Claim your invitation**.
+    *Expected:* you land on `/events/[id]`. If the claim instead shows the
+    generic refusal, first re-check that the address just registered is
+    byte-for-byte the one entered as partner 2 in step 4 (case included)
+    before concluding this is a product defect.
+
+### Results — attested by Niv Hovav, 2026-09-03
+
+*(Filled in from what was reported back after the walk; not machine-verified —
+see the no-session section above for what was.)*
+
+- **Step 5** (re-send invites on an already-promoted event) — **PASSED**,
+  attested 2026-09-03. "Send invites again is working." This is the
+  load-bearing live check for the `42501`-on-second-run defect that killed
+  design revision 1.
+- **Step 12** (one-email register → confirm → claim round trip) — **PASSED
+  IN FULL**, attested 2026-09-03. Registered with no DJ fields, confirmed
+  the email, was redirected back to the claim page (not `/dashboard`),
+  claimed, and landed on `/events/[id]`.
+- **Steps 6, 7, 9, 10, 11 — NOT REPORTED.** No attested pass/fail has come
+  back for these steps. Do not read their absence here as a pass; they are
+  simply unattested as of this writing.

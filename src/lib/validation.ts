@@ -64,37 +64,45 @@ export const loginSchema = z.object({
     .refine((value) => byteLength(value) <= 72, 'Password must be at most 72 characters.'),
 });
 
-export const registerSchema = z
-  .object({
-    name: nameField,
-    businessName: businessNameField,
-    email: emailField,
-    confirmEmail: z.string().min(1, 'Confirm your email.'),
-    phone: phoneField,
-    password: registerPasswordField,
-    confirmPassword: z.string().min(1, 'Confirm your password.'),
-  })
-  .superRefine((values, ctx) => {
-    if (
-      values.email &&
-      values.confirmEmail &&
-      values.confirmEmail.trim().toLowerCase() !== values.email.trim().toLowerCase()
-    ) {
-      ctx.addIssue({
-        code: 'custom',
-        path: ['confirmEmail'],
-        message: 'Emails do not match.',
-      });
-    }
+/**
+ * The fields every signup needs, whoever is signing up. registerSchema adds
+ * the two DJ fields on top; partnerRegisterSchema does not
+ * (docs/specs/2026-09-02-new-event-design.md §4.6).
+ */
+const baseRegisterFields = {
+  name: nameField,
+  email: emailField,
+  confirmEmail: z.string().min(1, 'Confirm your email.'),
+  password: registerPasswordField,
+  confirmPassword: z.string().min(1, 'Confirm your password.'),
+};
 
-    if (values.password && values.confirmPassword && values.confirmPassword !== values.password) {
-      ctx.addIssue({
-        code: 'custom',
-        path: ['confirmPassword'],
-        message: 'Passwords do not match.',
-      });
-    }
-  });
+/**
+ * Shared by both register schemas: the two confirm-field comparisons.
+ * Written once so a change to one cannot silently miss the other.
+ */
+function addConfirmationIssues(
+  values: { email?: string; confirmEmail?: string; password?: string; confirmPassword?: string },
+  ctx: z.RefinementCtx,
+): void {
+  if (
+    values.email &&
+    values.confirmEmail &&
+    values.confirmEmail.trim().toLowerCase() !== values.email.trim().toLowerCase()
+  ) {
+    ctx.addIssue({ code: 'custom', path: ['confirmEmail'], message: 'Emails do not match.' });
+  }
+
+  if (values.password && values.confirmPassword && values.confirmPassword !== values.password) {
+    ctx.addIssue({ code: 'custom', path: ['confirmPassword'], message: 'Passwords do not match.' });
+  }
+}
+
+export const partnerRegisterSchema = z.object(baseRegisterFields).superRefine(addConfirmationIssues);
+
+export const registerSchema = z
+  .object({ ...baseRegisterFields, businessName: businessNameField, phone: phoneField })
+  .superRefine(addConfirmationIssues);
 
 export const profileSchema = z.object({
   businessName: businessNameField,
@@ -284,4 +292,97 @@ export const ceremonySlotSchema = z
 export const spotifySearchSchema = z.object({
   q: z.string().trim().min(2, 'Type at least two characters.').max(100),
   type: z.enum(['track', 'artist']),
+});
+
+/* ---------------------------------------------------------------------------
+   The New Event wizard (docs/specs/2026-09-02-new-event-design.md §7).
+
+   Every bound below repeats a database check constraint's own number, so the
+   DJ sees a field error rather than a generic failure from Postgres.
+   --------------------------------------------------------------------------- */
+
+const partnerNameField = z
+  .string()
+  .trim()
+  .min(1, 'Both names are required.')
+  .max(120, 'A name must be at most 120 characters.');
+
+/**
+ * A real calendar day, not a YYYY-MM-DD shape.
+ *
+ * `2026-02-31` passes a regex and raises Postgres 22008, which would surface
+ * as the generic "Could not save that." A browser's <input type="date">
+ * prevents it, but a server action is a public HTTP endpoint reachable
+ * without ever loading the page (design §5.4 applies the same reasoning to
+ * authorization).
+ *
+ * Date.UTC round-trips the parts: JavaScript's Date rolls 2026-02-31 forward
+ * to 2026-03-03 rather than rejecting it, so the only reliable check is that
+ * the parts survive the trip unchanged.
+ */
+const eventDateField = z
+  .string()
+  .regex(/^\d{4}-\d{2}-\d{2}$/, 'Enter a date as YYYY-MM-DD.')
+  .refine((value) => {
+    const [year, month, day] = value.split('-').map(Number);
+    const parsed = new Date(Date.UTC(year, month - 1, day));
+    return (
+      parsed.getUTCFullYear() === year &&
+      parsed.getUTCMonth() === month - 1 &&
+      parsed.getUTCDate() === day
+    );
+  }, 'That date does not exist.');
+
+/**
+ * Optional, and '' means absent rather than invalid: the field is optional on
+ * the artboard, and a DJ who leaves it blank must not get an error.
+ * `guest_count_range` in 20260903090000_event_wizard_columns.sql is the source
+ * of 1 and 10000.
+ */
+const guestCountField = z
+  .union([
+    z.literal(''),
+    z.coerce
+      .number()
+      .int('Guest count must be a whole number.')
+      .min(1, 'Guest count must be at least 1.')
+      .max(10000, 'Guest count must be at most 10000.'),
+  ])
+  .transform((value) => (value === '' ? null : value));
+
+export const eventDraftSchema = z
+  .object({
+    /** '' on /events/new (insert), a uuid on /events/new/[id] (update). */
+    eventId: z.union([z.uuid(), z.literal('')]),
+    partner1Name: partnerNameField,
+    partner2Name: partnerNameField,
+    eventDate: eventDateField,
+    venue: z.string().trim().min(1, 'Venue is required.').max(120, 'Venue must be at most 120 characters.'),
+    guestCount: guestCountField,
+  })
+  .refine(
+    (values) => `${values.partner1Name} & ${values.partner2Name}`.length <= 120,
+    {
+      // Capping each name at 58 would satisfy couple_names_len with a number
+      // that means nothing to a DJ. The real constraint is on the composed
+      // value, so that is what is reported (design §3.3).
+      message: 'Those two names are too long together — keep them under 120 characters combined.',
+      path: ['partner2Name'],
+    },
+  );
+
+/**
+ * Step 2. Emails only: step 1 already collected both names and stores them, so
+ * display_name is filled from partner1_name/partner2_name rather than asking
+ * twice. The artboard has no name fields here either (design §4.2).
+ *
+ * `emailField` (max 254) rather than partner_email_len's 3–320: every other
+ * email in this app is capped at 254, and an address the invite form accepts
+ * while the register form rejects it is a live inconsistency for a couple who
+ * has to do both (design §7).
+ */
+export const partnerInviteSchema = z.object({
+  eventId: eventIdField,
+  email1: emailField,
+  email2: emailField,
 });
