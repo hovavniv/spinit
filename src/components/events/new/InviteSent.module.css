@@ -1,0 +1,77 @@
+.tick {
+  width: 44px;
+  height: 44px;
+  margin-bottom: 16px;
+  border-radius: 50%;
+  background: var(--accent-tint);
+  color: var(--accent-deep);
+  font-size: 20px;
+  font-weight: 700;
+  line-height: 44px;
+  text-align: center;
+}
+
+.heading {
+  margin: 0 0 6px;
+  font-family: 'Sora', sans-serif;
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--ink-dark);
+}
+
+.blurb {
+  margin: 0 0 24px;
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--text-muted);
+}
+
+.summary {
+  margin: 0 0 24px;
+}
+
+.summaryRow {
+  display: flex;
+  gap: 16px;
+  padding: 10px 0;
+  border-top: 1px solid var(--border);
+}
+
+.summaryLabel {
+  min-width: 90px;
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-label);
+}
+
+.summaryValue {
+  margin: 0;
+  font-size: 13.5px;
+  color: var(--ink-dark);
+}
+
+.links {
+  margin-bottom: 28px;
+}
+
+.actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.back {
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.primary {
+  padding: 13px 26px;
+  border-radius: var(--radius-pill);
+  background: var(--accent);
+  color: white;
+  font-size: 14.5px;
+  font-weight: 700;
+}
