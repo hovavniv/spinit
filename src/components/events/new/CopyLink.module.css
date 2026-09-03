@@ -14,11 +14,11 @@
 }
 
 .url {
-  overflow-x: auto;
   flex: 1;
+  min-width: 0; /* a flex item's default min-width:auto blocks shrinking, which stops wrapping */
   font-size: 12.5px;
   color: var(--text-muted);
-  white-space: nowrap;
+  overflow-wrap: anywhere;
 }
 
 .button {

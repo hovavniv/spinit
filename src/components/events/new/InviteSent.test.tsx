@@ -34,6 +34,20 @@ describe('InviteSent', () => {
     expect(screen.getByText(links[2])).toBeInTheDocument();
   });
 
+  test('renders each link in full, not truncated', () => {
+    // Pins the DOM text only. jsdom computes no layout, so this cannot pin
+    // the visual clipping a live walk found (CopyLink.module.css's
+    // `white-space: nowrap` + a flex item that couldn't shrink below its
+    // content cut both links to the same visible prefix, mid-uuid, hiding
+    // the /1 vs /2 that distinguishes them). The real evidence for that stays
+    // a screenshot, not this test -- this only guards the text content.
+    render(<InviteSent event={event} links={links} />);
+
+    expect(screen.getByText(links[1])).toBeInTheDocument();
+    expect(screen.getByText(links[2])).toBeInTheDocument();
+    expect(links[1]).not.toBe(links[2]);
+  });
+
   test('reads the guest count', () => {
     // guest_count's only reader. Without this the column would be written by
     // one form and read only by that same form to refill itself (design §4.3).
