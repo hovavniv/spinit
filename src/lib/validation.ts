@@ -64,37 +64,45 @@ export const loginSchema = z.object({
     .refine((value) => byteLength(value) <= 72, 'Password must be at most 72 characters.'),
 });
 
-export const registerSchema = z
-  .object({
-    name: nameField,
-    businessName: businessNameField,
-    email: emailField,
-    confirmEmail: z.string().min(1, 'Confirm your email.'),
-    phone: phoneField,
-    password: registerPasswordField,
-    confirmPassword: z.string().min(1, 'Confirm your password.'),
-  })
-  .superRefine((values, ctx) => {
-    if (
-      values.email &&
-      values.confirmEmail &&
-      values.confirmEmail.trim().toLowerCase() !== values.email.trim().toLowerCase()
-    ) {
-      ctx.addIssue({
-        code: 'custom',
-        path: ['confirmEmail'],
-        message: 'Emails do not match.',
-      });
-    }
+/**
+ * The fields every signup needs, whoever is signing up. registerSchema adds
+ * the two DJ fields on top; partnerRegisterSchema does not
+ * (docs/specs/2026-09-02-new-event-design.md §4.6).
+ */
+const baseRegisterFields = {
+  name: nameField,
+  email: emailField,
+  confirmEmail: z.string().min(1, 'Confirm your email.'),
+  password: registerPasswordField,
+  confirmPassword: z.string().min(1, 'Confirm your password.'),
+};
 
-    if (values.password && values.confirmPassword && values.confirmPassword !== values.password) {
-      ctx.addIssue({
-        code: 'custom',
-        path: ['confirmPassword'],
-        message: 'Passwords do not match.',
-      });
-    }
-  });
+/**
+ * Shared by both register schemas: the two confirm-field comparisons.
+ * Written once so a change to one cannot silently miss the other.
+ */
+function addConfirmationIssues(
+  values: { email?: string; confirmEmail?: string; password?: string; confirmPassword?: string },
+  ctx: z.RefinementCtx,
+): void {
+  if (
+    values.email &&
+    values.confirmEmail &&
+    values.confirmEmail.trim().toLowerCase() !== values.email.trim().toLowerCase()
+  ) {
+    ctx.addIssue({ code: 'custom', path: ['confirmEmail'], message: 'Emails do not match.' });
+  }
+
+  if (values.password && values.confirmPassword && values.confirmPassword !== values.password) {
+    ctx.addIssue({ code: 'custom', path: ['confirmPassword'], message: 'Passwords do not match.' });
+  }
+}
+
+export const partnerRegisterSchema = z.object(baseRegisterFields).superRefine(addConfirmationIssues);
+
+export const registerSchema = z
+  .object({ ...baseRegisterFields, businessName: businessNameField, phone: phoneField })
+  .superRefine(addConfirmationIssues);
 
 export const profileSchema = z.object({
   businessName: businessNameField,

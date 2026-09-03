@@ -2,14 +2,23 @@
 
 import { redirect } from 'next/navigation';
 import { revalidatePath } from 'next/cache';
+import { cookies } from 'next/headers';
 import type { ZodError } from 'zod';
 
 import { createClient } from '@/lib/supabase/server';
 import { requireUser } from '@/lib/auth/dal';
 import { mapAuthError, type ActionResult } from '@/lib/auth/errors';
-import { postLoginPath } from '@/lib/auth/redirects';
+import { postLoginPath, safeRedirect } from '@/lib/auth/redirects';
 import { siteUrl } from '@/lib/auth/site-url';
-import { formDataToRecord, loginSchema, registerSchema, profileSchema, PHONE_PATTERN } from '@/lib/validation';
+import { INVITE_COOKIE, INVITE_COOKIE_OPTIONS } from '@/lib/auth/inviteCookie';
+import {
+  formDataToRecord,
+  loginSchema,
+  registerSchema,
+  partnerRegisterSchema,
+  profileSchema,
+  PHONE_PATTERN,
+} from '@/lib/validation';
 
 /**
  * The four server actions in scope for this chunk (design 4.1, 4.2, 4.4, 4.6).
@@ -51,29 +60,74 @@ export async function signUpWithPassword(
   _prevState: ActionResult,
   formData: FormData,
 ): Promise<ActionResult> {
-  const parsed = registerSchema.safeParse(formDataToRecord(formData));
-  if (!parsed.success) {
-    return { ok: false, formErrors: fieldErrorsFrom(parsed.error) };
+  // A hidden form field, so attacker-controlled. It selects a SCHEMA, never a
+  // privilege: the only consequence of forcing partner mode is a profile row
+  // with business_name null, which is the state a Google signup already
+  // produces and which no authorization decision anywhere reads (design §4.6).
+  const isPartner = formData.get('mode') === 'partner';
+  const record = formDataToRecord(formData);
+
+  // Parsed as two disjoint variables (rather than one union-typed `parsed`)
+  // so `businessName`/`phone` stay compile-time-known-present on the DJ
+  // branch instead of requiring a runtime cast that a structural-subtyping
+  // quirk (a DJ record structurally satisfies the partner shape too) would
+  // otherwise make `tsc` refuse.
+  let name: string;
+  let email: string;
+  let password: string;
+  let businessName = '';
+  // The phone block below applies to DJ signups only: a partner submits no
+  // phone at all, and joining a dial code to an empty string would fail
+  // PHONE_PATTERN and reject a perfectly valid signup.
+  let joinedPhone: string | null = null;
+
+  if (isPartner) {
+    const parsed = partnerRegisterSchema.safeParse(record);
+    if (!parsed.success) {
+      return { ok: false, formErrors: fieldErrorsFrom(parsed.error) };
+    }
+    ({ name, email, password } = parsed.data);
+  } else {
+    const parsed = registerSchema.safeParse(record);
+    if (!parsed.success) {
+      return { ok: false, formErrors: fieldErrorsFrom(parsed.error) };
+    }
+    ({ name, email, password, businessName } = parsed.data);
+
+    const dialCodeEntry = formData.get('dialCode');
+    const dialCode = typeof dialCodeEntry === 'string' ? dialCodeEntry : '';
+    joinedPhone = `${dialCode}${parsed.data.phone}`;
+
+    if (!PHONE_PATTERN.test(joinedPhone)) {
+      return { ok: false, formErrors: { phone: 'Enter a valid phone number.' } };
+    }
   }
 
-  const dialCodeEntry = formData.get('dialCode');
-  const dialCode = typeof dialCodeEntry === 'string' ? dialCodeEntry : '';
-  const joinedPhone = `${dialCode}${parsed.data.phone}`;
-
-  if (!PHONE_PATTERN.test(joinedPhone)) {
-    return { ok: false, formErrors: { phone: 'Enter a valid phone number.' } };
+  // Re-validated server-side, never trusted from the hidden field. An invalid
+  // pair simply carries nobody anywhere -- it is not an error worth failing a
+  // signup over.
+  if (isPartner) {
+    const invitePath = safeRedirect(String(formData.get('invitePath') ?? ''));
+    if (invitePath !== '/dashboard') {
+      const cookieStore = await cookies();
+      cookieStore.set(INVITE_COOKIE, invitePath, INVITE_COOKIE_OPTIONS);
+    }
   }
 
   const supabase = await createClient();
   const { error } = await supabase.auth.signUp({
-    email: parsed.data.email,
-    password: parsed.data.password,
+    email,
+    password,
     options: {
       data: {
-        full_name: parsed.data.name,
-        business_name: parsed.data.businessName,
-        phone: joinedPhone,
+        full_name: name,
+        // handle_new_user applies nullif(…, '') to both, so '' becomes null --
+        // which both check constraints accept (they are `is null or …`).
+        business_name: businessName,
+        phone: joinedPhone ?? '',
       },
+      // NO query string. Byte-identical to the allowlisted URL -- see
+      // lib/auth/inviteCookie.ts for why this must never gain a `?next=`.
       emailRedirectTo: `${siteUrl()}/auth/callback`,
     },
   });

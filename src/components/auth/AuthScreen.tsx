@@ -28,6 +28,11 @@ interface AuthScreenProps {
    * relevant in login mode; threaded straight to `LoginForm`.
    */
   callbackMessage?: string;
+  /**
+   * Non-null only when the visitor arrived from an invitation; threaded
+   * straight to `RegisterForm`.
+   */
+  invitePath?: string | null;
 }
 
 /**
@@ -40,7 +45,13 @@ interface AuthScreenProps {
  * switchMode. The mode swap itself is immediate client state; router.replace
  * only catches the address bar up afterwards, it is not awaited.
  */
-export function AuthScreen({ defaultMode, loginAction, registerAction, callbackMessage }: AuthScreenProps) {
+export function AuthScreen({
+  defaultMode,
+  loginAction,
+  registerAction,
+  callbackMessage,
+  invitePath,
+}: AuthScreenProps) {
   const [mode, setMode] = useState<Mode>(defaultMode);
   const router = useRouter();
 
@@ -83,7 +94,11 @@ export function AuthScreen({ defaultMode, loginAction, registerAction, callbackM
               callbackMessage={callbackMessage}
             />
           ) : (
-            <RegisterForm onSwitchToLogin={() => switchMode('login')} action={registerAction} />
+            <RegisterForm
+              onSwitchToLogin={() => switchMode('login')}
+              action={registerAction}
+              invitePath={invitePath}
+            />
           )}
         </div>
       </div>
