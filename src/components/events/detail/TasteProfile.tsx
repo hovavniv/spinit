@@ -167,34 +167,24 @@ export function TasteProfile({ partner1, partner2, genresByArtistId, progress }:
     const notJoined = outstanding.filter((p) => !p.joined);
     const joined = outstanding.filter((p) => p.joined);
 
-    if (notJoined.length === 2) {
-      // Neither partner has opened their invitation
-      const names = outstanding.map((p) => p.name).join(' and ');
-      return (
-        <div className={styles.waiting}>
-          <p>Waiting on {names} to open their invitations.</p>
-        </div>
-      );
-    } else if (notJoined.length === 1) {
-      // One partner opened but not connected, one hasn't opened yet
-      const notJoinedName = notJoined[0].name;
-      const joinedName = joined[0].name;
-      return (
-        <div className={styles.waiting}>
-          <p>
-            Waiting on {notJoinedName} to open their invitation, and on {joinedName} to connect Spotify.
-          </p>
-        </div>
-      );
-    } else {
-      // Both partners have opened but neither connected (original wording)
-      const names = outstanding.map((p) => p.name).join(' and ');
-      return (
-        <div className={styles.waiting}>
-          <p>Waiting on {names} to connect Spotify.</p>
-        </div>
-      );
+    // Composed, not enumerated. `outstanding` shrinks as partners connect,
+    // so a branch keyed on notJoined.length silently assumed both partners
+    // were still outstanding -- which is how joined[0] came to be read when
+    // joined was empty (pre-push review, 2026-09-03).
+    const clauses: string[] = [];
+    if (notJoined.length > 0) {
+      const names = notJoined.map((p) => p.name).join(' and ');
+      clauses.push(`${names} to open their invitation${notJoined.length > 1 ? 's' : ''}`);
     }
+    if (joined.length > 0) {
+      clauses.push(`${joined.map((p) => p.name).join(' and ')} to connect Spotify`);
+    }
+
+    return (
+      <div className={styles.waiting}>
+        <p>Waiting on {clauses.join(', and on ')}.</p>
+      </div>
+    );
   }
 
   // Guarded by the outstanding.length check above -- both are non-null here.

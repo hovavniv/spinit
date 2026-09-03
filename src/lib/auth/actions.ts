@@ -103,17 +103,6 @@ export async function signUpWithPassword(
     }
   }
 
-  // Re-validated server-side, never trusted from the hidden field. An invalid
-  // pair simply carries nobody anywhere -- it is not an error worth failing a
-  // signup over.
-  if (isPartner) {
-    const invitePath = safeRedirect(String(formData.get('invitePath') ?? ''));
-    if (invitePath !== '/dashboard') {
-      const cookieStore = await cookies();
-      cookieStore.set(INVITE_COOKIE, invitePath, INVITE_COOKIE_OPTIONS);
-    }
-  }
-
   const supabase = await createClient();
   const { error } = await supabase.auth.signUp({
     email,
@@ -134,6 +123,25 @@ export async function signUpWithPassword(
 
   if (error) {
     return mapAuthError(error, { event: 'signup', constraint: error.code });
+  }
+
+  // Set only AFTER signUp succeeds (fix-spec, 2026-09-03): setting this
+  // before the call left a stray 30-minute cookie for a FAILED signup, since
+  // nothing cleared it on the early return above. A different person
+  // completing any signup in the same browser within that window would then
+  // land on a stranger's invite page -- a misroute, not a privilege
+  // escalation (the invite page is public to view and the claim itself is
+  // still email-gated), but a real one.
+  //
+  // Re-validated server-side, never trusted from the hidden field. An invalid
+  // pair simply carries nobody anywhere -- it is not an error worth failing a
+  // signup over.
+  if (isPartner) {
+    const invitePath = safeRedirect(String(formData.get('invitePath') ?? ''));
+    if (invitePath !== '/dashboard') {
+      const cookieStore = await cookies();
+      cookieStore.set(INVITE_COOKIE, invitePath, INVITE_COOKIE_OPTIONS);
+    }
   }
 
   // "check your email" — the caller/UI renders the copy for this state.

@@ -653,12 +653,16 @@ Do steps 1–11 first and completely. If the mailer budget is spent, step 12 can
 wait an hour with everything else already confirmed — do not attempt step 12
 first and risk a half-finished walk.
 
-**No-session paths (curl-testable, no browser needed) — verified 2026-09-03:**
+**No-session paths (curl-testable, no browser needed) — re-verified 2026-09-03:**
 
 - `GET /invite/<uuid>/3` (slot outside 1/2) → **404**, before any auth check
   runs (`isUuid`/slot validation in the page short-circuits ahead of
   `requireUser()`).
-- `GET /invite/<uuid>/1` (valid shape, no session) → **307** to `/login`.
+- `GET /invite/<uuid>/1` (valid shape, no session) → **200** — commit
+  `803dbeb` made this page's read public, so a signed-out visitor now gets
+  the page rendered in place (with a signed-out view) instead of a redirect.
+  This was previously recorded here as 307 to `/login`; that is no longer
+  true.
 - `GET /events/new` (no session) → **307** to `/login` — confirms the route
   exists and no longer 404s, without needing to sign in.
 - `GET` of a route that never existed → **404**, confirming the app's 404
@@ -727,7 +731,9 @@ machine-verified):**
 **One-email step, do last:**
 
 12. Open partner 2's invite link (from step 4) in a private/incognito window.
-    *Expected:* redirected to `/login`. Click **Create an account**.
+    *Expected:* the invite page renders in place for the signed-out visitor
+    (no redirect — `803dbeb` made this read public) with a **Create an
+    account** link on that same page. Click it.
     *Expected:* the register form shows name, email, confirm email, password,
     confirm password — **no business name field, no phone field.** Register
     with **exactly the address you wrote down as partner 2's invited email in
@@ -749,3 +755,15 @@ machine-verified):**
 
 *(Filled in from what was reported back after the walk; not machine-verified —
 see the no-session section above for what was.)*
+
+- **Step 5** (re-send invites on an already-promoted event) — **PASSED**,
+  attested 2026-09-03. "Send invites again is working." This is the
+  load-bearing live check for the `42501`-on-second-run defect that killed
+  design revision 1.
+- **Step 12** (one-email register → confirm → claim round trip) — **PASSED
+  IN FULL**, attested 2026-09-03. Registered with no DJ fields, confirmed
+  the email, was redirected back to the claim page (not `/dashboard`),
+  claimed, and landed on `/events/[id]`.
+- **Steps 6, 7, 9, 10, 11 — NOT REPORTED.** No attested pass/fail has come
+  back for these steps. Do not read their absence here as a pass; they are
+  simply unattested as of this writing.

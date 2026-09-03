@@ -82,8 +82,16 @@ describe('getEventForWizard', () => {
   });
 
   test('returns null and logs when the query errors', async () => {
+    // data set to a valid-shaped row (not null) alongside the error: with a
+    // null-data fixture, `toBeNull()` would ALSO pass via the separate
+    // `if (!data) return null` branch even if the `if (error)` guard above it
+    // were deleted -- only a non-null data value here means `toBeNull()`
+    // can only be satisfied by the error guard actually firing.
     const error = vi.spyOn(console, 'error').mockImplementation(() => {});
-    const { builder } = builderDouble({ data: null, error: { message: 'boom' } });
+    const { builder } = builderDouble({
+      data: { id: EVENT_ID, couple_names: 'Alex & Sam', status: 'draft' },
+      error: { message: 'boom' },
+    });
     from.mockReturnValue(builder);
 
     expect(await getEventForWizard(EVENT_ID)).toBeNull();

@@ -111,8 +111,13 @@ describe('saveEventDraft — insert path', () => {
   });
 
   test('returns the generic message on a database error, and logs the code', async () => {
+    // data set to a valid-shaped row (not null) alongside the error: if the
+    // `if (error)` guard were deleted, the code would fall through to
+    // `if (!data)`, which a null-data fixture would ALSO satisfy and produce
+    // the same generic-failure result for the wrong reason. A non-null data
+    // here means only the error guard itself can make this test pass.
     const error = vi.spyOn(console, 'error').mockImplementation(() => {});
-    const { builder } = eventsDouble({ data: null, error: { code: '23514', message: 'boom' } });
+    const { builder } = eventsDouble({ data: { id: EVENT_ID }, error: { code: '23514', message: 'boom' } });
     from.mockReturnValue(builder);
 
     const result = await saveEventDraft(null, formData(draftFields));
@@ -196,6 +201,10 @@ describe('sendInvites', () => {
 
     await expect(sendInvites(null, formData(inviteFields))).rejects.toThrow(/NEXT_REDIRECT/);
 
+    // Module doc claims "every action calls requireUser() FIRST" -- deleting
+    // that call left all other tests in this file green (getEventForWizard
+    // and claimPartnerSlot happen to call it internally), so pin it directly.
+    expect(requireUser).toHaveBeenCalled();
     expect(calls.upsert).toHaveLength(1);
     const [rows, opts] = calls.upsert[0];
     expect(rows).toHaveLength(2);
@@ -277,6 +286,9 @@ describe('claimInvite', () => {
 
     expect(claimPartnerSlot).toHaveBeenCalledWith(EVENT_ID, 1);
     expect(redirect).toHaveBeenCalledWith(`/events/${EVENT_ID}`);
+    // Same module-doc claim as sendInvites' test above -- pinned directly
+    // rather than relying on claimPartnerSlot's own internal call to it.
+    expect(requireUser).toHaveBeenCalled();
   });
 
   test('returns one generic message for every refusal, and does not redirect', async () => {

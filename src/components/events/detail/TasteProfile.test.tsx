@@ -319,4 +319,75 @@ describe('TasteProfile', () => {
     expect(screen.queryByText(/connect spotify/i)).not.toBeInTheDocument();
     expect(screen.getByText(/open their invitations/i)).toBeInTheDocument();
   });
+
+  // --- Fix-spec item 1: crash when one partner already has a profile ------
+  // (pre-push review, 2026-09-03) -- `outstanding` only holds the
+  // not-yet-connected partner, so a `notJoined.length === 1` branch that
+  // assumed BOTH partners were still outstanding read `joined[0].name` on
+  // an empty array.
+
+  it('does not crash when one partner has connected and the other has not joined at all', () => {
+    expect(() =>
+      render(
+        <TasteProfile
+          partner1={{ name: 'Maya', profile: p1, joined: true }}
+          partner2={{ name: 'Chris', profile: null, joined: false }}
+          genresByArtistId={noGenres}
+          progress={noProgress}
+        />,
+      ),
+    ).not.toThrow();
+  });
+
+  it('renders "open their invitation" (singular) when only one partner is outstanding and has not joined', () => {
+    render(
+      <TasteProfile
+        partner1={{ name: 'Maya', profile: p1, joined: true }}
+        partner2={{ name: 'Chris', profile: null, joined: false }}
+        genresByArtistId={noGenres}
+        progress={noProgress}
+      />,
+    );
+    expect(screen.getByText(/waiting on chris to open their invitation/i)).toBeInTheDocument();
+    expect(screen.queryByText(/connect spotify/i)).not.toBeInTheDocument();
+  });
+
+  it('renders "connect Spotify" when only one partner is outstanding and has joined', () => {
+    render(
+      <TasteProfile
+        partner1={{ name: 'Maya', profile: p1, joined: true }}
+        partner2={{ name: 'Chris', profile: null, joined: true }}
+        genresByArtistId={noGenres}
+        progress={noProgress}
+      />,
+    );
+    expect(screen.getByText(/waiting on chris to connect spotify/i)).toBeInTheDocument();
+    expect(screen.queryByText(/open their invitation/i)).not.toBeInTheDocument();
+  });
+
+  it('renders both names when both are outstanding and neither has joined (five-row table row 1)', () => {
+    render(
+      <TasteProfile
+        partner1={{ name: 'Maya', profile: null, joined: false }}
+        partner2={{ name: 'Chris', profile: null, joined: false }}
+        genresByArtistId={noGenres}
+        progress={noProgress}
+      />,
+    );
+    expect(screen.getByText(/waiting on maya and chris to open their invitations/i)).toBeInTheDocument();
+  });
+
+  it('renders a mixed message when both are outstanding but only one has joined (five-row table row 2)', () => {
+    render(
+      <TasteProfile
+        partner1={{ name: 'Maya', profile: null, joined: false }}
+        partner2={{ name: 'Chris', profile: null, joined: true }}
+        genresByArtistId={noGenres}
+        progress={noProgress}
+      />,
+    );
+    expect(
+      screen.getByText(/waiting on maya to open their invitation, and on chris to connect spotify/i),
+    ).toBeInTheDocument();
+  });
 });
