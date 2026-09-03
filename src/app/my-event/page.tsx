@@ -40,11 +40,10 @@ export default async function MyEventPage() {
 
   const dj = {
     name: profile?.full_name || user.email || 'You',
-    // Same deferred limitation as /events/[id] (design §10's "Partner
-    // chrome" item): a partner's profile carries no business name, so this
-    // reads as a DJ label. Not addressed here — plan task 14 only hides the
-    // sidebar nav (below), it does not fix the label itself.
-    company: profile?.business_name || 'Independent DJ',
+    // This route only exists for partners (see the doc comment above), so
+    // unlike /events/[id] there is no DJ case to fall back to here at all
+    // (design §9.5, now fixed).
+    company: 'Getting married',
   };
 
   return (
