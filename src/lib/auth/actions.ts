@@ -173,6 +173,14 @@ export async function signInWithPassword(
     supabase.from('event_partners').select('id').eq('user_id', userId).limit(1),
   ]);
 
+  // A hidden field, so attacker-controlled -- which is exactly why it goes
+  // through safeRedirect rather than being obeyed. safeRedirect returns
+  // '/dashboard' for anything that is not a valid invite path, so that value
+  // doubles as "nothing usable was supplied". Same idiom the auth callback
+  // already uses.
+  const invitePath = safeRedirect(String(formData.get('invitePath') ?? ''));
+  if (invitePath !== '/dashboard') redirect(invitePath);
+
   // redirect() throws internally — expected Next behavior, not caught here.
   redirect(
     postLoginPath({

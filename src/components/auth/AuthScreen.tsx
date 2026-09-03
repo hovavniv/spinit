@@ -55,9 +55,17 @@ export function AuthScreen({
   const [mode, setMode] = useState<Mode>(defaultMode);
   const router = useRouter();
 
+  // Parsed back out of invitePath (shape `/invite/{uuid}/{slot}`) rather than
+  // threading raw `invite`/`slot` values down as separate props: invitePath
+  // is already the one piece of invite state this component receives, so
+  // reconstructing the query string from it avoids adding a second prop pair
+  // that would need to stay in sync with it.
+  const inviteQuery = invitePath ? invitePath.match(/^\/invite\/([^/]+)\/([12])$/) : null;
+  const inviteSearch = inviteQuery ? `?invite=${inviteQuery[1]}&slot=${inviteQuery[2]}` : '';
+
   function switchMode(next: Mode) {
     setMode(next);
-    router.replace(next === 'login' ? '/login' : '/register');
+    router.replace((next === 'login' ? '/login' : '/register') + inviteSearch);
   }
 
   return (
@@ -92,6 +100,7 @@ export function AuthScreen({
               onSwitchToRegister={() => switchMode('register')}
               action={loginAction}
               callbackMessage={callbackMessage}
+              invitePath={invitePath}
             />
           ) : (
             <RegisterForm

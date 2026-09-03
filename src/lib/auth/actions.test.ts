@@ -242,6 +242,26 @@ describe('signInWithPassword', () => {
     expect(from).toHaveBeenCalledWith('events');
     expect(from).toHaveBeenCalledWith('event_partners');
   });
+
+  it('redirects to a valid invite path from the hidden invitePath field, bypassing postLoginPath', async () => {
+    const fd = loginFormData({ invitePath: '/invite/11111111-1111-4111-8111-111111111111/1' });
+
+    await expect(signInAction({ ok: true }, fd)).rejects.toThrow(
+      'REDIRECT:/invite/11111111-1111-4111-8111-111111111111/1',
+    );
+  });
+
+  it('falls through to postLoginPath when invitePath is a tampered open-redirect attempt', async () => {
+    const fd = loginFormData({ invitePath: '//evil.com' });
+
+    await expect(signInAction({ ok: true }, fd)).rejects.toThrow('REDIRECT:/dashboard');
+  });
+
+  it('falls through to postLoginPath when invitePath names an invalid slot', async () => {
+    const fd = loginFormData({ invitePath: '/invite/11111111-1111-4111-8111-111111111111/3' });
+
+    await expect(signInAction({ ok: true }, fd)).rejects.toThrow('REDIRECT:/dashboard');
+  });
 });
 
 describe('signUpWithPassword — error diagnostics (F6)', () => {
