@@ -4,6 +4,7 @@ const requireUser = vi.fn();
 const revalidatePath = vi.fn();
 const redirect = vi.fn((path: string) => { throw new Error(`NEXT_REDIRECT:${path}`); });
 const from = vi.fn();
+const claimPartnerSlot = vi.fn(async (_eventId: string, _slot: 1 | 2) => null as string | null);
 
 vi.mock('@/lib/auth/dal', () => ({ requireUser: () => requireUser() }));
 vi.mock('next/cache', () => ({ revalidatePath: (...args: unknown[]) => revalidatePath(...args) }));
@@ -22,8 +23,11 @@ vi.mock('./newEventDal', () => ({
     partners: [],
   })),
 }));
+vi.mock('@/lib/events/partnersDal', () => ({
+  claimPartnerSlot: (eventId: string, slot: 1 | 2) => claimPartnerSlot(eventId, slot),
+}));
 
-import { saveEventDraft, sendInvites } from './newEventActions';
+import { saveEventDraft, sendInvites, claimInvite } from './newEventActions';
 
 const EVENT_ID = '11111111-2222-4333-8444-555555555555';
 const USER_ID = '22222222-2222-4333-8444-555555555555';
@@ -257,5 +261,51 @@ describe('sendInvites', () => {
 
     expect(result).toMatchObject({ ok: false });
     expect(from).not.toHaveBeenCalled();
+  });
+});
+
+const CLAIM_MESSAGE =
+  "That invitation isn't for this account. Sign in with the address your DJ invited — or create an account with it — then open this link again.";
+
+describe('claimInvite', () => {
+  test('redirects into the event on a successful claim', async () => {
+    claimPartnerSlot.mockResolvedValue('partner-row-id');
+
+    await expect(
+      claimInvite(null, formData({ eventId: EVENT_ID, slot: '1' })),
+    ).rejects.toThrow(/NEXT_REDIRECT/);
+
+    expect(claimPartnerSlot).toHaveBeenCalledWith(EVENT_ID, 1);
+    expect(redirect).toHaveBeenCalledWith(`/events/${EVENT_ID}`);
+  });
+
+  test('returns one generic message for every refusal, and does not redirect', async () => {
+    // claimPartnerSlot collapses "no such event", "already claimed" and "not
+    // your invitation" into a single null on purpose. This action must not
+    // undo that by distinguishing them.
+    claimPartnerSlot.mockResolvedValue(null);
+
+    const result = await claimInvite(null, formData({ eventId: EVENT_ID, slot: '2' }));
+
+    expect(result).toEqual({ ok: false, message: CLAIM_MESSAGE });
+    expect(redirect).not.toHaveBeenCalled();
+  });
+
+  test.each([
+    ['a slot of 3', '3'],
+    ['a slot of 0', '0'],
+    ['an empty slot', ''],
+  ])('refuses %s without calling the claim function', async (_label, slot) => {
+    const result = await claimInvite(null, formData({ eventId: EVENT_ID, slot }));
+
+    expect(result).toEqual({ ok: false, message: CLAIM_MESSAGE });
+    expect(claimPartnerSlot).not.toHaveBeenCalled();
+  });
+
+  test('refuses a non-uuid event id without calling the claim function', async () => {
+    const result = await claimInvite(null, formData({ eventId: 'banana', slot: '1' }));
+
+    expect(result).toEqual({ ok: false, message: CLAIM_MESSAGE });
+    expect(claimPartnerSlot).not.toHaveBeenCalled();
   });
 });

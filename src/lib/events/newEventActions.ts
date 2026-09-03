@@ -6,7 +6,8 @@ import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
 import { requireUser } from '@/lib/auth/dal';
 import type { ActionResult } from '@/lib/auth/errors';
-import { formDataToRecord, eventDraftSchema, partnerInviteSchema } from '@/lib/validation';
+import { formDataToRecord, eventDraftSchema, partnerInviteSchema, isUuid } from '@/lib/validation';
+import { claimPartnerSlot } from './partnersDal';
 import { composeCoupleNames } from './coupleNames';
 import type { WizardActionState } from './newEventTypes';
 
@@ -189,4 +190,36 @@ export async function sendInvites(
 
   revalidatePath('/dashboard');
   redirect(`/events/new/${eventId}/sent`);
+}
+
+/**
+ * One message for every failure (design §4.4).
+ *
+ * claimPartnerSlot already collapses "no such event", "already claimed" and
+ * "not your invitation" into a single null, logging the error code and never
+ * the message. Distinguishing them here would undo that and turn this route
+ * into a way to learn which event ids exist.
+ */
+const CLAIM_REFUSED =
+  "That invitation isn't for this account. Sign in with the address your DJ invited — or create an account with it — then open this link again.";
+
+export async function claimInvite(
+  _prevState: WizardActionState,
+  formData: FormData,
+): Promise<ActionResult> {
+  await requireUser();
+
+  const eventId = String(formData.get('eventId') ?? '');
+  const rawSlot = String(formData.get('slot') ?? '');
+
+  // Same refusal as a genuine claim failure: a caller must not be able to tell
+  // a malformed request from a rejected one.
+  if (!isUuid(eventId) || (rawSlot !== '1' && rawSlot !== '2')) {
+    return { ok: false, message: CLAIM_REFUSED };
+  }
+
+  const partnerId = await claimPartnerSlot(eventId, rawSlot === '1' ? 1 : 2);
+  if (!partnerId) return { ok: false, message: CLAIM_REFUSED };
+
+  redirect(`/events/${eventId}`);
 }
