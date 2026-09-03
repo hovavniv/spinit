@@ -36,6 +36,15 @@ const hasTestUsers = Boolean(
   TEST_USER_A_EMAIL && TEST_USER_A_PASSWORD && TEST_USER_B_EMAIL && TEST_USER_B_PASSWORD,
 );
 
+// Cases 5 and 6 below each send a real confirmation email through Supabase's
+// built-in mailer, which is capped at 2 emails/hour, project-wide, shared
+// with every other signup on this project. A gate that runs on every commit
+// cannot depend on a shared external resource capped that low, so these two
+// tests are opt-in only: skipped unless RUN_MAILER_TESTS=1 is set explicitly.
+// See docs/submission/manual-tests.md for the documented manual/opt-in
+// procedure to run them.
+const shouldRunMailerTests = process.env.RUN_MAILER_TESTS === '1';
+
 // No Supabase config at all: skip cleanly (grader running `npm test` fresh).
 // Supabase configured but test users are not: fail loudly rather than skip
 // — this is the case a half-configured `.env.local` produces, and it should
@@ -209,78 +218,84 @@ describe.skipIf(!hasSupabaseConfig || !hasTestUsers)(
     // emails/hour mailer budget (section 9, gap 2) every time this actually
     // runs — a unique local part avoids colliding with a prior run's
     // unconfirmed user, but does not avoid spending the budget.
-    test('signUp creates a profile row with metadata carried through by the trigger', async () => {
-      const uniqueEmail = `spinit-rls-test+${Date.now()}-${crypto.randomUUID()}@example.com`;
-      const fullName = 'RLS Trigger Test User';
+    test.skipIf(!shouldRunMailerTests)(
+      'signUp creates a profile row with metadata carried through by the trigger (opt-in: set RUN_MAILER_TESTS=1 -- spends real mailer quota, 2/hour project-wide)',
+      async () => {
+        const uniqueEmail = `spinit-rls-test+${Date.now()}-${crypto.randomUUID()}@gmail.com`;
+        const fullName = 'RLS Trigger Test User';
 
-      const signUpResult = await clientA.auth.signUp({
-        email: uniqueEmail,
-        password: 'a-valid-test-password-1',
-        options: {
-          data: { full_name: fullName },
-        },
-      });
+        const signUpResult = await clientA.auth.signUp({
+          email: uniqueEmail,
+          password: 'a-valid-test-password-1',
+          options: {
+            data: { full_name: fullName },
+          },
+        });
 
-      expect(signUpResult.error).toBeNull();
-      expect(signUpResult.data.user).not.toBeNull();
+        expect(signUpResult.error).toBeNull();
+        expect(signUpResult.data.user).not.toBeNull();
 
-      const newUserId = signUpResult.data.user!.id;
+        const newUserId = signUpResult.data.user!.id;
 
-      // The new user's own row is readable under their own RLS-scoped select
-      // only if signed in as them; a plain unauthenticated/anon select of an
-      // arbitrary id is blocked by the same select policy exercised in case
-      // 1. Signing in as the freshly created (unconfirmed) user is not
-      // possible without clicking the confirmation email, and reading
-      // another user's row from this script is blocked by RLS either way —
-      // a real, structural limitation, not something this test can work
-      // around without the service-role key, which stays out of this
-      // codebase entirely (design 8.1).
-      //
-      // What this assertion actually verifies: `signUp` did not error with
-      // the given valid metadata — i.e. the trigger's insert into `profiles`
-      // did NOT fail a check constraint (a failure surfaces as a signUp
-      // error per design 7.2, exercised directly by case 6's negative test).
-      // That is an indirect but real signal that the trigger ran without
-      // hitting a constraint violation. It is NOT a verification that the
-      // resulting row exists or that its content (metadata carried through)
-      // is correct — that would require the service-role key. The row's
-      // content is verified separately, out of band, via the read-only DB
-      // check documented under "Confirmation email" in
-      // docs/submission/manual-tests.md, for test user A.
-      expect(newUserId).toBeTruthy();
-    });
+        // The new user's own row is readable under their own RLS-scoped select
+        // only if signed in as them; a plain unauthenticated/anon select of an
+        // arbitrary id is blocked by the same select policy exercised in case
+        // 1. Signing in as the freshly created (unconfirmed) user is not
+        // possible without clicking the confirmation email, and reading
+        // another user's row from this script is blocked by RLS either way —
+        // a real, structural limitation, not something this test can work
+        // around without the service-role key, which stays out of this
+        // codebase entirely (design 8.1).
+        //
+        // What this assertion actually verifies: `signUp` did not error with
+        // the given valid metadata — i.e. the trigger's insert into `profiles`
+        // did NOT fail a check constraint (a failure surfaces as a signUp
+        // error per design 7.2, exercised directly by case 6's negative test).
+        // That is an indirect but real signal that the trigger ran without
+        // hitting a constraint violation. It is NOT a verification that the
+        // resulting row exists or that its content (metadata carried through)
+        // is correct — that would require the service-role key. The row's
+        // content is verified separately, out of band, via the read-only DB
+        // check documented under "Confirmation email" in
+        // docs/submission/manual-tests.md, for test user A.
+        expect(newUserId).toBeTruthy();
+      },
+    );
 
     // Case 6 (design 10.2): negative case. Over-length metadata (a 300-char
     // full_name) is rejected cleanly by the 5.1 check constraints, and the
     // trigger's failed insert rolls back the whole signUp — no row is created
     // in auth.users either. Also consumes mailer budget when it actually runs.
-    test('signUp with over-length full_name is rejected and creates no user', async () => {
-      const uniqueEmail = `spinit-rls-test+${Date.now()}-${crypto.randomUUID()}@example.com`;
-      const overLongName = 'A'.repeat(300);
+    test.skipIf(!shouldRunMailerTests)(
+      'signUp with over-length full_name is rejected and creates no user (opt-in: set RUN_MAILER_TESTS=1 -- spends real mailer quota, 2/hour project-wide)',
+      async () => {
+        const uniqueEmail = `spinit-rls-test+${Date.now()}-${crypto.randomUUID()}@gmail.com`;
+        const overLongName = 'A'.repeat(300);
 
-      const signUpResult = await clientA.auth.signUp({
-        email: uniqueEmail,
-        password: 'a-valid-test-password-1',
-        options: {
-          data: { full_name: overLongName },
-        },
-      });
+        const signUpResult = await clientA.auth.signUp({
+          email: uniqueEmail,
+          password: 'a-valid-test-password-1',
+          options: {
+            data: { full_name: overLongName },
+          },
+        });
 
-      // The trigger's insert into `profiles` fails its check constraint,
-      // which per design 7.2 rolls back the whole signUp transaction — so
-      // Supabase must report this as a signUp error, not a success with a
-      // user whose profile is simply missing.
-      //
-      // `error is not null` alone is too weak a pin: GoTrue's mailer-budget
-      // gate (case 5's failure mode) also produces a non-null error, and
-      // this test runs right after case 5 spends the same budget — so a
-      // rate-limited attempt would report a false pass here without ever
-      // reaching the trigger at all. Assert the error is specifically NOT
-      // the rate-limit error, so this only passes for the reason it claims.
-      expect(signUpResult.error).not.toBeNull();
-      expect(signUpResult.error?.code).not.toBe('over_email_send_rate_limit');
-      expect(signUpResult.error?.status).not.toBe(429);
-      expect(signUpResult.data.user).toBeNull();
-    });
+        // The trigger's insert into `profiles` fails its check constraint,
+        // which per design 7.2 rolls back the whole signUp transaction — so
+        // Supabase must report this as a signUp error, not a success with a
+        // user whose profile is simply missing.
+        //
+        // `error is not null` alone is too weak a pin: GoTrue's mailer-budget
+        // gate (case 5's failure mode) also produces a non-null error, and
+        // this test runs right after case 5 spends the same budget — so a
+        // rate-limited attempt would report a false pass here without ever
+        // reaching the trigger at all. Assert the error is specifically NOT
+        // the rate-limit error, so this only passes for the reason it claims.
+        expect(signUpResult.error).not.toBeNull();
+        expect(signUpResult.error?.code).not.toBe('over_email_send_rate_limit');
+        expect(signUpResult.error?.status).not.toBe(429);
+        expect(signUpResult.data.user).toBeNull();
+      },
+    );
   },
 );

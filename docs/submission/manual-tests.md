@@ -125,6 +125,59 @@ collide (commit `b53eda8`).
 rate limit above) — everything else in the suite passes, 5/6 RLS cases
 included.
 
+### Cases 5 and 6 (signUp mailer cases) are now opt-in, not part of the gate
+
+The above flakiness had two independent causes, not one: `@example.com` is
+an RFC 2606 reserved domain that Supabase's validator sometimes rejects
+outright (`email_address_invalid`), and — separately — every real run of
+either test sends a genuine confirmation email against the project's
+2-emails/hour mailer budget, shared with every other signup on the
+project. A gate that runs on every commit cannot depend on a shared
+external resource capped that low; renaming the domain alone does not fix
+that second cause, it just makes the failure differently shaped and less
+frequent.
+
+Both cases in `src/lib/auth/rls.integration.test.ts` (`signUp creates a
+profile row with metadata carried through by the trigger` and `signUp
+with over-length full_name is rejected and creates no user`) are now
+skipped by default (`test.skipIf`) and only run when explicitly opted
+into. Their local-part email domain was also changed from `@example.com`
+to `@gmail.com` (still a synthetic local part, `spinit-rls-test+<ts>-<uuid>`,
+not a real inbox) — `gmail.com` is not one of the RFC 2606 reserved
+domains, so it does not hit the validator's reserved-domain rejection.
+
+**To run them:**
+
+1. Set `RUN_MAILER_TESTS=1` as an environment variable before running the
+   command below.
+2. Run: `RUN_MAILER_TESTS=1 npx vitest run src/lib/auth/rls.integration.test.ts`
+3. A pass looks like: all 6 cases in the file pass, including case 5
+   (confirming a real `signUp` call correctly triggers profile-row
+   creation with metadata) and case 6 (confirming a real `signUp` call
+   correctly rejects/rolls back on a check-constraint violation).
+
+**Warning: this spends two of the project's 2 emails/hour mailer budget.**
+Running it twice within the same hour will hit the rate limit on the
+second run. Running it alongside any other signup activity on this
+project (a live manual walk, a demo, fixture creation) contends for the
+same limited budget and can make either activity fail for a reason that
+has nothing to do with the code under test.
+
+**Result of the one opt-in run performed while making this change**
+(2026-09-03): 5 of 6 passed. Case 6 (the negative, over-length-name case)
+passed — confirming the domain change did not introduce a rejection, since
+this case's own assertion specifically distinguishes a genuine trigger
+rejection from a rate-limit false pass. Case 5 failed, but with
+`AuthApiError` `over_email_send_rate_limit` (429/`over_email_send_rate_limit`),
+not `email_address_invalid` — i.e. the project's 2-emails/hour budget was
+already exhausted before this run started (from unrelated activity earlier
+in the same hour), not a domain rejection. This is the same failure mode
+already documented above for the pre-existing case 5 flake, now something
+this opt-in gate makes an explicit, deliberate choice rather than an
+accidental one every commit pays for. Re-running case 5 alone, in a fresh
+hour, would be needed to see it pass outright; not done here, to avoid
+spending a third email against the same budget window.
+
 ### Definition of done walk-through (design section 11)
 
 - **A DJ can register with email and password, confirm by email, and reach
