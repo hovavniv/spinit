@@ -158,6 +158,123 @@ describe.skipIf(!hasSupabaseConfig || !hasTestUsers)(
       expect(error).not.toBeNull();
     });
 
+    // New Event wizard, plan task 15. "dj inserts own events" is
+    // `with check ((select auth.uid()) = dj_id)` -- A signed in as A cannot
+    // satisfy that with anyone else's id in the dj_id column, forged or not.
+    test('a DJ cannot insert an event owned by another DJ', async () => {
+      const { error } = await clientA.from('events').insert({
+        dj_id: userBId,
+        couple_names: 'Forged & Event',
+        venue: 'Nowhere',
+        event_date: '2026-12-31',
+        status: 'upcoming',
+      });
+      expect(error).not.toBeNull();
+      expect(error!.code).toBe('42501');
+    });
+
+    // "dj inserts partners" requires
+    // `exists (select 1 from events e where e.id = event_partners.event_id
+    // and e.dj_id = auth.uid())`. A nonexistent event id makes that exists()
+    // false the same way an event genuinely owned by another DJ would --
+    // same predicate, same code path, no need for a real row of B's that A
+    // can otherwise never even see (RLS already hides it from A's SELECT).
+    test('a DJ cannot insert partners onto another DJ\'s event', async () => {
+      const notOwnedByA = '00000000-0000-4000-8000-000000000099';
+      const { error } = await clientA.from('event_partners').insert({
+        event_id: notOwnedByA,
+        slot: 1,
+        display_name: 'Forged',
+        invite_email: 'forged@spinit.test',
+      });
+      expect(error).not.toBeNull();
+      expect(error!.code).toBe('42501');
+    });
+
+    // sendInvites' write sequence (newEventActions.ts), run live and TWICE.
+    // A MOCK CANNOT SEE A GRANT. The defect this pins -- an upsert that
+    // succeeds on run 1 and fails 42501 on run 2 against event_partners'
+    // column-scoped update grant -- is invisible to every mocked test that
+    // could be written. Only a live second run finds it.
+    //
+    // Reuses anEventOfA rather than inserting a fresh fixture event: events
+    // carries no delete policy and no delete grant (20260829171500_events.sql),
+    // so a fresh event created here could never be cleaned up. The seed's own
+    // slot 1/2 rows on anEventOfA are overwritten by this test and restored
+    // in afterAll, the same restoration shape the partner-access block below
+    // already uses for invite_email.
+    describe('the invite write sequence (sendInvites)', () => {
+      let djClient: SupabaseClient;
+      let eventId: string;
+      let originalSlot1: { display_name: string; invite_email: string };
+      let originalSlot2: { display_name: string; invite_email: string };
+
+      beforeAll(async () => {
+        djClient = clientA;
+        eventId = anEventOfA;
+
+        const { data, error } = await djClient
+          .from('event_partners')
+          .select('slot, display_name, invite_email')
+          .eq('event_id', eventId)
+          .in('slot', [1, 2]);
+        if (error || !data || data.length !== 2) {
+          throw new Error(`could not read the seeded partner slots for anEventOfA: ${error?.message}`);
+        }
+        const slot1 = data.find((row) => row.slot === 1);
+        const slot2 = data.find((row) => row.slot === 2);
+        if (!slot1 || !slot2) throw new Error('anEventOfA is missing slot 1 or slot 2');
+        originalSlot1 = { display_name: slot1.display_name, invite_email: slot1.invite_email };
+        originalSlot2 = { display_name: slot2.display_name, invite_email: slot2.invite_email };
+      });
+
+      afterAll(async () => {
+        try {
+          await djClient
+            .from('event_partners')
+            .update(originalSlot1)
+            .eq('event_id', eventId)
+            .eq('slot', 1);
+          await djClient
+            .from('event_partners')
+            .update(originalSlot2)
+            .eq('event_id', eventId)
+            .eq('slot', 2);
+        } catch (cleanupError) {
+          console.error('invite write sequence: cleanup failed, live rows may be left behind', cleanupError);
+        }
+      });
+
+      test('the invite write sequence is idempotent across two runs', async () => {
+        const rows = [
+          { event_id: eventId, slot: 1, display_name: 'Alex', invite_email: 'alex@spinit.test' },
+          { event_id: eventId, slot: 2, display_name: 'Sam', invite_email: 'sam@spinit.test' },
+        ];
+
+        for (const run of [1, 2]) {
+          const { error: upsertError } = await djClient
+            .from('event_partners')
+            .upsert(rows, { onConflict: 'event_id,slot', ignoreDuplicates: true });
+          expect(upsertError, `upsert on run ${run}`).toBeNull();
+
+          for (const row of rows) {
+            const { error: updateError } = await djClient
+              .from('event_partners')
+              .update({ display_name: row.display_name, invite_email: row.invite_email })
+              .eq('event_id', eventId)
+              .eq('slot', row.slot);
+            expect(updateError, `update slot ${row.slot} on run ${run}`).toBeNull();
+          }
+        }
+
+        const { data } = await djClient
+          .from('event_partners')
+          .select('slot')
+          .eq('event_id', eventId);
+        expect(data).toHaveLength(2);
+      });
+    });
+
     // CORRECTED 2026-08-29 -- this test originally predicted the opposite
     // ordering and said so out loud: "if this ever comes back 42501 instead,
     // the FK stopped being the first line of defence and this test's name is

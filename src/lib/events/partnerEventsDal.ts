@@ -32,6 +32,14 @@ export const listPartnerEvents = cache(async (): Promise<PartnerEvent[]> => {
     .from('events')
     .select('id, couple_names, event_date, event_partners!inner(user_id)')
     .eq('event_partners.user_id', user.id)
+    // Excludes 'draft' and 'cancelled'. A draft normally has no partner rows,
+    // but that is an INVARIANT another function maintains, not a filter:
+    // sendInvites' own failure mode is "the partner write succeeded and the
+    // promotion failed", which leaves a draft WITH partners attached. And
+    // /my-event redirects straight into the event when a partner has exactly
+    // one, so an unfiltered list drops a partner into a wedding that has been
+    // called off with nothing on screen saying so (design §3.2).
+    .in('status', ['upcoming', 'live', 'completed'])
     .order('event_date', { ascending: true })
     .order('id');
 
