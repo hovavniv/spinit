@@ -10,6 +10,11 @@ import styles from './TasteProfile.module.css';
 interface PartnerTaste {
   name: string;
   profile: TasteProfileType | null;
+  /** The partner has claimed their invitation (event_partners.user_id is
+   *  set) -- distinct from having connected Spotify. Lets the "waiting on"
+   *  message below tell a DJ who hasn't opened the link apart from who has
+   *  joined but not connected, mirroring StreamingSection's table. */
+  joined: boolean;
 }
 
 interface EnrichmentProgress {
@@ -159,12 +164,37 @@ export function TasteProfile({ partner1, partner2, genresByArtistId, progress }:
   const outstanding = [partner1, partner2].filter((p) => p.profile === null);
 
   if (outstanding.length > 0) {
-    const names = outstanding.map((p) => p.name).join(' and ');
-    return (
-      <div className={styles.waiting}>
-        <p>Waiting on {names} to connect Spotify.</p>
-      </div>
-    );
+    const notJoined = outstanding.filter((p) => !p.joined);
+    const joined = outstanding.filter((p) => p.joined);
+
+    if (notJoined.length === 2) {
+      // Neither partner has opened their invitation
+      const names = outstanding.map((p) => p.name).join(' and ');
+      return (
+        <div className={styles.waiting}>
+          <p>Waiting on {names} to open their invitations.</p>
+        </div>
+      );
+    } else if (notJoined.length === 1) {
+      // One partner opened but not connected, one hasn't opened yet
+      const notJoinedName = notJoined[0].name;
+      const joinedName = joined[0].name;
+      return (
+        <div className={styles.waiting}>
+          <p>
+            Waiting on {notJoinedName} to open their invitation, and on {joinedName} to connect Spotify.
+          </p>
+        </div>
+      );
+    } else {
+      // Both partners have opened but neither connected (original wording)
+      const names = outstanding.map((p) => p.name).join(' and ');
+      return (
+        <div className={styles.waiting}>
+          <p>Waiting on {names} to connect Spotify.</p>
+        </div>
+      );
+    }
   }
 
   // Guarded by the outstanding.length check above -- both are non-null here.

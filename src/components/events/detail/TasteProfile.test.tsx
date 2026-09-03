@@ -22,8 +22,8 @@ describe('TasteProfile', () => {
   it('renders the outstanding partner by name when only one has a profile', () => {
     render(
       <TasteProfile
-        partner1={{ name: 'Maya', profile: profile(['a']) }}
-        partner2={{ name: 'Chris', profile: null }}
+        partner1={{ name: 'Maya', profile: profile(['a']), joined: true }}
+        partner2={{ name: 'Chris', profile: null, joined: true }}
         genresByArtistId={noGenres}
         progress={noProgress}
       />,
@@ -35,8 +35,8 @@ describe('TasteProfile', () => {
   it('renders the artist panels when both have profiles', () => {
     render(
       <TasteProfile
-        partner1={{ name: 'Maya', profile: profile(['a', 'b']) }}
-        partner2={{ name: 'Chris', profile: profile(['b', 'c']) }}
+        partner1={{ name: 'Maya', profile: profile(['a', 'b']), joined: true }}
+        partner2={{ name: 'Chris', profile: profile(['b', 'c']), joined: true }}
         genresByArtistId={noGenres}
         progress={noProgress}
       />,
@@ -49,8 +49,8 @@ describe('TasteProfile', () => {
   it('says "not enough listening history" rather than 0% when noData is set', () => {
     render(
       <TasteProfile
-        partner1={{ name: 'Maya', profile: profile([]) }}
-        partner2={{ name: 'Chris', profile: profile([]) }}
+        partner1={{ name: 'Maya', profile: profile([]), joined: true }}
+        partner2={{ name: 'Chris', profile: profile([]), joined: true }}
         genresByArtistId={noGenres}
         progress={noProgress}
       />,
@@ -62,8 +62,8 @@ describe('TasteProfile', () => {
   it('renders a message naming both partners when neither has connected', () => {
     render(
       <TasteProfile
-        partner1={{ name: 'Maya', profile: null }}
-        partner2={{ name: 'Chris', profile: null }}
+        partner1={{ name: 'Maya', profile: null, joined: true }}
+        partner2={{ name: 'Chris', profile: null, joined: true }}
         genresByArtistId={noGenres}
         progress={noProgress}
       />,
@@ -71,13 +71,15 @@ describe('TasteProfile', () => {
     expect(screen.getByText(/maya/i)).toBeInTheDocument();
     expect(screen.getByText(/chris/i)).toBeInTheDocument();
     expect(screen.queryByText(/music match/i)).not.toBeInTheDocument();
+    // Both have joined but neither connected - should see "connect Spotify" message
+    expect(screen.getByText(/waiting on maya and chris to connect spotify/i)).toBeInTheDocument();
   });
 
   it('renders each partner\'s exclusive artists under "<name> also loves"', () => {
     render(
       <TasteProfile
-        partner1={{ name: 'Maya', profile: profile(['a', 'b']) }}
-        partner2={{ name: 'Chris', profile: profile(['b', 'c']) }}
+        partner1={{ name: 'Maya', profile: profile(['a', 'b']), joined: true }}
+        partner2={{ name: 'Chris', profile: profile(['b', 'c']), joined: true }}
         genresByArtistId={noGenres}
         progress={noProgress}
       />,
@@ -99,8 +101,8 @@ describe('TasteProfile', () => {
     // heading a given artist renders under.
     render(
       <TasteProfile
-        partner1={{ name: 'Maya', profile: profile(['a', 'b']) }}
-        partner2={{ name: 'Chris', profile: profile(['b', 'c']) }}
+        partner1={{ name: 'Maya', profile: profile(['a', 'b']), joined: true }}
+        partner2={{ name: 'Chris', profile: profile(['b', 'c']), joined: true }}
         genresByArtistId={noGenres}
         progress={noProgress}
       />,
@@ -130,8 +132,8 @@ describe('TasteProfile', () => {
   it('shows "still analysing" while settled < total', () => {
     render(
       <TasteProfile
-        partner1={{ name: 'Maya', profile: p1 }}
-        partner2={{ name: 'Chris', profile: p2 }}
+        partner1={{ name: 'Maya', profile: p1, joined: true }}
+        partner2={{ name: 'Chris', profile: p2, joined: true }}
         genresByArtistId={noGenres}
         progress={{ settled: 4, total: 30 }}
       />,
@@ -154,8 +156,8 @@ describe('TasteProfile', () => {
     // to the top-genres panel is what the test actually means to check.
     render(
       <TasteProfile
-        partner1={{ name: 'Maya', profile: p1 }}
-        partner2={{ name: 'Chris', profile: p2 }}
+        partner1={{ name: 'Maya', profile: p1, joined: true }}
+        partner2={{ name: 'Chris', profile: p2, joined: true }}
         genresByArtistId={{ x: { mizrahi: 100 }, y: { pop: 100 } }}
         progress={{ settled: 30, total: 30 }}
       />,
@@ -169,8 +171,8 @@ describe('TasteProfile', () => {
     const six = genreProfile('p1', [genreArtist('x', 3)]);
     render(
       <TasteProfile
-        partner1={{ name: 'Maya', profile: six }}
-        partner2={{ name: 'Chris', profile: p2 }}
+        partner1={{ name: 'Maya', profile: six, joined: true }}
+        partner2={{ name: 'Chris', profile: p2, joined: true }}
         genresByArtistId={{ x: { a: 6, b: 5, c: 4, d: 3, e: 2, f: 1 } }}
         progress={{ settled: 30, total: 30 }}
       />,
@@ -181,8 +183,8 @@ describe('TasteProfile', () => {
   it('says so plainly when enrichment finished and found nothing usable', () => {
     render(
       <TasteProfile
-        partner1={{ name: 'Maya', profile: p1 }}
-        partner2={{ name: 'Chris', profile: p2 }}
+        partner1={{ name: 'Maya', profile: p1, joined: true }}
+        partner2={{ name: 'Chris', profile: p2, joined: true }}
         genresByArtistId={noGenres}
         progress={{ settled: 30, total: 30 }}
       />,
@@ -195,8 +197,8 @@ describe('TasteProfile', () => {
     for (const genresByArtistId of [noGenres, { x: { pop: 100 } }]) {
       const { unmount } = render(
         <TasteProfile
-          partner1={{ name: 'Maya', profile: p1 }}
-          partner2={{ name: 'Chris', profile: p2 }}
+          partner1={{ name: 'Maya', profile: p1, joined: true }}
+          partner2={{ name: 'Chris', profile: p2, joined: true }}
           genresByArtistId={genresByArtistId}
           progress={{ settled: 30, total: 30 }}
         />,
@@ -209,8 +211,8 @@ describe('TasteProfile', () => {
   it('shows nothing genre-shaped when total is 0 -- nobody has connected yet', () => {
     render(
       <TasteProfile
-        partner1={{ name: 'Maya', profile: p1 }}
-        partner2={{ name: 'Chris', profile: p2 }}
+        partner1={{ name: 'Maya', profile: p1, joined: true }}
+        partner2={{ name: 'Chris', profile: p2, joined: true }}
         genresByArtistId={noGenres}
         progress={{ settled: 0, total: 0 }}
       />,
@@ -222,8 +224,8 @@ describe('TasteProfile', () => {
   it('renders soloGenres as its own "Only one of you" panel, distinct from top genres, capped at four', () => {
     render(
       <TasteProfile
-        partner1={{ name: 'Maya', profile: genreProfile('p1', [genreArtist('x', 3)]) }}
-        partner2={{ name: 'Chris', profile: genreProfile('p2', [genreArtist('y', 3)]) }}
+        partner1={{ name: 'Maya', profile: genreProfile('p1', [genreArtist('x', 3)]), joined: true }}
+        partner2={{ name: 'Chris', profile: genreProfile('p2', [genreArtist('y', 3)]), joined: true }}
         genresByArtistId={{
           x: { pop: 100, m1: 100, m2: 100, m3: 100, m4: 100, m5: 100 },
           y: { pop: 100 },
@@ -239,8 +241,8 @@ describe('TasteProfile', () => {
   it('names which partner listens, in the solo-genres copy', () => {
     render(
       <TasteProfile
-        partner1={{ name: 'Maya', profile: genreProfile('p1', [genreArtist('x', 3)]) }}
-        partner2={{ name: 'Chris', profile: genreProfile('p2', [genreArtist('y', 3)]) }}
+        partner1={{ name: 'Maya', profile: genreProfile('p1', [genreArtist('x', 3)]), joined: true }}
+        partner2={{ name: 'Chris', profile: genreProfile('p2', [genreArtist('y', 3)]), joined: true }}
         genresByArtistId={{ x: { metal: 100 }, y: { pop: 100 } }}
         progress={{ settled: 30, total: 30 }}
       />,
@@ -253,13 +255,68 @@ describe('TasteProfile', () => {
      '(should-fix 15, mirrored from taste.test.ts)', () => {
     render(
       <TasteProfile
-        partner1={{ name: 'Maya', profile: genreProfile('p1', [genreArtist('x', 3)]) }}
-        partner2={{ name: 'Chris', profile: genreProfile('p2', [genreArtist('y', 3)]) }}
+        partner1={{ name: 'Maya', profile: genreProfile('p1', [genreArtist('x', 3)]), joined: true }}
+        partner2={{ name: 'Chris', profile: genreProfile('p2', [genreArtist('y', 3)]), joined: true }}
         genresByArtistId={{ x: { pop: 100 }, y: { pop: 100, klezmer: 100 } }}
         progress={{ settled: 30, total: 30 }}
       />,
     );
     const solo = screen.getByTestId('solo-genres');
     expect(within(solo).getByText(/Chris listens, Maya doesn.t/)).toBeInTheDocument();
+  });
+
+  // --- Task: distinguish "not joined" from "joined but not connected" --------
+
+  it('renders "open their invitations" when neither partner has joined', () => {
+    render(
+      <TasteProfile
+        partner1={{ name: 'Maya', profile: null, joined: false }}
+        partner2={{ name: 'Chris', profile: null, joined: false }}
+        genresByArtistId={noGenres}
+        progress={noProgress}
+      />,
+    );
+    expect(screen.getByText(/waiting on maya and chris to open their invitations/i)).toBeInTheDocument();
+    // Ensure the old message is not present
+    expect(screen.queryByText(/connect spotify/i)).not.toBeInTheDocument();
+  });
+
+  it('renders distinct messages when one partner has joined but not the other', () => {
+    render(
+      <TasteProfile
+        partner1={{ name: 'Maya', profile: null, joined: false }}
+        partner2={{ name: 'Chris', profile: null, joined: true }}
+        genresByArtistId={noGenres}
+        progress={noProgress}
+      />,
+    );
+    expect(screen.getByText(/waiting on maya to open their invitation/i)).toBeInTheDocument();
+    expect(screen.getByText(/chris to connect spotify/i)).toBeInTheDocument();
+  });
+
+  it('renders "connect Spotify" when both partners have joined but neither connected', () => {
+    render(
+      <TasteProfile
+        partner1={{ name: 'Maya', profile: null, joined: true }}
+        partner2={{ name: 'Chris', profile: null, joined: true }}
+        genresByArtistId={noGenres}
+        progress={noProgress}
+      />,
+    );
+    expect(screen.getByText(/waiting on maya and chris to connect spotify/i)).toBeInTheDocument();
+  });
+
+  it('NEVER shows "connect Spotify" for a partner who hasn\'t joined their invitation', () => {
+    render(
+      <TasteProfile
+        partner1={{ name: 'Maya', profile: null, joined: false }}
+        partner2={{ name: 'Chris', profile: null, joined: false }}
+        genresByArtistId={noGenres}
+        progress={noProgress}
+      />,
+    );
+    // Neither should ever see "connect Spotify" -- they should both see "open their invitations"
+    expect(screen.queryByText(/connect spotify/i)).not.toBeInTheDocument();
+    expect(screen.getByText(/open their invitations/i)).toBeInTheDocument();
   });
 });
