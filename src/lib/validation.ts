@@ -237,6 +237,10 @@ export const eventDetailsSchema = z.object({
   eventId: eventIdField,
 });
 
+export const endEventSchema = z.object({
+  eventId: eventIdField,
+});
+
 /**
  * The two note bodies (design §3, §5.2). Notes left `events` for two tables
  * with two different policies -- private is the DJ's alone, shared is everyone
