@@ -134,6 +134,8 @@ export function toLiveEvent(rows: DashboardEventRow[]): LiveEvent | null {
  * mean this branch cannot typecheck until their code lands (design §5). One
  * duplicated five-field interface is the price; a branch that cannot run
  * `npm run typecheck` is worse.
+ *
+ * Since 20260904120000 the view means "ended", not "status = completed".
  */
 export interface PastEventCountRow {
   id: string;

@@ -5,6 +5,7 @@ import { cache } from 'react';
 import { requireUser } from '@/lib/auth/dal';
 import { createClient } from '@/lib/supabase/server';
 import type { DashboardEventRow, PastEventCountRow } from './fromDb';
+import { todayInAppTimezone } from './now';
 
 // `couple_status` is derived, not selected: it has never been written by
 // anything (defaults to 'awaiting-couple' and no application code, trigger
@@ -37,13 +38,27 @@ const PAST_COLUMNS = 'id, couple_names, venue, event_date, songs_played';
 export const listActiveEvents = cache(async (): Promise<DashboardEventRow[]> => {
   const user = await requireUser();
   const supabase = await createClient();
+  const today = todayInAppTimezone();
 
   const { data, error } = await supabase
     .from('events')
     .select(EVENT_COLUMNS)
     .eq('dj_id', user.id)
     .in('status', ['upcoming', 'live'])
-    .order('event_date', { ascending: true });
+    // NOT a bare .gte('event_date', today). That would drop a live wedding at
+    // local midnight -- a Saturday event still in progress at 00:30 has
+    // event_date < today -- taking the dashboard's live banner down mid-party.
+    // A live row is exempt from the date rule entirely (design §3.5); only the
+    // DJ's End button ends one. This resolves to:
+    //     (upcoming AND date >= today) OR live
+    // which is the exact complement of the view's `ended` predicate.
+    .or(`status.eq.live,event_date.gte.${today}`)
+    .order('event_date', { ascending: true })
+    // Tiebreaker, not decoration: two weddings on one date would otherwise come
+    // back in an arbitrary order that can differ between reads, because rows
+    // written in one transaction share a created_at and PostgREST returns ties
+    // in executor order. Ascending, to match this query's date order.
+    .order('id', { ascending: true });
 
   if (error) {
     console.error('listActiveEvents: query failed', { message: error.message });
@@ -59,9 +74,11 @@ export const listActiveEvents = cache(async (): Promise<DashboardEventRow[]> => 
  * Reads `past_events_with_counts`, the view feat/past-events creates. The
  * `.limit(2)` is at the database, not a JavaScript slice: the card shows two
  * rows, and their own `listPastEvents()` is unbounded, so calling it would
- * fetch a DJ's entire history to render two rows. No `.eq('status',
- * 'completed')` here: the view now carries `where e.status = 'completed'`
- * internally, so that filter would be redundant, not protective.
+ * fetch a DJ's entire history to render two rows. No status predicate here:
+ * the view carries its own `ended` predicate (completed, or upcoming with a
+ * past date -- see 20260904120000_ended_events_view.sql). This card
+ * therefore shows a wedding whose date has passed even if the DJ never
+ * pressed End, which is the point.
  *
  * `.eq('dj_id', user.id)` matters more here than on `listActiveEvents`: this
  * function reads a **view** owned by `postgres`, which carries
