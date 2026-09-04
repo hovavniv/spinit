@@ -349,6 +349,31 @@ describe('EventDetailScreen', () => {
     });
   });
 
+  test('shows End event to a DJ on a live event', () => {
+    render(<EventDetailScreen event={buildEvent({ status: 'live' })} viewer={{ role: 'dj' }} />);
+    expect(screen.getByRole('button', { name: 'End event' })).toBeInTheDocument();
+  });
+
+  test('hides End event on an upcoming event whose date has already passed', () => {
+    render(
+      <EventDetailScreen
+        event={buildEvent({ status: 'upcoming', event_date: '2020-01-01' })}
+        viewer={{ role: 'dj' }}
+      />,
+    );
+    expect(screen.queryByRole('button', { name: 'End event' })).not.toBeInTheDocument();
+  });
+
+  test('never shows End event to a partner', () => {
+    render(
+      <EventDetailScreen
+        event={buildEvent({ status: 'live' })}
+        viewer={{ role: 'partner', partnerId: 'p1' }}
+      />,
+    );
+    expect(screen.queryByRole('button', { name: 'End event' })).not.toBeInTheDocument();
+  });
+
   afterEach(() => {
     vi.unstubAllGlobals();
   });

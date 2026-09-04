@@ -8,8 +8,10 @@ import {
   addBlocklistEntry,
   removeBlocklistEntry,
   saveEventDetails,
+  endEvent,
 } from '@/lib/events/detailActions';
 import { savePrivateNotes, saveSharedNotes } from '@/lib/events/notesActions';
+import { todayInAppTimezone } from '@/lib/dashboard/now';
 import { StepHeader } from './StepHeader';
 import { StreamingSection, type StreamingConnections } from './StreamingSection';
 import { TasteProfileClient } from './TasteProfileClient';
@@ -19,6 +21,7 @@ import { BlocklistSection } from './BlocklistSection';
 import { NotesSection } from './NotesSection';
 import { SharedNotesSection } from './SharedNotesSection';
 import { EventDetailsForm } from './EventDetailsForm';
+import { EndEventSection } from './EndEventSection';
 import styles from './EventDetailScreen.module.css';
 
 interface EventDetailScreenProps {
@@ -51,6 +54,15 @@ export function EventDetailScreen({ event, viewer }: EventDetailScreenProps) {
   }
 
   const [partner1, partner2] = event.partners;
+
+  // Server-side, so `today` is APP_TIMEZONE and not the viewer's browser.
+  // A live event is exempt from the date rule, so only 'upcoming' is checked
+  // against the date; a past-dated upcoming event has already ended and needs
+  // no button (design §3.5, §3.6).
+  const isEndable = event.status === 'upcoming' || event.status === 'live';
+  const alreadyEndedByDate =
+    event.status === 'upcoming' && event.event_date < todayInAppTimezone();
+  const canEnd = viewer.role === 'dj' && isEndable && !alreadyEndedByDate;
 
   return (
     <div className={styles.page}>
@@ -143,6 +155,8 @@ export function EventDetailScreen({ event, viewer }: EventDetailScreenProps) {
         />
 
         <EventDetailsForm eventId={event.id} saveAction={saveEventDetails} />
+
+        <EndEventSection eventId={event.id} canEnd={canEnd} endAction={endEvent} />
       </div>
     </div>
   );

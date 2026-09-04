@@ -1,0 +1,41 @@
+.section {
+  margin-top: 32px;
+  padding-top: 24px;
+  border-top: 1px solid var(--border);
+}
+
+.warning {
+  font-size: 13.5px;
+  color: var(--text-muted);
+  margin: 0 0 12px;
+}
+
+.confirm {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.end {
+  background: none;
+  border: 1.5px solid var(--border-input);
+  color: var(--text-muted);
+  padding: 10px 20px;
+  border-radius: var(--radius-pill);
+  font-family: var(--font-inter), sans-serif;
+  font-weight: 600;
+  font-size: 13.5px;
+  cursor: pointer;
+}
+
+.cancel {
+  background: none;
+  border: 1.5px solid transparent;
+  color: var(--text-muted);
+  padding: 10px 20px;
+  border-radius: var(--radius-pill);
+  font-family: var(--font-inter), sans-serif;
+  font-weight: 600;
+  font-size: 13.5px;
+  cursor: pointer;
+}
