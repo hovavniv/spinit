@@ -542,11 +542,10 @@ describe.skipIf(!hasSupabaseConfig || !hasTestUsers)(
 
     test('A reads their own completed event through the recap filters', async () => {
       const { data, error } = await clientA
-        .from('events')
+        .from('past_events_with_counts')
         .select('id, couple_names, venue, event_date')
         .eq('id', anEventOfA)
         .eq('dj_id', userAId)
-        .eq('status', 'completed')
         .maybeSingle();
 
       expect(error).toBeNull();
@@ -556,10 +555,9 @@ describe.skipIf(!hasSupabaseConfig || !hasTestUsers)(
 
     test('B reads zero rows through the same filters', async () => {
       const { data, error } = await clientB
-        .from('events')
+        .from('past_events_with_counts')
         .select('id')
         .eq('id', anEventOfA)
-        .eq('status', 'completed')
         .maybeSingle();
 
       // maybeSingle() on zero rows is null data and no error, which is the
@@ -599,11 +597,10 @@ describe.skipIf(!hasSupabaseConfig || !hasTestUsers)(
       }
 
       const { data, error } = await clientA
-        .from('events')
+        .from('past_events_with_counts')
         .select('id')
         .eq('id', cancelled[0].id)
         .eq('dj_id', userAId)
-        .eq('status', 'completed')
         .maybeSingle();
 
       expect(error).toBeNull();

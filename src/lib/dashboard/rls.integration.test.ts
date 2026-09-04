@@ -107,8 +107,11 @@ describe.skipIf(!hasSupabaseConfig || !hasTestUsers)(
       // cannot work regardless), so every run of this suite leaves this row in the
       // live database permanently. 'draft' is invisible to every query this repo
       // runs today (listActiveEvents only reads 'upcoming'/'live';
-      // past_events_with_counts only carries 'completed'), so the leak no longer
-      // renders as a phantom card on a real DJ's dashboard. It does not fix the
+      // past_events_with_counts carries only completed and date-passed upcoming
+      // rows (the status conjunct in 20260904120000 is what excludes these
+      // drafts, and it is load-bearing: without it they would surface on
+      // 2026-12-02)), so the leak no longer renders as a phantom card on a real
+      // DJ's dashboard. It does not fix the
       // accumulation itself — that needs a delete policy, a decision recorded as
       // open in the ledger, not made here.
       const { data, error } = await clientA

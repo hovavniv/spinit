@@ -8,7 +8,8 @@ import { isUuid } from '@/lib/validation';
 import type { PastEventRow, EventRecap } from './types';
 
 /**
- * Every completed event of the CURRENT verified DJ, newest first.
+ * Every ended event of the CURRENT verified DJ, newest first — completed, or
+ * date-passed (see `20260904120000_ended_events_view.sql`).
  *
  * Takes no id argument, and calls requireUser() itself, so a forgotten
  * requireUser() upstream can never turn this into a way to read another DJ's
@@ -26,8 +27,9 @@ import type { PastEventRow, EventRecap } from './types';
  * The projection is explicit: `.select()` with no argument is `select('*')`,
  * which would also return dj_id and status that nothing renders.
  *
- * The view already filters to status = 'completed', so no status predicate
- * appears here.
+ * The view carries its own `ended` predicate — `status = 'completed'` OR an
+ * `upcoming` event whose date has passed — so no status predicate appears
+ * here.
  */
 export const listPastEvents = cache(async (): Promise<PastEventRow[]> => {
   const user = await requireUser();
@@ -55,7 +57,7 @@ export const listPastEvents = cache(async (): Promise<PastEventRow[]> => {
 });
 
 /**
- * One completed event of the CURRENT verified DJ, with its playlist in order.
+ * One ended event of the CURRENT verified DJ, with its playlist in order.
  * Returns null for anything this DJ may not see.
  *
  * Calls requireUser() itself for the same reason listPastEvents does: a

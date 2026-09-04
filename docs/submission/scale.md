@@ -56,8 +56,15 @@ Each past event shows how many songs were played. The naive version is N+1: one 
 the events, then one per event for its count. A view collapses it:
 
 ```sql
-create view public.past_events_with_counts as ...   -- security_invoker = on
+create view public.past_events_with_counts
+with (security_invoker = on) as
+  select ... where status = 'completed'
+     or (status = 'upcoming' and event_date < today in Asia/Jerusalem) ...
 ```
+
+An event counts as "past" when the DJ has ended it, or when its date has already passed —
+not `status = 'completed'` alone. Before this the view could only ever return seeded rows,
+because nothing in the application wrote `'completed'`.
 
 `security_invoker = on` matters more than the aggregation. Without it the view would run
 with its **owner's** rights and bypass RLS entirely — a scale optimisation that quietly

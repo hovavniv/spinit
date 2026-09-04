@@ -203,7 +203,7 @@ actions. The one route handler is a proxy.
 |---|---|---|
 | Read an event + lists + partners | `getEventDetail` | **one** PostgREST call with embedded resources |
 | Read dashboard events | `listActiveEvents` / `listRecentPastEvents` | index-backed |
-| Read past-event counts | `past_events_with_counts` | a view; avoids N+1 |
+| Read past-event counts | `past_events_with_counts` | a view; avoids N+1; "past" means `status = 'completed'` **or** an `upcoming` event whose `event_date` has already passed in `Asia/Jerusalem` |
 | Add / remove a list row | server action, one row | `revalidatePath` with the **literal** path |
 | Save notes | server action, **upsert** | never `update` — §9 |
 | Search Spotify | `GET /api/spotify/search` | auth-gated; app token, no user |
