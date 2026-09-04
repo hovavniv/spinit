@@ -1,6 +1,8 @@
 import { describe, expect, test } from 'vitest';
 import { filterUpcomingEvents, STATUS_FILTERS, BADGE_LABELS } from './upcomingEvents';
 import type { UpcomingEvent } from '@/lib/dashboard/types';
+import { toUpcomingEvents, type DashboardEventRow } from '@/lib/dashboard/fromDb';
+import { todayInAppTimezone } from '@/lib/dashboard/now';
 
 function event(overrides: Partial<UpcomingEvent> = {}): UpcomingEvent {
   return {
@@ -73,5 +75,46 @@ describe('the label maps', () => {
       'partly-connected': '1 of 2 connected',
       'awaiting-couple': 'No profiles connected',
     });
+  });
+});
+
+/**
+ * The status axis of the upcoming/ended complement: over the three statuses a
+ * DJ is shown, the two screens partition the events. draft and cancelled are
+ * on NEITHER, deliberately.
+ *
+ * The DATE axis is not tested here and cannot be — see this task's preamble.
+ */
+describe('the upcoming/ended boundary', () => {
+  const CLOCK = new Date('2026-09-04T09:00:00Z'); // 12:00 in Jerusalem
+  const TODAY = '2026-09-04';
+
+  function eventRow(over: Partial<DashboardEventRow>): DashboardEventRow {
+    return {
+      id: 'e',
+      couple_names: 'A & B',
+      venue: 'V',
+      event_date: TODAY,
+      status: 'upcoming',
+      phase: null,
+      start_time: null,
+      event_partners: [],
+      ...over,
+    };
+  }
+
+  test('todayInAppTimezone anchors the boundary', () => {
+    expect(todayInAppTimezone(CLOCK)).toBe(TODAY);
+  });
+
+  test('toUpcomingEvents admits only upcoming rows, whatever their date', () => {
+    const rows = [
+      eventRow({ id: 'up', status: 'upcoming' }),
+      eventRow({ id: 'live', status: 'live' }),
+      eventRow({ id: 'draft', status: 'draft' }),
+      eventRow({ id: 'cancelled', status: 'cancelled' }),
+      eventRow({ id: 'done', status: 'completed' }),
+    ];
+    expect(toUpcomingEvents(rows).map((e) => e.id)).toEqual(['up']);
   });
 });
