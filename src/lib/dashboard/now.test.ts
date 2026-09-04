@@ -1,5 +1,5 @@
 import { describe, expect, it, afterEach } from 'vitest';
-import { APP_TIMEZONE, currentLocalNow } from './now';
+import { APP_TIMEZONE, currentLocalNow, todayInAppTimezone } from './now';
 
 // Same pattern as format.test.ts: save/restore process.env.TZ so these tests
 // can't leak a changed host timezone into a later test file.
@@ -55,5 +55,23 @@ describe('currentLocalNow', () => {
     // anyway because it's the zone this repo's own dev machine runs in.
     process.env.TZ = 'Asia/Jerusalem';
     expect(currentLocalNow(new Date('2026-08-29T09:00:00Z'))).toBe('2026-08-29T12:00');
+  });
+});
+
+describe('todayInAppTimezone', () => {
+  it('returns the YYYY-MM-DD date in APP_TIMEZONE, not UTC', () => {
+    // 22:30 UTC on 2026-09-04 is 01:30 on 2026-09-05 in Jerusalem (UTC+3 in
+    // summer). A UTC clock would answer '2026-09-04' — the exact skew the
+    // view predicate in the migration exists to close.
+    expect(todayInAppTimezone(new Date('2026-09-04T22:30:00Z'))).toBe('2026-09-05');
+  });
+
+  it('is stable across the winter/summer offset change', () => {
+    // Israel is UTC+2 in winter, UTC+3 in summer. 22:30 UTC in January is
+    // still the same date locally; in September it is the next day. If this
+    // were built on a fixed offset rather than a real timezone, one of these
+    // two would be wrong.
+    expect(todayInAppTimezone(new Date('2026-01-15T22:30:00Z'))).toBe('2026-01-16');
+    expect(todayInAppTimezone(new Date('2026-01-15T21:30:00Z'))).toBe('2026-01-15');
   });
 });
