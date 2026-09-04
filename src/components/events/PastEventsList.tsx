@@ -26,7 +26,7 @@ export function PastEventsList({ events }: PastEventsListProps) {
   const [query, setQuery] = useState('');
 
   const visible = filterPastEvents(events, query);
-  const groups = groupByMonth(visible);
+  const groups = groupByMonth(visible, (event) => event.event_date);
 
   const hasNoEventsAtAll = events.length === 0;
   const searchFoundNothing = !hasNoEventsAtAll && visible.length === 0;

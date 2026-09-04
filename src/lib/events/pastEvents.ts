@@ -37,19 +37,18 @@ export function filterPastEvents(events: PastEventRow[], query: string): PastEve
  * month's group appears at the position of its first event, and events keep
  * their relative order inside it.
  *
- * PRECONDITION: `events` is already sorted by `event_date` descending. This
- * function does not sort. Given unsorted input it produces groups in whatever
- * order the input happened to be in, and the same month can appear twice —
- * which is the artboard's behaviour too, and is invisible at the call site,
- * so it is stated here. `listPastEvents` orders the query; nothing else calls
- * this.
+ * PRECONDITION: `events` is already sorted by date. This function does not
+ * sort. Two callers rely on it, in opposite directions: listPastEvents orders
+ * event_date DESCENDING, listActiveEvents ASCENDING. Given unsorted input it
+ * produces groups in whatever order the input happened to be in, and the same
+ * month can appear twice.
  */
-export function groupByMonth(events: PastEventRow[]): MonthGroup[] {
-  const byKey = new Map<string, MonthGroup>();
+export function groupByMonth<T>(events: T[], dateOf: (event: T) => string): MonthGroup<T>[] {
+  const byKey = new Map<string, MonthGroup<T>>();
   const order: string[] = [];
 
   for (const event of events) {
-    const date = parseLocalDate(event.event_date);
+    const date = parseLocalDate(dateOf(event));
     const key = `${date.getFullYear()}-${date.getMonth()}`;
 
     if (!byKey.has(key)) {

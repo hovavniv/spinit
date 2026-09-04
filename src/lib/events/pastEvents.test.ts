@@ -58,34 +58,47 @@ describe('filterPastEvents', () => {
 
 describe('groupByMonth', () => {
   test('one group per month, in input order', () => {
-    const groups = groupByMonth([
-      row({ id: 'a', event_date: '2026-07-18' }),
-      row({ id: 'b', event_date: '2026-06-06' }),
-    ]);
+    const groups = groupByMonth(
+      [row({ id: 'a', event_date: '2026-07-18' }), row({ id: 'b', event_date: '2026-06-06' })],
+      (event) => event.event_date,
+    );
     expect(groups.map((g) => g.label)).toEqual(['July 2026', 'June 2026']);
     expect(groups.map((g) => g.events.map((e) => e.id))).toEqual([['a'], ['b']]);
   });
 
   test('events in the same month share one group', () => {
-    const groups = groupByMonth([
-      row({ id: 'a', event_date: '2026-07-25' }),
-      row({ id: 'b', event_date: '2026-07-04' }),
-    ]);
+    const groups = groupByMonth(
+      [row({ id: 'a', event_date: '2026-07-25' }), row({ id: 'b', event_date: '2026-07-04' })],
+      (event) => event.event_date,
+    );
     expect(groups).toHaveLength(1);
     expect(groups[0].label).toBe('July 2026');
     expect(groups[0].events.map((e) => e.id)).toEqual(['a', 'b']);
   });
 
   test('the same month in different years does not collide', () => {
-    const groups = groupByMonth([
-      row({ id: 'a', event_date: '2026-07-18' }),
-      row({ id: 'b', event_date: '2025-07-18' }),
-    ]);
+    const groups = groupByMonth(
+      [row({ id: 'a', event_date: '2026-07-18' }), row({ id: 'b', event_date: '2025-07-18' })],
+      (event) => event.event_date,
+    );
     expect(groups.map((g) => g.label)).toEqual(['July 2026', 'July 2025']);
   });
 
   test('an empty list produces no groups', () => {
-    expect(groupByMonth([])).toEqual([]);
+    expect(groupByMonth([], (event: PastEventRow) => event.event_date)).toEqual([]);
+  });
+
+  test('groups a non-PastEventRow shape through the accessor, ascending', () => {
+    const groups = groupByMonth(
+      [
+        { id: 'a', date: '2026-09-12' },
+        { id: 'b', date: '2026-09-26' },
+        { id: 'c', date: '2026-10-03' },
+      ],
+      (event) => event.date,
+    );
+    expect(groups.map((g) => g.label)).toEqual(['September 2026', 'October 2026']);
+    expect(groups[0].events.map((e) => e.id)).toEqual(['a', 'b']);
   });
 });
 

@@ -19,11 +19,16 @@ export interface PastEventRow {
   songs_played: number;
 }
 
-/** A month heading and the events under it, in the order they render. */
-export interface MonthGroup {
+/**
+ * A month heading and the events under it, in the order they render.
+ *
+ * Generic because two screens group by month over different row shapes; the
+ * default keeps every existing reference to the bare name compiling.
+ */
+export interface MonthGroup<T = PastEventRow> {
   /** e.g. 'July 2026'. */
   label: string;
-  events: PastEventRow[];
+  events: T[];
 }
 
 /** The 52px date tile at the left of each row: day number over weekday. */
