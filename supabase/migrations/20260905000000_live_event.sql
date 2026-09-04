@@ -245,6 +245,14 @@ declare
 begin
   perform pg_advisory_xact_lock(hashtext(p_event_id::text));
 
+  -- RLS (security invoker) checks ownership, not state: dj_id is dj's own
+  -- event either way, live or not. Without this, a DJ could write
+  -- played_songs rows onto an upcoming or completed event of their own,
+  -- which Task 18's recap would then show for a wedding that never played.
+  if not exists (select 1 from public.events e where e.id = p_event_id and e.status = 'live') then
+    raise exception 'event_not_live';
+  end if;
+
   select s.status, s.spotify_track_id, s.title, s.artist, gs.display_name
     into v_status, v_track_id, v_suggestion_title, v_suggestion_artist, v_suggested_by_name
   from public.song_suggestions s
@@ -256,11 +264,19 @@ begin
   end if;
 
   if v_status = 'played' then
+    -- Match on the resolved track id, not "the latest played row in the
+    -- event": if other songs have played since this suggestion was played,
+    -- the latest position belongs to one of those, not to this suggestion.
+    -- Known narrow gap (matches the fallback case's own narrowness, S3.3):
+    -- if this suggestion was played before its track ever resolved,
+    -- played_songs.spotify_track_id is null and this match returns no rows
+    -- rather than a stale-but-present position.
     return query
       select ps.position, true
       from public.played_songs ps
       where ps.event_id = p_event_id
-      order by ps.position desc
+        and ps.spotify_track_id = v_track_id
+      order by ps.played_at desc
       limit 1;
     return;
   end if;
@@ -309,6 +325,10 @@ declare
   v_existing_position int;
 begin
   perform pg_advisory_xact_lock(hashtext(p_event_id::text));
+
+  if not exists (select 1 from public.events e where e.id = p_event_id and e.status = 'live') then
+    raise exception 'event_not_live';
+  end if;
 
   select ps.position into v_existing_position
   from public.played_songs ps
