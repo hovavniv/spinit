@@ -37,11 +37,19 @@ function assertNoFormIsNestedInAnotherForm(container: HTMLElement) {
  * <form>, not that EventDetailScreen's actual composition keeps the details
  * form as a sibling once every section is present together.
  */
-function buildEvent(): EventDetail {
+function buildEvent(overrides: Partial<EventDetail> = {}): EventDetail {
   return {
     id: EVENT_ID,
     couple_names: 'Noa & Eitan',
     dj_id: 'dj-1',
+    // Default 'live' + a fixed PAST date: 'live' is exempt from the
+    // End-event date rule, so for the default fixture the date is
+    // irrelevant to whether the End button would show, and a future date
+    // would be a time bomb that silently changes test behavior once it
+    // passes. Matches this codebase's fixtures, which run around
+    // September 2026.
+    status: 'live',
+    event_date: '2026-01-01',
     privateNotes: 'DJ private note',
     sharedNotes: 'Couple shared note',
     // A real partner in the 'invited' state (no connection row yet) so
@@ -75,6 +83,7 @@ function buildEvent(): EventDetail {
     ],
     genresByArtistId: {},
     enrichmentProgress: { settled: 0, total: 0 },
+    ...overrides,
   };
 }
 

@@ -78,6 +78,14 @@ export interface EventDetail {
   dj_id: string;
   couple_names: string;
   /**
+   * Needed to decide whether the End event button renders (design §3.6).
+   * The five-value union is spelled out because this repo has no shared
+   * EventStatus type; src/lib/dashboard/fromDb.ts:52 is the same spelling.
+   */
+  status: 'draft' | 'upcoming' | 'live' | 'completed' | 'cancelled';
+  /** 'YYYY-MM-DD'. Never pass this to `new Date(string)` — see format.ts. */
+  event_date: string;
+  /**
    * The two note bodies (design §3, §5.2). Strings, never null: both tables
    * default the body to '' and the migration backfills a row per event.
    *
