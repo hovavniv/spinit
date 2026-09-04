@@ -1,0 +1,40 @@
+.section {
+  margin-top: 32px;
+  padding-top: 24px;
+  border-top: 1px solid var(--border);
+}
+
+.error {
+  font-size: 13.5px;
+  color: var(--accent-deep);
+  margin: 0 0 12px;
+}
+
+.phaseRow {
+  margin-bottom: 16px;
+}
+
+.label {
+  display: block;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-subtle);
+  margin-bottom: 8px;
+}
+
+.start {
+  background: var(--accent);
+  border: none;
+  color: white;
+  padding: 10px 20px;
+  border-radius: var(--radius-pill);
+  font-family: var(--font-inter), sans-serif;
+  font-weight: 600;
+  font-size: 13.5px;
+  cursor: pointer;
+}
+
+.start:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}

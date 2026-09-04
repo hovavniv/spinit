@@ -5,6 +5,12 @@ import { EventDetailScreen } from './EventDetailScreen';
 import { DETAILS_FORM_ID } from './formId';
 import type { EventDetail } from '@/lib/events/detailTypes';
 
+// StartEventSection (live-event slice) calls useRouter().push on a
+// successful start -- stubbed so it can render without a mounted app router.
+vi.mock('next/navigation', () => ({
+  useRouter: () => ({ push: vi.fn() }),
+}));
+
 const EVENT_ID = '11111111-2222-4333-8444-555555555555';
 
 /**
@@ -372,6 +378,49 @@ describe('EventDetailScreen', () => {
       />,
     );
     expect(screen.queryByRole('button', { name: 'End event' })).not.toBeInTheDocument();
+  });
+
+  // canStart's four-row table (live-event slice, design §5.2b). The date
+  // guard is not cosmetic: without it, Start renders on a wedding that
+  // happened last month, and pressing it un-ends an already-ended event.
+  test('hides Start event on a draft', () => {
+    render(<EventDetailScreen event={buildEvent({ status: 'draft' })} viewer={{ role: 'dj' }} />);
+    expect(screen.queryByRole('button', { name: 'Start event' })).not.toBeInTheDocument();
+  });
+
+  test('shows Start event on an upcoming event whose date has not passed', () => {
+    render(
+      <EventDetailScreen
+        event={buildEvent({ status: 'upcoming', event_date: '2099-01-01' })}
+        viewer={{ role: 'dj' }}
+      />,
+    );
+    expect(screen.getByRole('button', { name: 'Start event' })).toBeInTheDocument();
+  });
+
+  test('hides Start event on an upcoming event whose date has already passed', () => {
+    render(
+      <EventDetailScreen
+        event={buildEvent({ status: 'upcoming', event_date: '2020-01-01' })}
+        viewer={{ role: 'dj' }}
+      />,
+    );
+    expect(screen.queryByRole('button', { name: 'Start event' })).not.toBeInTheDocument();
+  });
+
+  test('hides Start event on a live event', () => {
+    render(<EventDetailScreen event={buildEvent({ status: 'live' })} viewer={{ role: 'dj' }} />);
+    expect(screen.queryByRole('button', { name: 'Start event' })).not.toBeInTheDocument();
+  });
+
+  test('never shows Start event to a partner', () => {
+    render(
+      <EventDetailScreen
+        event={buildEvent({ status: 'upcoming', event_date: '2099-01-01' })}
+        viewer={{ role: 'partner', partnerId: 'p1' }}
+      />,
+    );
+    expect(screen.queryByRole('button', { name: 'Start event' })).not.toBeInTheDocument();
   });
 
   afterEach(() => {
