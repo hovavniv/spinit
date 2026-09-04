@@ -35,12 +35,16 @@ export type LiveEvent = {
 };
 
 /**
- * A union rather than a boolean: the artboard already draws these two states
- * differently (filled teal vs. outlined grey), and more states are coming
- * (do-not-play list pending, guest list missing) that a boolean would have to
- * be widened to fit.
+ * A union rather than a boolean: the artboard already draws these states
+ * differently, and more are coming (do-not-play list pending, guest list
+ * missing) that a boolean would have to be widened to fit.
+ *
+ * 'partly-connected' is rendered as "1 of 2 connected" on /events/upcoming and
+ * folded into the grey "Awaiting couple" pill on /dashboard, whose artboard
+ * draws only two variants. That divergence is deliberate and recorded in the
+ * design's §3.2; DashboardScreen.test.tsx pins the dashboard half.
  */
-export type CoupleStatus = 'streaming-connected' | 'awaiting-couple';
+export type CoupleStatus = 'streaming-connected' | 'partly-connected' | 'awaiting-couple';
 
 export type UpcomingEvent = {
   id: string;

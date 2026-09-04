@@ -73,7 +73,8 @@ function coupleStatusOf(row: DashboardEventRow): CoupleStatus {
   const connected = (row.event_partners ?? []).filter(
     (p) => firstRow(p.spotify_connections)?.status === 'connected',
   ).length;
-  return connected >= 2 ? 'streaming-connected' : 'awaiting-couple';
+  if (connected >= 2) return 'streaming-connected';
+  return connected === 1 ? 'partly-connected' : 'awaiting-couple';
 }
 
 /**
