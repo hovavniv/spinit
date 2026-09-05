@@ -2,6 +2,7 @@ import { notFound } from 'next/navigation';
 import type { Metadata } from 'next';
 
 import { requireUser, getProfile } from '@/lib/auth/dal';
+import { createClient } from '@/lib/supabase/server';
 import { getEventRecap } from '@/lib/events/dal';
 import { mostActiveGuest } from '@/lib/events/recap';
 import { AppShell } from '@/components/shell/AppShell';
@@ -56,18 +57,33 @@ export default async function EventRecapPage(props: PageProps<'/events/[id]/reca
   const { event, songs } = recap;
   const guest = mostActiveGuest(songs);
 
+  // A minimal, self-contained read for role only (design §15.4) -- not
+  // routed through getEventRecap/EventRecap, whose shape is shared and
+  // held by another branch. Anyone reaching this point already participates
+  // (getEventRecap's own null-collapse already refused everyone else), so
+  // this only decides WHICH participant they are, never whether they may be
+  // here at all.
+  const supabase = await createClient();
+  const { data: eventRow } = await supabase.from('events').select('dj_id').eq('id', id).maybeSingle();
+  const isPartner = eventRow !== null && eventRow.dj_id !== user.id;
+
   const dj = {
     name: profile?.full_name || user.email || 'DJ',
     // business_name is nullable and at least one live row is null, so '' would
-    // render an empty chip where the artboard always draws a line.
-    company: profile?.business_name || 'Independent DJ',
+    // render an empty chip where the artboard always draws a line. A partner
+    // viewer has no business_name at all, so that fallback would otherwise
+    // label the couple as a DJ on their own keepsake (design §15.4) -- the
+    // same fix /events/[id]/page.tsx already applies for its own sidebar.
+    company: isPartner ? 'Getting married' : profile?.business_name || 'Independent DJ',
   };
 
   return (
     <AppShell
       // 'past', because a recap is reached only from Past events and the
-      // sidebar has no recap nav item to highlight.
-      sidebar={<DashboardSidebar dj={dj} current="past" />}
+      // sidebar has no recap nav item to highlight. A partner has no Past
+      // events of their own, so hideNav for the same reason the event detail
+      // page hides it for them.
+      sidebar={<DashboardSidebar dj={dj} current="past" hideNav={isPartner} />}
       width="narrow"
     >
       <RecapHeader event={event} />
