@@ -23,11 +23,28 @@ interface RawTrack {
   artists: RawArtistRef[];
 }
 
+/**
+ * G4: `spotify_tracks.artist_len` (a database CHECK) requires 1-200 chars,
+ * so `raw.artists[0]?.name ?? ''` would fail the upsert outright if Spotify
+ * ever answered with a zero-artist track -- and a failed upsert here is
+ * exactly the starvation `UNRESOLVABLE_TRACK_ARTIST` (`src/lib/live/liveTypes.ts`)
+ * was introduced to avoid, just via a different path (a CHECK violation
+ * instead of a 404). This module is a lower-level Spotify client and
+ * `liveTypes.ts` is a live-event-domain module one layer up, so a local
+ * fallback here (rather than importing the domain sentinel into the client)
+ * keeps the dependency direction pointing the right way. It only needs to be
+ * a non-empty display placeholder, not the sentinel itself -- a zero-artist
+ * response is a shape Spotify returned, not the same case as a 404, and
+ * conflating them would make a genuinely-found-but-artistless track render
+ * with the "Spotify has no such track" strings.
+ */
+const UNKNOWN_ARTIST_PLACEHOLDER = 'Unknown artist';
+
 function toResolvedTrack(raw: RawTrack): ResolvedTrack {
   return {
     id: raw.id,
     title: raw.name,
-    artist: raw.artists[0]?.name ?? '',
+    artist: raw.artists[0]?.name ?? UNKNOWN_ARTIST_PLACEHOLDER,
     artists: raw.artists.map((a) => ({ id: a.id, name: a.name })),
   };
 }

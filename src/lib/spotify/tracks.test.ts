@@ -61,6 +61,19 @@ describe('getTrack', () => {
     expect(result?.artists[1]).toEqual({ id: 'artistpharrellaaaaaaaa', name: 'Pharrell Williams' });
   });
 
+  // G4: `spotify_tracks.artist_len` requires 1-200 chars. `?? ''` would
+  // violate it and cause the upsert to fail for ever on a track shaped
+  // this way -- the exact starvation the sentinel exists to avoid, via a
+  // different path (a CHECK violation rather than a 404).
+  it('falls back to a non-empty placeholder artist for a zero-artist track, never an empty string', async () => {
+    spotifyFetch.mockResolvedValue(rawTrack('trackddddddddddddddddd', 'Untitled', []));
+
+    const result = await getTrack('trackddddddddddddddddd');
+
+    expect(result?.artist).not.toBe('');
+    expect(result?.artist.length).toBeGreaterThan(0);
+  });
+
   it('returns null for a 404 rather than throwing', async () => {
     spotifyFetch.mockRejectedValue(new SpotifyError('unavailable', 404, '/tracks/x'));
 
