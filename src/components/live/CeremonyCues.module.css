@@ -66,8 +66,8 @@
 .playedBadge {
   padding: 4px 10px;
   border-radius: var(--radius-pill);
-  background: var(--chip-strong);
-  color: var(--ok);
+  background: var(--ink-dark);
+  color: var(--bg);
   font-size: 12px;
   font-weight: 700;
 }

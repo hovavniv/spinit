@@ -69,13 +69,11 @@
      and every error in the app follows. */
   --error: oklch(0.14 0 0);
 
-  /* positive/played states, live screen only.
-     Neutral, matching the Live artboard's played rows. The guest screen used to
-     share these for its "voted" state and no longer does: the Guest artboard
-     draws voted in the accent, so GuestQueue.module.css now uses --accent
-     directly and holds no reference to these two. */
+  /* Played must-plays on the live screen. Neutral, matching the Live artboard.
+     The guest screen used to share this for its "voted" state and no longer
+     does: the Guest artboard draws voted in the accent, so GuestQueue.module.css
+     uses --accent directly and holds no reference here. */
   --ok: oklch(0.3 0 0);
-  --ok-tint: oklch(0.92 0.006 90);
 
   /* chips and hovers */
   --chip: oklch(0.92 0.006 90);

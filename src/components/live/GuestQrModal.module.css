@@ -98,9 +98,9 @@
   white-space: nowrap;
 }
 
-.urlText:focus {
-  outline: none;
-}
+/* No outline override: this is a readOnly input, which stays in the tab order,
+   and it has no border for globals.css's input:focus rule to colour. The
+   browser's own focus ring is the only indicator available, so leave it. */
 
 .copyButton {
   flex-shrink: 0;
