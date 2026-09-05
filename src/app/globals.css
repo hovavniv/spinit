@@ -44,6 +44,10 @@
      write var(--on-accent) instead. */
   --accent: oklch(0.87 0.21 125);
   --on-accent: oklch(0.14 0 0);
+  /* Hover ground for an accent-filled control. Darker lime rather than ink,
+     so --on-accent stays readable on it: 9.03:1, against 1.00:1 if --accent-deep
+     is used (it is now ink, the same value as --on-accent itself). */
+  --accent-hover: oklch(0.74 0.19 125);
 
   /* Retired hues, kept as neutral aliases rather than deleted: a var() pointing
      at a property that no longer exists fails silently -- no warning, no build
@@ -55,10 +59,11 @@
   --role-couple: oklch(0.3 0 0);
   --role-guest: oklch(0.3 0 0);
 
-  /* positive/played states (live screen).
-     Neutral, matching the Live artboard's played rows. NOTE: GuestQueue uses
-     these two for "voted", which the Guest artboard draws in accent instead --
-     it overrides at its own call sites. See Task 6. */
+  /* positive/played states, live screen only.
+     Neutral, matching the Live artboard's played rows. The guest screen used to
+     share these for its "voted" state and no longer does: the Guest artboard
+     draws voted in the accent, so GuestQueue.module.css now uses --accent
+     directly and holds no reference to these two. */
   --ok: oklch(0.3 0 0);
   --ok-tint: oklch(0.92 0.006 90);
 

@@ -40,7 +40,7 @@
 }
 
 .button:hover {
-  background: var(--accent-deep);
+  background: var(--accent-hover);
 }
 
 .button:active {

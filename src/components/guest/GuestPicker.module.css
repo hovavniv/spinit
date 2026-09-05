@@ -16,7 +16,7 @@
 
 .input:focus {
   outline: none;
-  border-color: var(--accent);
+  border-color: var(--ink-dark);
 }
 
 .hint {
@@ -73,8 +73,9 @@
 }
 
 .requestButtonDone {
-  background: var(--surface);
-  color: var(--accent);
+  background: var(--accent);
+  color: var(--on-accent);
+  border-color: var(--accent);
 }
 
 .requestButton:disabled {

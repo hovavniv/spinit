@@ -32,7 +32,7 @@
 
 .textarea:focus {
   outline: none;
-  border-color: var(--accent);
+  border-color: var(--ink-dark);
 }
 
 /* The section is its own form now, so it carries its own save row. Same

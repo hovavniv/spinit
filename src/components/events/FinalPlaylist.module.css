@@ -10,9 +10,9 @@
 }
 
 /* The ticket-stub perforation, top and bottom. This is the card's whole
-   character in the artboard, not decoration to drop. The colour has no token
-   because nothing else in the app uses it -- globals.css promotes a colour
-   only when a second component needs it. */
+   character in the artboard, not decoration to drop. The colour is
+   --border-strong, shared with the same perforation effect in
+   home/RecapSection.module.css. */
 .rule {
   position: absolute;
   top: 0;
