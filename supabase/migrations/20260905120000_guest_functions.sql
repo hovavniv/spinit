@@ -75,7 +75,14 @@ declare
   v_status public.event_status;
   v_session_id uuid;
 begin
-  v_name := btrim(p_display_name);
+  -- btrim's default second argument is a single space; a name of only tab,
+  -- newline or CR would pass char_length > 0 untrimmed and render as blank
+  -- everywhere it's shown (the DJ's activity feed, the queue, the couple's
+  -- recap) -- found by the fresh-context security review of this file,
+  -- verified empirically before this fix existed. NBSP/ZWSP and other
+  -- non-ASCII blank-looking characters are NOT caught by this (or by any
+  -- single btrim call) and remain a known, narrower residual gap.
+  v_name := btrim(p_display_name, ' ' || chr(9) || chr(10) || chr(13));
   if v_name is null or char_length(v_name) not between 1 and 40 then
     raise exception 'bad_display_name';
   end if;
