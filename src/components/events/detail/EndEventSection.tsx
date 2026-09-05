@@ -1,7 +1,8 @@
 'use client';
 
-import { useState } from 'react';
+import { useActionState, useState } from 'react';
 import type { ActionResult } from '@/lib/auth/errors';
+import type { DetailActionState } from '@/lib/events/detailTypes';
 import styles from './EndEventSection.module.css';
 
 interface EndEventSectionProps {
@@ -31,6 +32,16 @@ interface EndEventSectionProps {
 export function EndEventSection({ eventId, canEnd, endAction }: EndEventSectionProps) {
   const [confirming, setConfirming] = useState(false);
 
+  // useActionState wants (prevState, formData); endEvent takes formData alone
+  // (it has no prevState to thread -- see detailActions.ts). The wrapper adapts
+  // the arity and nothing else.
+  const [state, formAction, pending] = useActionState<DetailActionState, FormData>(
+    async (_prev, formData) => endAction(formData),
+    null,
+  );
+  const errors = state && !state.ok && 'formErrors' in state ? state.formErrors : null;
+  const message = state && !state.ok && 'message' in state ? state.message : null;
+
   if (!canEnd) return null;
 
   if (!confirming) {
@@ -48,24 +59,26 @@ export function EndEventSection({ eventId, canEnd, endAction }: EndEventSectionP
       <p className={styles.warning}>
         This closes the event and delivers the recap. It cannot be undone.
       </p>
-      <form
-        // The client-component remedy: the action returns an ActionResult, and
-        // a function returning Promise<T> is not assignable where
-        // `void | Promise<void>` is expected. Wrapping keeps the action's real
-        // signature honest instead of weakening its return type.
-        action={(formData: FormData) => {
-          void endAction(formData);
-        }}
-        className={styles.confirm}
-      >
+      <form action={formAction} className={styles.confirm}>
         <input type="hidden" name="eventId" value={eventId} />
-        <button type="submit" className={styles.end}>
-          End it
+        <button type="submit" className={styles.end} disabled={pending}>
+          {pending ? 'Ending…' : 'End it'}
         </button>
-        <button type="button" className={styles.cancel} onClick={() => setConfirming(false)}>
+        <button
+          type="button"
+          className={styles.cancel}
+          onClick={() => setConfirming(false)}
+          disabled={pending}
+        >
           Cancel
         </button>
       </form>
+
+      {(errors?.eventId || message) && (
+        <p role="alert" className={styles.error}>
+          {errors?.eventId ?? message}
+        </p>
+      )}
     </div>
   );
 }

@@ -39,4 +39,43 @@ describe('EndEventSection', () => {
     expect(endAction).not.toHaveBeenCalled();
     expect(screen.getByRole('button', { name: 'End event' })).toBeInTheDocument();
   });
+
+  it('shows the action’s message when the write is refused', async () => {
+    const user = userEvent.setup();
+    const endAction = vi.fn(async (_formData: FormData) => ({
+      ok: false as const,
+      message: 'Could not save that. Try again.',
+    }));
+
+    render(<EndEventSection eventId={EVENT_ID} canEnd endAction={endAction} />);
+    await user.click(screen.getByRole('button', { name: 'End event' }));
+    await user.click(screen.getByRole('button', { name: 'End it' }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Could not save that. Try again.');
+  });
+
+  it('renders a fallback when the failure carries formErrors rather than a message', async () => {
+    const user = userEvent.setup();
+    const endAction = vi.fn(async (_formData: FormData) => ({
+      ok: false as const,
+      formErrors: { eventId: 'That event link is not valid.' },
+    }));
+
+    render(<EndEventSection eventId={EVENT_ID} canEnd endAction={endAction} />);
+    await user.click(screen.getByRole('button', { name: 'End event' }));
+    await user.click(screen.getByRole('button', { name: 'End it' }));
+
+    expect(await screen.findByRole('alert')).toBeInTheDocument();
+  });
+
+  it('shows no alert on success', async () => {
+    const user = userEvent.setup();
+    const endAction = vi.fn(async (_formData: FormData) => ({ ok: true as const }));
+
+    render(<EndEventSection eventId={EVENT_ID} canEnd endAction={endAction} />);
+    await user.click(screen.getByRole('button', { name: 'End event' }));
+    await user.click(screen.getByRole('button', { name: 'End it' }));
+
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  });
 });
