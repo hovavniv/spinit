@@ -3,7 +3,7 @@
 import { createClient } from '@/lib/supabase/server';
 import { setGuestSessionCookie, getGuestSessionId } from '@/lib/guest/session';
 import { mapGuestError, type GuestErrorCode } from './guestErrors';
-import { guestNameSchema, guestSuggestSchema, guestVoteSchema } from './liveValidation';
+import { guestNameSchema, guestSuggestSchema, guestVoteSchema, joinTokenParamSchema } from './liveValidation';
 
 /**
  * `'use server'` wrappers around `guest_join`, `guest_suggest` and
@@ -73,6 +73,14 @@ export async function suggestAction(
   title: string,
   artist: string,
 ): Promise<SuggestActionResult> {
+  // G3: `token` is now the sole authorization input -- it selects which
+  // cookie `getGuestSessionId` reads -- and `session.ts`'s own header says
+  // callers MUST validate against TOKEN_PATTERN before calling anything
+  // there. Refuse rather than default on a malformed token.
+  if (!joinTokenParamSchema.safeParse(token).success) {
+    return { ok: false, code: 'invalid', message: "Couldn't add that one." };
+  }
+
   const parsed = guestSuggestSchema.safeParse({ trackId, title, artist });
   if (!parsed.success) {
     return { ok: false, code: 'invalid', message: "Couldn't add that one." };
@@ -104,6 +112,11 @@ export async function suggestAction(
 }
 
 export async function voteAction(token: string, suggestionId: string): Promise<VoteActionResult> {
+  // G3: same reasoning as suggestAction above.
+  if (!joinTokenParamSchema.safeParse(token).success) {
+    return { ok: false, code: 'invalid', message: "Couldn't add that one." };
+  }
+
   const parsed = guestVoteSchema.safeParse({ suggestionId });
   if (!parsed.success) {
     return { ok: false, code: 'invalid', message: "Couldn't add that one." };

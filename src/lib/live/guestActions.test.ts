@@ -112,6 +112,17 @@ describe('suggestAction', () => {
     });
     expect(rpc).not.toHaveBeenCalled();
   });
+
+  // G3: `token` is now the sole authorization input (it selects which cookie
+  // is read) and had no schema of its own. A malformed token must be
+  // refused before it is ever used to look up a cookie or call the RPC.
+  it('rejects a malformed token before ever reading the cookie or calling the RPC', async () => {
+    const result = await suggestAction('not-a-valid-token', TRACK_ID, 'September', 'Earth, Wind & Fire');
+
+    expect(result).toEqual({ ok: false, code: 'invalid', message: expect.any(String) });
+    expect(cookieGet).not.toHaveBeenCalled();
+    expect(rpc).not.toHaveBeenCalled();
+  });
 });
 
 describe('voteAction', () => {
@@ -148,6 +159,15 @@ describe('voteAction', () => {
       code: 'no_such_session',
       message: expect.any(String),
     });
+    expect(rpc).not.toHaveBeenCalled();
+  });
+
+  // G3: same reasoning as suggestAction's equivalent test above.
+  it('rejects a malformed token before ever reading the cookie or calling the RPC', async () => {
+    const result = await voteAction('not-a-valid-token', '22222222-2222-4222-8222-222222222222');
+
+    expect(result).toEqual({ ok: false, code: 'invalid', message: expect.any(String) });
+    expect(cookieGet).not.toHaveBeenCalled();
     expect(rpc).not.toHaveBeenCalled();
   });
 });

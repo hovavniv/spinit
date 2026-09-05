@@ -24,15 +24,11 @@ export const setPhaseSchema = z.object({
  * Guest-facing schemas (design §4.5, §4.7, §9). `TOKEN_PATTERN` is imported
  * from `token.ts` rather than re-derived, so the shape checked here and the
  * shape the `join_token_shape` CHECK enforces can never drift apart.
- */
-export const joinTokenSchema = z.string().regex(TOKEN_PATTERN);
-
-/**
- * The `[token]` ROUTE PARAM, checked before it is ever used to build a
- * cookie name or query the database -- the same reject-before-use discipline
- * `isUuid` applies to `/events/[id]`. Kept as its own schema (rather than
- * reusing `joinTokenSchema` directly at call sites) so every call site names
- * what it is validating.
+ *
+ * The `[token]` ROUTE PARAM (and, since G3, the `token` argument to every
+ * guest Server Action), checked before it is ever used to build a cookie
+ * name or query the database -- the same reject-before-use discipline
+ * `isUuid` applies to `/events/[id]`.
  */
 export const joinTokenParamSchema = z.string().regex(TOKEN_PATTERN);
 
