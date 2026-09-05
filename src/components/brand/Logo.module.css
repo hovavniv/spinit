@@ -5,7 +5,7 @@
 }
 
 .wordmark {
-  font-family: var(--font-sora), sans-serif;
+  font-family: var(--font-display), sans-serif;
   font-weight: 800;
   font-size: 22px;
   letter-spacing: -0.02em;

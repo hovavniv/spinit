@@ -9,7 +9,7 @@
 }
 
 .heading {
-  font-family: var(--font-sora), sans-serif;
+  font-family: var(--font-display), sans-serif;
   font-size: 20px;
   font-weight: 700;
   margin: 0 0 6px;

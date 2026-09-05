@@ -36,7 +36,7 @@
   border: none;
   padding: 13px 26px;
   border-radius: var(--radius-pill);
-  font-family: var(--font-inter), sans-serif;
+  font-family: var(--font-body), sans-serif;
   font-weight: 700;
   font-size: 14.5px;
   cursor: pointer;

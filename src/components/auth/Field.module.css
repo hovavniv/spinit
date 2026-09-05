@@ -20,7 +20,7 @@
   padding: 13px 14px;
   border-radius: 12px;
   border: 1.5px solid var(--border-input);
-  font-family: var(--font-inter), sans-serif;
+  font-family: var(--font-body), sans-serif;
   font-size: 14.5px;
   background: var(--surface);
   color: var(--ink-dark);

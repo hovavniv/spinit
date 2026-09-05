@@ -12,7 +12,7 @@
   padding: 9px 0;
   border-radius: var(--radius-pill);
   border: none;
-  font-family: var(--font-inter), sans-serif;
+  font-family: var(--font-body), sans-serif;
   font-weight: 600;
   font-size: 13px;
   cursor: pointer;
@@ -81,7 +81,7 @@
   background: none;
   border: none;
   cursor: pointer;
-  font-family: var(--font-inter), sans-serif;
+  font-family: var(--font-body), sans-serif;
 }
 
 .voteHeart {
@@ -102,7 +102,7 @@
   border: none;
   text-align: left;
   width: 100%;
-  font-family: var(--font-inter), sans-serif;
+  font-family: var(--font-body), sans-serif;
   color: var(--ink-dark);
 }
 

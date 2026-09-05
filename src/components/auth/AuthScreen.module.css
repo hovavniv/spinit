@@ -1,5 +1,5 @@
 .screen {
-  font-family: var(--font-inter), sans-serif;
+  font-family: var(--font-body), sans-serif;
   color: var(--ink-dark);
   background: var(--bg);
   width: 100%;
@@ -35,7 +35,7 @@
   padding: 10px 0;
   border-radius: var(--radius-pill);
   border: none;
-  font-family: var(--font-inter), sans-serif;
+  font-family: var(--font-body), sans-serif;
   font-weight: 600;
   font-size: 14px;
   cursor: pointer;

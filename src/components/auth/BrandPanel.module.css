@@ -43,7 +43,7 @@
 }
 
 .heading {
-  font-family: var(--font-sora), sans-serif;
+  font-family: var(--font-display), sans-serif;
   color: white;
   font-size: 38px;
   line-height: 1.15;

@@ -22,7 +22,7 @@
   color: var(--text-muted);
   padding: 10px 20px;
   border-radius: var(--radius-pill);
-  font-family: var(--font-inter), sans-serif;
+  font-family: var(--font-body), sans-serif;
   font-weight: 600;
   font-size: 13.5px;
   cursor: pointer;
@@ -34,7 +34,7 @@
   color: var(--text-muted);
   padding: 10px 20px;
   border-radius: var(--radius-pill);
-  font-family: var(--font-inter), sans-serif;
+  font-family: var(--font-body), sans-serif;
   font-weight: 600;
   font-size: 13.5px;
   cursor: pointer;

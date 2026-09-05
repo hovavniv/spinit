@@ -3,7 +3,7 @@
    inner 1040px max-width wrapper. */
 
 .screen {
-  font-family: var(--font-inter), sans-serif;
+  font-family: var(--font-body), sans-serif;
   color: var(--ink-dark);
   background: var(--bg);
   width: 100%;

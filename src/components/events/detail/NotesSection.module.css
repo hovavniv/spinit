@@ -5,7 +5,7 @@
 }
 
 .heading {
-  font-family: var(--font-sora), sans-serif;
+  font-family: var(--font-display), sans-serif;
   font-size: 16.5px;
   font-weight: 700;
   margin: 0 0 4px;
@@ -23,7 +23,7 @@
   padding: 13px 14px;
   border-radius: 12px;
   border: 1.5px solid var(--border-input);
-  font-family: var(--font-inter), sans-serif;
+  font-family: var(--font-body), sans-serif;
   font-size: 14px;
   background: var(--surface);
   color: var(--ink-dark);
@@ -64,7 +64,7 @@
   border: 1.5px solid var(--border-input);
   padding: 9px 18px;
   border-radius: var(--radius-pill);
-  font-family: var(--font-inter), sans-serif;
+  font-family: var(--font-body), sans-serif;
   font-weight: 700;
   font-size: 13.5px;
   cursor: pointer;

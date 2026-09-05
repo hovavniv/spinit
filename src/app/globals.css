@@ -10,47 +10,73 @@
 
 :root {
   /* surfaces */
-  --bg: oklch(0.97 0.014 75); /* warm page background */
+  --bg: oklch(0.955 0.006 90); /* neutral cream page ground */
   --surface: white; /* cards, inputs */
-  --ink-dark: oklch(0.22 0.02 50); /* body text, and the dark panels */
+  --ink-dark: oklch(0.14 0 0); /* body text, and the dark panels */
 
   /* text */
-  --text-muted: oklch(0.45 0.02 50);
-  --text-subtle: oklch(0.5 0.02 50);
-  --text-label: oklch(0.35 0.02 50);
-  --text-placeholder: oklch(0.62 0.02 50);
+  --text-muted: oklch(0.4 0 0);
+  --text-subtle: oklch(0.45 0 0);
+  --text-label: oklch(0.3 0 0);
+  /* Darker than the canvas's oklch(0.57 0 0), deliberately: 0.57 is 4.46:1 on
+     white and 3.92:1 on --bg, both short of WCAG AA's 4.5:1 for normal text.
+     0.53 gives 5.28:1 and 4.63:1. Design spec section 4.5. */
+  --text-placeholder: oklch(0.53 0 0);
 
-  /* lines */
-  --border: oklch(0.9 0.012 60);
-  --border-input: oklch(0.88 0.012 60);
+  /* lines.
+     --border and --border-input are hairlines and card edges: decorative, and
+     nothing depends on perceiving them. --border-strong is the same, one step
+     heavier. --border-control is different in kind -- it is the ONLY visible
+     edge of an outlined control, so it has to clear WCAG 1.4.11's 3:1. The
+     canvas draws all of these at 0.83; splitting them by role is what lets the
+     decoration stay faithful while the controls stay legible. Do not collapse
+     --border-control back into --border-strong. */
+  --border: oklch(0.88 0.006 90);
+  --border-input: oklch(0.86 0.006 90);
+  --border-strong: oklch(0.83 0.006 90);
+  --border-control: oklch(0.62 0.006 90);
+  --divider: oklch(0.89 0.006 90);
 
-  /* accents.
-     --accent and --accent-deep are both pink at hue 350 and differ in
-     lightness. --accent is for large filled surfaces and glyphs: buttons,
-     the active pill tab, the rank-1 badge, the vote heart, the record mark's
-     centre dot, a focused input's border. --accent-deep is for places where
-     the brighter pink would be too light to read or too loud at small size:
-     text on white and on pale pink, the small heart glyph, and the 20px
-     numbered chip, where it is a background carrying white text. */
-  --accent: oklch(0.64 0.19 350);
-  --accent-deep: oklch(0.5 0.19 350);
-  --accent-tint: oklch(0.95 0.045 350);
-  --link: oklch(0.55 0.17 265);
-  --role-couple: oklch(0.5 0.17 265);
-  --role-guest: oklch(0.5 0.13 190);
+  /* accent.
+     The canvas is near-monochrome with exactly one hue. --accent ALWAYS carries
+     --on-accent, never white: white on this lime is 1.42:1 and illegible.
+     If you are about to write `color: white` next to `background: var(--accent)`,
+     write var(--on-accent) instead. */
+  --accent: oklch(0.87 0.21 125);
+  --on-accent: oklch(0.14 0 0);
+
+  /* Retired hues, kept as neutral aliases rather than deleted: a var() pointing
+     at a property that no longer exists fails silently -- no warning, no build
+     error, no failing test, just an inherited colour. Sweeping these out is a
+     separate mechanical change. */
+  --accent-deep: oklch(0.14 0 0);
+  --accent-tint: oklch(0.92 0.006 90);
+  --link: oklch(0.14 0 0);
+  --role-couple: oklch(0.3 0 0);
+  --role-guest: oklch(0.3 0 0);
+
+  /* positive/played states (live screen).
+     Neutral, matching the Live artboard's played rows. NOTE: GuestQueue uses
+     these two for "voted", which the Guest artboard draws in accent instead --
+     it overrides at its own call sites. See Task 6. */
+  --ok: oklch(0.3 0 0);
+  --ok-tint: oklch(0.92 0.006 90);
+
+  /* chips and hovers */
+  --chip: oklch(0.92 0.006 90);
+  --chip-strong: oklch(0.93 0.006 90);
+  --row-hover: oklch(0.925 0.006 90);
 
   /* dark-panel palette, shared by the login brand panel and the dashboard
      sidebar */
-  --panel-blob-pink: oklch(0.3 0.03 350 / 0.35);
-  --panel-blob-indigo: oklch(0.28 0.03 265 / 0.35);
-  --panel-raised: oklch(0.3 0.03 350 / 0.5);
-  --panel-text-dim: oklch(0.6 0.01 50);
+  --panel-blob-pink: oklch(0.2 0 0);
+  --panel-blob-indigo: oklch(0.2 0 0);
+  --panel-raised: oklch(0.26 0 0);
+  --panel-text-dim: oklch(0.6 0 0);
+  --panel-nav: oklch(0.72 0 0);
 
   --radius-pill: 999px;
-
-  /* positive/played states (live screen, Task 16) */
-  --ok: oklch(0.55 0.13 145);
-  --ok-tint: oklch(0.96 0.04 145);
+  --radius: 0;
 }
 
 /* --------------------------------------------------------------------------
@@ -65,7 +91,7 @@ body {
   margin: 0;
   background: var(--bg);
   color: var(--ink-dark);
-  font-family: var(--font-inter), sans-serif;
+  font-family: var(--font-body), sans-serif;
   /* An element pushed past the right edge below 900px (see the responsive
      rules in each section's CSS module) is clipped here rather than
      producing a horizontal scrollbar. Section 8 of the design spec is
@@ -74,16 +100,18 @@ body {
 }
 
 ::selection {
-  background: oklch(0.64 0.19 350 / 0.22);
+  background: oklch(0.87 0.21 125 / 0.45);
 }
 
+/* The canvas has no coloured links. Leaving a:hover on var(--accent) would make
+   every hovered link lime on cream -- 1.24:1, invisible. */
 a {
-  color: var(--link);
+  color: var(--ink-dark);
   text-decoration: none;
 }
 
 a:hover {
-  color: var(--accent);
+  color: oklch(0.35 0 0);
 }
 
 input::placeholder {
@@ -92,7 +120,7 @@ input::placeholder {
 
 input:focus {
   outline: none;
-  border-color: var(--accent);
+  border-color: var(--ink-dark);
 }
 
 /* --------------------------------------------------------------------------

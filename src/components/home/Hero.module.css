@@ -25,7 +25,7 @@
 }
 
 .headline {
-  font-family: var(--font-sora), sans-serif;
+  font-family: var(--font-display), sans-serif;
   font-size: 56px;
   line-height: 1.05;
   font-weight: 800;

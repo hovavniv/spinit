@@ -14,7 +14,7 @@
   font-weight: 700;
   color: var(--ink-dark);
   margin: 0 0 1rem 0;
-  font-family: var(--font-sora), sans-serif;
+  font-family: var(--font-display), sans-serif;
 }
 
 .description {
@@ -23,7 +23,7 @@
   margin: 0 0 2rem 0;
   max-width: 400px;
   line-height: 1.5;
-  font-family: var(--font-inter), sans-serif;
+  font-family: var(--font-body), sans-serif;
 }
 
 .button {
@@ -33,7 +33,7 @@
   border: none;
   border-radius: var(--radius-pill);
   font-weight: 600;
-  font-family: var(--font-sora), sans-serif;
+  font-family: var(--font-display), sans-serif;
   cursor: pointer;
   transition: background 0.2s;
   font-size: 1rem;

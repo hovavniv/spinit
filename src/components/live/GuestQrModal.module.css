@@ -42,7 +42,7 @@
 
 .eyebrow {
   margin: 0;
-  font-family: var(--font-inter), sans-serif;
+  font-family: var(--font-body), sans-serif;
   font-weight: 600;
   font-size: 13px;
   color: var(--text-subtle);
@@ -52,7 +52,7 @@
 
 .coupleNames {
   margin: 0;
-  font-family: var(--font-inter), sans-serif;
+  font-family: var(--font-body), sans-serif;
   font-weight: 700;
   font-size: 20px;
   color: var(--ink-dark);
@@ -90,7 +90,7 @@
   min-width: 0;
   border: none;
   background: none;
-  font-family: var(--font-inter), sans-serif;
+  font-family: var(--font-body), sans-serif;
   font-size: 13px;
   color: var(--text-muted);
   text-overflow: ellipsis;
@@ -109,7 +109,7 @@
   border: none;
   border-radius: var(--radius-pill);
   padding: 8px 16px;
-  font-family: var(--font-inter), sans-serif;
+  font-family: var(--font-body), sans-serif;
   font-weight: 600;
   font-size: 12.5px;
   cursor: pointer;
@@ -135,7 +135,7 @@
   color: var(--text-muted);
   padding: 9px 16px;
   border-radius: var(--radius-pill);
-  font-family: var(--font-inter), sans-serif;
+  font-family: var(--font-body), sans-serif;
   font-weight: 600;
   font-size: 13.5px;
   cursor: pointer;
@@ -182,7 +182,7 @@
 
   .printCoupleNames {
     margin: 0;
-    font-family: var(--font-inter), sans-serif;
+    font-family: var(--font-body), sans-serif;
     font-weight: 700;
     font-size: 16px;
   }

@@ -36,7 +36,7 @@
 /* 34px, not the 32px of the Past events h1. Both are read from their own
    artboard; this is not a typo to normalise. */
 .title {
-  font-family: var(--font-sora), sans-serif;
+  font-family: var(--font-display), sans-serif;
   font-size: 34px;
   font-weight: 800;
   letter-spacing: -0.02em;
@@ -55,7 +55,7 @@
   border: none;
   padding: 12px 22px;
   border-radius: var(--radius-pill);
-  font-family: var(--font-inter), sans-serif;
+  font-family: var(--font-body), sans-serif;
   font-weight: 700;
   font-size: 14px;
   white-space: nowrap;

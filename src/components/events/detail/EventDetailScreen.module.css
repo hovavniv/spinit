@@ -13,7 +13,7 @@
 }
 
 .title {
-  font-family: var(--font-sora), sans-serif;
+  font-family: var(--font-display), sans-serif;
   font-size: 30px;
   font-weight: 800;
   letter-spacing: -0.02em;
@@ -34,7 +34,7 @@
 }
 
 .segmentHeading {
-  font-family: var(--font-sora), sans-serif;
+  font-family: var(--font-display), sans-serif;
   font-size: 17.5px;
   font-weight: 800;
   margin: 0 0 18px;
