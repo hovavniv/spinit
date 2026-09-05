@@ -68,7 +68,14 @@
   --row-hover: oklch(0.925 0.006 90);
 
   /* dark-panel palette, shared by the login brand panel and the dashboard
-     sidebar */
+     sidebar.
+
+     The two -blob- names are historical: they were a pink and an indigo blob,
+     and the canvas re-theme made both the same plain dark circle. They keep
+     their names rather than being merged or deleted because a var() aimed at a
+     property that no longer exists fails silently. Renaming them to one token
+     is a separate mechanical change; until then, the names lie about the hue
+     and this comment is the warning. */
   --panel-blob-pink: oklch(0.2 0 0);
   --panel-blob-indigo: oklch(0.2 0 0);
   --panel-raised: oklch(0.26 0 0);

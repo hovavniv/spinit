@@ -36,7 +36,7 @@
 }
 
 /* The section is its own form now, so it carries its own save row. Same
-   teal confirmation and pill button as the details bar, one size down —
+   confirmation ink and pill button as the details bar, one size down —
    this is a secondary save, not the page's primary one. */
 .actions {
   display: flex;

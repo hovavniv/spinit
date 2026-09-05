@@ -18,7 +18,8 @@
   gap: 14px;
 }
 
-/* The artboard's teal confirmation, the same pair the connected pill uses. */
+/* The save confirmation. Teal until the canvas re-theme; now the same neutral
+   label ink as the connected pill, which is still the pair it matches. */
 .saved {
   font-size: 13px;
   font-weight: 600;

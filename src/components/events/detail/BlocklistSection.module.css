@@ -84,9 +84,10 @@
   flex-wrap: wrap;
 }
 
-/* The artboard's red type chip. These two values are inlined rather than
-   tokenised for the same reason UpcomingEvents.module.css inlines its teal
-   pill: two uses, one screen each. */
+/* The artboard's do-not-play type chip. It was red until the canvas re-theme;
+   the new canvas has no red anywhere, so it is the same neutral chip as every
+   other pill and reads as a negative only from its label. That is a known,
+   accepted loss, not an oversight. */
 .pill {
   font-size: 11px;
   font-weight: 700;

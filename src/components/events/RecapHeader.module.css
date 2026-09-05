@@ -8,7 +8,7 @@
 }
 
 /* globals.css's a:hover (specificity (0,1,1)) would otherwise outrank this
-   class's color and turn the link pink on hover — the artboard does not do
+   class's color and turn the link grey on hover — the artboard does not do
    this (its <a> carries the color inline, which outranks a:hover there too).
    Same trap as DashboardSidebar.module.css and PastEventsList.module.css. */
 .back:hover {

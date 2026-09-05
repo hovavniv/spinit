@@ -75,7 +75,7 @@
 }
 
 /* globals.css's `a:hover` has specificity (0,1,1) and would outrank
-   `.row { color: inherit }` at (0,1,0), turning the whole row's text pink on
+   `.row { color: inherit }` at (0,1,0), turning the whole row's text grey on
    hover — which the artboard does not do (it neutralises the same thing with
    an inline style). This rule is (0,2,0) and wins regardless of source order.
    The same trap is annotated in PastEvents.module.css and
