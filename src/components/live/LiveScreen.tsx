@@ -13,6 +13,7 @@ import { RequestQueue } from './RequestQueue';
 import { BlockedGroup } from './BlockedGroup';
 import { CoupleRules } from './CoupleRules';
 import { GuestActivity, type LiveActivityItem } from './GuestActivity';
+import { useLivePoll } from './useLivePoll';
 import styles from './LiveScreen.module.css';
 
 export interface LiveScreenProps {
@@ -71,6 +72,14 @@ export function LiveScreen({
 }: LiveScreenProps) {
   const router = useRouter();
   const [currentPhase, setCurrentPhase] = useState<EventPhase>(phase);
+  const { state: polled, reconnecting } = useLivePoll(eventId, {
+    queue,
+    blocked,
+    activity,
+    mustPlayProgress,
+    unresolvedArtistIds: [],
+    now,
+  });
 
   async function handlePhaseChange(next: EventPhase) {
     const previous = currentPhase;
@@ -87,29 +96,34 @@ export function LiveScreen({
 
   return (
     <div className={styles.screen}>
+      {reconnecting && (
+        <p className={styles.reconnecting} role="status">
+          Reconnecting…
+        </p>
+      )}
       <LiveHeader
         coupleNames={coupleNames}
         venue={venue}
         eventDate={eventDate}
         startTime={startTime}
-        now={now}
+        now={polled.now}
         phase={currentPhase}
         onPhaseChange={(next) => {
           void handlePhaseChange(next);
         }}
-        queueCount={queue.length}
-        mustPlayProgress={mustPlayProgress}
+        queueCount={polled.queue.length}
+        mustPlayProgress={polled.mustPlayProgress}
       />
       <CeremonyCues mustPlay={mustPlay} played={played} />
-      <RequestQueue queue={queue} />
-      <BlockedGroup blocked={blocked} />
+      <RequestQueue queue={polled.queue} />
+      <BlockedGroup blocked={polled.blocked} />
       <CoupleRules
         mustPlay={mustPlay}
         blocklist={blocklist}
         played={played}
-        mustPlayProgress={mustPlayProgress}
+        mustPlayProgress={polled.mustPlayProgress}
       />
-      <GuestActivity activity={activity} />
+      <GuestActivity activity={polled.activity} />
     </div>
   );
 }

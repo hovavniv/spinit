@@ -128,6 +128,11 @@ function suggestionRows() {
 beforeEach(() => {
   vi.clearAllMocks();
   refresh.mockClear();
+  // LiveScreen now owns a useLivePoll (Task 16a) that fires one fetch on
+  // mount -- stub it so these render-only tests never hit a real network
+  // call. A non-ok response is fine: the hook's own failure handling is
+  // covered by useLivePoll.test.ts, not here.
+  vi.stubGlobal('fetch', vi.fn(async () => ({ ok: false, json: async () => null })));
   eventsMaybeSingle.mockResolvedValue({ data: eventRow(), error: null });
   suggestionsResult.mockResolvedValue({ data: suggestionRows(), error: null });
   votesIn.mockResolvedValue({
