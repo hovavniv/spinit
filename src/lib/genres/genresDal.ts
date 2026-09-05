@@ -106,6 +106,39 @@ export async function readGenres(eventId: string, artistId: string): Promise<Fac
 }
 
 /**
+ * One bulk read for the ranking path (design §8.1, live-event slice).
+ * `readGenres` above is `.maybeSingle()` -- one artist per call, which would
+ * mean one round trip per queue row per poll. This is the read `rankQueue`'s
+ * `genresByArtistId` is actually fed from.
+ *
+ * `status = 'resolved'` only: a `'pending'` or `'failed'` row has no genre
+ * data worth matching on, and including it would mean treating an unfetched
+ * or permanently-unresolvable artist as "no genres" (silently wrong) rather
+ * than "not yet known" (what `rankQueue`'s `genre-pending` reason exists to
+ * say instead, one layer up).
+ */
+export async function readGenresForEvent(
+  eventId: string,
+): Promise<Record<string, Record<string, number>>> {
+  const supabase = await createClient();
+
+  const { data, error } = await supabase
+    .from('artist_genres')
+    .select('spotify_artist_id, genres')
+    .eq('event_id', eventId)
+    .eq('status', 'resolved');
+  if (error) {
+    throw new Error(`artist_genres bulk read failed: ${error.code}`);
+  }
+
+  const result: Record<string, Record<string, number>> = {};
+  for (const row of (data ?? []) as { spotify_artist_id: string; genres: Record<string, number> }[]) {
+    result[row.spotify_artist_id] = row.genres;
+  }
+  return result;
+}
+
+/**
  * Genre entries only. `event_blocklist` holds `'artist'`, `'song'` and
  * `'genre'` rows in one `value` column -- reading raw values would ban a
  * genre by coincidence of name whenever a couple blocked an ARTIST or SONG
