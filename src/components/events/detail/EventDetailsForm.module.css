@@ -22,7 +22,7 @@
 .saved {
   font-size: 13px;
   font-weight: 600;
-  color: oklch(0.4 0.13 190);
+  color: var(--text-label);
 }
 
 .error {

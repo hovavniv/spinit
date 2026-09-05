@@ -57,7 +57,7 @@
 .navItem {
   padding: 11px 16px;
   border-radius: var(--radius);
-  color: oklch(0.75 0.01 50);
+  color: var(--panel-nav);
   font-weight: 600;
   font-size: 14px;
 }
@@ -66,14 +66,14 @@
    class's color and turn the label pink on hover — the artboard does not do
    this (its <a> carries the color inline, which outranks a:hover there too). */
 .navItem:hover {
-  color: oklch(0.75 0.01 50);
+  color: var(--panel-nav);
 }
 
 .navItemCurrent {
   padding: 11px 16px;
   border-radius: var(--radius);
-  background: var(--panel-raised);
-  color: white;
+  background: var(--accent);
+  color: var(--on-accent);
   font-weight: 600;
   font-size: 14px;
 }
@@ -90,19 +90,18 @@
   border-radius: var(--radius);
   background: transparent;
   /* the same value .navItem uses, so sign-out reads as part of the rail */
-  color: oklch(0.75 0.01 50);
+  color: var(--panel-nav);
   font: inherit;
   text-align: left;
   cursor: pointer;
 }
 
 .signOut:hover {
-  /* NOT var(--panel-raised): that is .navItemCurrent's background, so using it
-     here would reproduce the current-page treatment on a control that is not
-     a page. .navItem:hover itself sets only `color`, as a specificity guard
-     against globals.css's `a:hover` — it carries no background at all. This
-     picks a hover that is visibly not the current-page state. */
-  background: oklch(0.3 0.01 50);
+  /* --panel-raised is free to use here now that .navItemCurrent is the accent
+     block. This hover is a raised dark chip; the current page is lime. They
+     cannot be confused. .navItem:hover sets only `color`, as a specificity
+     guard against globals.css's `a:hover`. */
+  background: var(--panel-raised);
   color: white;
 }
 
@@ -119,9 +118,7 @@
   width: 38px;
   height: 38px;
   border-radius: 50%;
-  /* Local value — indigo at 0.5 alpha, distinct from the shared
-     --panel-raised token. Appears only in the sidebar, per design §4. */
-  background: oklch(0.3 0.03 265 / 0.5);
+  background: var(--panel-raised);
   color: white;
   font-weight: 700;
   font-size: 13px;

@@ -69,8 +69,8 @@
   font-weight: 600;
   padding: 5px 12px;
   border-radius: var(--radius-pill);
-  background: oklch(0.95 0.03 190);
-  color: oklch(0.4 0.13 190);
+  background: var(--chip);
+  color: var(--text-label);
   white-space: nowrap;
 }
 
@@ -80,6 +80,6 @@
   padding: 5px 12px;
   border-radius: var(--radius-pill);
   background: transparent;
-  color: oklch(0.45 0.02 50);
+  color: var(--text-subtle);
   white-space: nowrap;
 }

@@ -8,7 +8,7 @@
   border-radius: 50%;
   position: relative;
   flex-shrink: 0;
-  background: radial-gradient(circle at 35% 32%, oklch(0.4 0.01 50), oklch(0.13 0.01 50) 65%);
+  background: radial-gradient(circle at 35% 32%, oklch(0.38 0 0), oklch(0.1 0 0) 65%);
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.35);
   animation-name: var(--spinit-anim-spinitRecordSpin);
   animation-duration: 6s;
@@ -20,14 +20,14 @@
   position: absolute;
   inset: 3.5px;
   border-radius: 50%;
-  border: 1px solid oklch(0.35 0.01 50 / 0.7);
+  border: 1px solid oklch(0.32 0 0 / 0.7);
 }
 
 .ringInner {
   position: absolute;
   inset: 7px;
   border-radius: 50%;
-  border: 1px solid oklch(0.35 0.01 50 / 0.5);
+  border: 1px solid oklch(0.32 0 0 / 0.5);
 }
 
 .centerDot {

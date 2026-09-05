@@ -182,8 +182,8 @@
 /* Three badge variants, read off the artboard: teal / amber / grey. Same box,
    different ink and ground — written out rather than composed, per above. */
 .badgeConnected {
-  background: oklch(0.95 0.03 190);
-  color: oklch(0.4 0.13 190);
+  background: var(--chip);
+  color: var(--text-label);
   font-size: 12px;
   font-weight: 600;
   padding: 5px 12px;
@@ -193,8 +193,8 @@
 }
 
 .badgePartly {
-  background: oklch(0.95 0.045 80);
-  color: oklch(0.5 0.15 80);
+  background: var(--chip);
+  color: var(--text-label);
   font-size: 12px;
   font-weight: 600;
   padding: 5px 12px;
