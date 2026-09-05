@@ -1,21 +1,22 @@
 /* ---------------------------------------------------------------------------
    Demo data for the Past events screen, and (Task 19, live-event slice) one
-   `live` event for the DJ's live screen.
+   `live` event for the DJ's live screen, including guest-side data.
    docs/specs/2026-08-29-past-events-design.md §12.
    docs/specs/2026-09-04-live-event-design.md.
 
    The live event's GUEST-side rows (guest_sessions, song_suggestions,
-   suggestion_votes) are deliberately NOT seeded here, and not because of an
-   oversight: `authenticated` has no insert grant on any of those three
-   tables (design §3.6) -- the only insert path is the anon-reachable RPCs
-   Migration B creates (guest_join, guest_suggest, guest_vote), which are
-   held behind a security review before they are even pushed. Seeding those
-   three tables as the signed-in DJ is not merely undocumented, it is
-   impossible under the grants as written; a service-role key would work
-   around it but would defeat the exact RLS-proving point this file's own
-   philosophy states below. Until Migration B lands and is pushed, the live
-   event's request queue is empty by construction -- ceremony cues,
-   must-plays and the do-not-play list are all real, the queue is not.
+   suggestion_votes) are seeded through the real anon-reachable RPCs
+   (guest_join, guest_suggest, guest_vote -- Migration B, live as of
+   2026-09-05), using a SEPARATE, unauthenticated Supabase client, exactly
+   the path a real guest's browser takes. Not through a direct table insert
+   as the DJ: `authenticated` has no insert grant on any of the three guest
+   tables at all (design §3.6) -- the only insert path is those RPCs. This
+   is deliberately not a compromise: it exercises the real guards (the <=3
+   cap, the dedupe-into-a-vote rule) on the real boundary, which a direct
+   insert never would have. Skipped entirely (idempotent) if the event
+   already has any guest sessions, so re-running the seed does not keep
+   minting new guests forever -- guest_join has no natural upsert key the
+   way every other write in this script does.
 
    Signs in as a real DJ with the PUBLISHABLE (anon) key and writes through
    PostgREST, exactly as the app does. There is deliberately no service-role
@@ -484,7 +485,121 @@ async function main() {
     );
   }
 
+  await seedGuestData(djId);
+
   console.log(`seed-demo: done. ${EVENTS.length} events.`);
+}
+
+/**
+ * Guest-side rows for the `sara-daniel` live event, through the real anon
+ * RPCs (Task 19) -- a SEPARATE, unauthenticated client, exactly the path a
+ * real guest's browser takes. Skipped entirely if the event already has any
+ * guest sessions: `guest_join` mints a fresh row every call with no natural
+ * upsert key, so re-running this unconditionally would add guests forever.
+ *
+ * Includes two guests suggesting the SAME track deliberately -- the
+ * dedupe-into-a-vote path (`was_existing = true`, no cap slot consumed) is
+ * the branch a fresh-context security review flagged as most likely to be
+ * silently broken; seeding it end to end through the real RPCs, not just
+ * proving it in isolated SQL, is worth the extra two lines.
+ */
+async function seedGuestData(djId) {
+  const eventId = derivedId(djId, 'sara-daniel');
+  const joinToken = deriveToken(djId, 'sara-daniel');
+
+  // As the DJ (authenticated): checking for existing guest data is a SELECT,
+  // which the DJ's own read policy already permits -- no anon client needed
+  // for this idempotency check.
+  const supabase = createClient(SUPABASE_URL, ANON_KEY);
+  const signIn = await supabase.auth.signInWithPassword({ email: EMAIL, password: PASSWORD });
+  if (signIn.error) {
+    console.error(`seed-demo: could not sign in to check for existing guest data: ${signIn.error.message}`);
+    process.exit(1);
+  }
+  const { data: existing, error: existingError } = await supabase
+    .from('guest_sessions')
+    .select('id')
+    .eq('event_id', eventId)
+    .limit(1);
+  if (existingError) {
+    console.error(`seed-demo: failed to check for existing guest data: ${existingError.message}`);
+    process.exit(1);
+  }
+  if (existing && existing.length > 0) {
+    console.log('seed-demo: sara-daniel already has guest data, skipping (idempotent)');
+    return;
+  }
+
+  // A genuinely separate, unauthenticated client -- persistSession: false so
+  // it never shares a storage slot with the DJ client above (the two-client
+  // gotcha CLAUDE.md records), though this script's short lifetime would
+  // make that collision unlikely to matter here regardless.
+  const guest = createClient(SUPABASE_URL, ANON_KEY, { auth: { persistSession: false } });
+
+  const sessions = [];
+  for (const name of ['Table 1', 'Table 2', 'Table 3']) {
+    const { data: sessionId, error } = await guest.rpc('guest_join', {
+      p_token: joinToken,
+      p_display_name: name,
+    });
+    if (error) {
+      console.error(`seed-demo: guest_join failed for ${name}: ${error.message}`);
+      process.exit(1);
+    }
+    sessions.push({ name, sessionId });
+  }
+
+  // Real, previously-verified Spotify ids (Task 12's live check, and the
+  // priya-alex fixture above) -- not invented, per this file's own standard.
+  const suggestions = [
+    { by: 0, trackId: '2grjqo0Frpf2okIBiifQKs', title: 'September', artist: 'Earth, Wind & Fire' },
+    { by: 1, trackId: '4PTG3Z6ehGkBFwjybzWkR8', title: 'Never Gonna Give You Up', artist: 'Rick Astley' },
+  ];
+  const bySuggestionKey = new Map();
+  for (const { by, trackId, title, artist } of suggestions) {
+    const { data, error } = await guest.rpc('guest_suggest', {
+      p_session_id: sessions[by].sessionId,
+      p_track_id: trackId,
+      p_title: title,
+      p_artist: artist,
+    });
+    if (error) {
+      console.error(`seed-demo: guest_suggest failed for ${sessions[by].name}: ${error.message}`);
+      process.exit(1);
+    }
+    bySuggestionKey.set(trackId, data[0].suggestion_id);
+  }
+
+  // Guest 3 (index 2) suggests the SAME track guest 1 already suggested --
+  // exercises the dedupe-into-a-vote path for real, through the boundary a
+  // hostile caller would actually use.
+  const { data: dup, error: dupError } = await guest.rpc('guest_suggest', {
+    p_session_id: sessions[2].sessionId,
+    p_track_id: '2grjqo0Frpf2okIBiifQKs',
+    p_title: 'September (dup request)',
+    p_artist: 'Earth, Wind & Fire',
+  });
+  if (dupError) {
+    console.error(`seed-demo: guest_suggest (dedupe case) failed: ${dupError.message}`);
+    process.exit(1);
+  }
+  if (!dup[0].was_existing) {
+    console.error('seed-demo: expected the duplicate suggestion to dedupe into a vote, it did not');
+    process.exit(1);
+  }
+
+  // Guest 2 also votes for "Never Gonna Give You Up" -- gives the demo a
+  // vote-count difference to actually rank on, not just a flat list of 1s.
+  const { error: voteError } = await guest.rpc('guest_vote', {
+    p_session_id: sessions[1].sessionId,
+    p_suggestion_id: bySuggestionKey.get('4PTG3Z6ehGkBFwjybzWkR8'),
+  });
+  if (voteError) {
+    console.error(`seed-demo: guest_vote failed: ${voteError.message}`);
+    process.exit(1);
+  }
+
+  console.log('seed-demo: seeded 3 guests, 2 distinct suggestions (one with 2 requesters via dedupe), 1 extra vote');
 }
 
 main().catch((error) => {
