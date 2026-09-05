@@ -49,6 +49,7 @@ committed; `.env.example` documents the names only.
 | `SPOTIFY_REDIRECT_URI` | `http://127.0.0.1:3000/api/spotify/callback` locally; the production URL once deployed | Never. Name only. |
 | `SPOTIFY_TOKEN_KEY` | 32 random bytes, base64. Generate with `openssl rand -base64 32` and paste it in — do not let it pass through any transcript or chat. Encrypts partners' refresh tokens at rest. | Never. Name only. |
 | `LASTFM_API_KEY` | Free, instant, from last.fm/api/account/create. Only the API key is needed; the shared secret is for signed writes this app never makes. | Never. Name only. |
+| `RUN_MAILER_TESTS` | Optional. Set to `1` to opt into the two `signUp`-calling tests in the RLS suite — omit it for an ordinary test run. | Never. Local-only, and only when deliberately budgeting mailer quota. |
 
 **The service-role key is never used by this app**, in any file, for any
 reason: authorization relies on Postgres Row Level Security, and a service-role
@@ -103,12 +104,20 @@ that was wrong, and the alternative that was considered.
   reads as `AuthApiError: over_email_send_rate_limit` (429), which is a quota,
   not a defect in the app.
 
-  **Running the test suite also spends that budget.** Two tests in
-  `src/lib/auth/rls.integration.test.ts` call `signUp` on every run, so a single
-  `npm test` can leave you unable to create an account for the next hour. That
-  is a known defect with a written fix — see
-  `docs/specs/2026-08-31-mailer-quota-fix.md` — and it is why account D is
-  created through the dashboard.
+  **The two `signUp`-calling tests in `src/lib/auth/rls.integration.test.ts`
+  are opt-in, not run by default** — they are skipped unless `RUN_MAILER_TESTS=1`
+  is set, precisely so an ordinary `npm test`/`npm run gate` never spends this
+  quota by accident. Set that variable only when you specifically intend to
+  exercise those two tests, and expect to wait out the cap afterward. Account D
+  is still created through the dashboard regardless, since it needs no
+  confirmation email at all.
+
+  **`src/lib/live/guest.integration.test.ts` needs `npm run seed:demo` to have
+  been run at least once** against the linked project first — it reads the
+  seeded `Sara & Daniel`, `Claire & Ben` and `Noa & Eitan` events by name.
+  **Do not run the full suite immediately before a live manual walk**: the
+  integration suites reset `event_partners`, which cascades and deletes any
+  manually-connected guest sessions or Spotify state for the same event.
 
 ### Spotify setup
 
