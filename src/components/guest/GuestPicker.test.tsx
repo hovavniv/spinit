@@ -22,7 +22,6 @@ const TRACK = {
 };
 
 const TOKEN = 'a'.repeat(22);
-const SESSION_ID = '11111111-1111-4111-8111-111111111111';
 
 function mockSearch(results: unknown[], status = 200) {
   return vi.fn(async (_i: RequestInfo | URL) => new Response(JSON.stringify({ results }), { status }));
@@ -38,7 +37,7 @@ beforeEach(() => {
 
 async function search(suggestAction: (...args: never[]) => Promise<SuggestActionResult>, usedCount = 0) {
   const r = render(
-    <GuestPicker token={TOKEN} sessionId={SESSION_ID} usedCount={usedCount} suggestAction={suggestAction as never} />,
+    <GuestPicker token={TOKEN} usedCount={usedCount} suggestAction={suggestAction as never} />,
   );
   vi.stubGlobal('fetch', mockSearch([TRACK]));
   await user.type(screen.getByRole('combobox'), 'abba');
@@ -67,6 +66,22 @@ describe('GuestPicker', () => {
     expect(suggestAction).toHaveBeenCalledTimes(1);
   });
 
+  // M1: a failed suggestAction call must not leave the button reading
+  // "Requested ✓" -- the toast already says it failed, and a guest cannot
+  // retry a button that is both mislabeled AND still disabled.
+  it('rolls back to "Request" (not "Requested ✓") when suggestAction fails', async () => {
+    const suggestAction = vi.fn(
+      async (): Promise<SuggestActionResult> => ({ ok: false, code: 'unknown', message: 'Something went wrong.' }),
+    );
+    await search(suggestAction);
+
+    await user.click(screen.getByRole('button', { name: /request dancing queen/i }));
+
+    expect(await screen.findByText('Something went wrong.')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /^request dancing queen by abba$/i })).toBeEnabled();
+    expect(screen.queryByRole('button', { name: /requested dancing queen/i })).not.toBeInTheDocument();
+  });
+
   it('renders "already up — backed it for you" when guest_suggest returns was_existing', async () => {
     const suggestAction = vi.fn(
       async (): Promise<SuggestActionResult> => ({ ok: true, suggestionId: 's1', wasExisting: true }),
@@ -78,8 +93,24 @@ describe('GuestPicker', () => {
     expect(await screen.findByText(/already up.*backed it for you/i)).toBeInTheDocument();
   });
 
+  // F3: no sessionId prop exists on this component any more -- it is a
+  // 'use client' component, so anything passed as a prop is serialized into
+  // the RSC payload and readable by any script on the page. suggestAction
+  // is called with the TOKEN, which reads the real session id off the
+  // httpOnly cookie server-side instead.
+  it('calls suggestAction with the token, and never receives a sessionId prop', async () => {
+    const suggestAction = vi.fn(
+      async (): Promise<SuggestActionResult> => ({ ok: true, suggestionId: 's1', wasExisting: false }),
+    );
+    await search(suggestAction);
+
+    await user.click(screen.getByRole('button', { name: /request dancing queen/i }));
+
+    expect(suggestAction).toHaveBeenCalledWith(TOKEN, TRACK.id, TRACK.name, TRACK.artistNames[0]);
+  });
+
   it('shows "nothing matched" and no free-text fallback when the search returns no rows', async () => {
-    render(<GuestPicker token={TOKEN} sessionId={SESSION_ID} usedCount={0} suggestAction={vi.fn() as never} />);
+    render(<GuestPicker token={TOKEN} usedCount={0} suggestAction={vi.fn() as never} />);
     vi.stubGlobal('fetch', mockSearch([]));
     await user.type(screen.getByRole('combobox'), 'zzzz');
     await vi.advanceTimersByTimeAsync(500);

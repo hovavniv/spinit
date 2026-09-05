@@ -27,18 +27,22 @@ type ErrorKind = 'busy' | 'unavailable' | null;
  * server-side count), never from `queue.length` or any locally-tracked
  * count of successful requests -- the footer has to be right even after a
  * page reload, and the server is the only place that count actually lives.
+ *
+ * F3: takes `token`, never `sessionId` -- a session id passed as a prop is
+ * serialized into the RSC payload and readable by any script on the page,
+ * which is exactly what the cookie's `httpOnly` flag exists to prevent.
+ * `suggestAction` now reads the session id off that cookie itself, keyed by
+ * `token`.
  */
 export function GuestPicker({
   token,
-  sessionId,
   usedCount,
   suggestAction,
 }: {
   token: string;
-  sessionId: string;
   usedCount: number;
   suggestAction: (
-    sessionId: string,
+    token: string,
     trackId: string,
     title: string,
     artist: string,
@@ -106,7 +110,7 @@ export function GuestPicker({
     if (requestedIds.has(track.id)) return;
     setRequestedIds((prev) => new Set(prev).add(track.id));
 
-    const result = await suggestAction(sessionId, track.id, track.name, track.artistNames[0] ?? '');
+    const result = await suggestAction(token, track.id, track.name, track.artistNames[0] ?? '');
     if (result.ok) {
       setToast(
         result.wasExisting
@@ -115,6 +119,14 @@ export function GuestPicker({
       );
       router.refresh();
     } else {
+      // M1: a failed suggestion must not leave this track showing
+      // "Requested ✓" -- the toast already says it failed, and a guest
+      // who cannot retry without a page reload has no way to act on that.
+      setRequestedIds((prev) => {
+        const next = new Set(prev);
+        next.delete(track.id);
+        return next;
+      });
       setToast(result.message);
     }
   }

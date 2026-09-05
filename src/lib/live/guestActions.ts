@@ -1,7 +1,7 @@
 'use server';
 
 import { createClient } from '@/lib/supabase/server';
-import { setGuestSessionCookie } from '@/lib/guest/session';
+import { setGuestSessionCookie, getGuestSessionId } from '@/lib/guest/session';
 import { mapGuestError, type GuestErrorCode } from './guestErrors';
 import { guestNameSchema, guestSuggestSchema, guestVoteSchema } from './liveValidation';
 
@@ -12,6 +12,16 @@ import { guestNameSchema, guestSuggestSchema, guestVoteSchema } from './liveVali
  * not `<form action>` submissions in the `useFormState` sense -- so each
  * returns a plain discriminated union, not the auth module's
  * `ActionResult`.
+ *
+ * F3: `suggestAction`/`voteAction` take the join TOKEN, never the session
+ * id, and read the session id off the httpOnly cookie server-side --
+ * exactly `/join/[token]/search`'s own pattern. Taking `sessionId` as a
+ * parameter meant it flowed into `'use client'` component props
+ * (`GuestPicker`/`GuestQueue`) and was serialized into the RSC payload,
+ * readable by any script on the page -- the opposite of the cookie's own
+ * `httpOnly` guarantee, and a live contradiction of this design's own
+ * stated principle (a uuid being unguessable is not an authorization
+ * control). The cookie is the only place these actions get the id from now.
  */
 
 type GuestActionFailure = { ok: false; code: GuestErrorCode | 'unknown' | 'invalid'; message: string };
@@ -51,7 +61,7 @@ export async function joinAction(token: string, displayName: string): Promise<Jo
 }
 
 export async function suggestAction(
-  sessionId: string,
+  token: string,
   trackId: string,
   title: string,
   artist: string,
@@ -59,6 +69,11 @@ export async function suggestAction(
   const parsed = guestSuggestSchema.safeParse({ trackId, title, artist });
   if (!parsed.success) {
     return { ok: false, code: 'invalid', message: "Couldn't add that one." };
+  }
+
+  const sessionId = await getGuestSessionId(token);
+  if (!sessionId) {
+    return { ok: false, ...mapGuestError({ message: 'no_such_session' }) };
   }
 
   const supabase = await createClient();
@@ -81,10 +96,15 @@ export async function suggestAction(
   return { ok: true, suggestionId: row.suggestion_id, wasExisting: row.was_existing };
 }
 
-export async function voteAction(sessionId: string, suggestionId: string): Promise<VoteActionResult> {
+export async function voteAction(token: string, suggestionId: string): Promise<VoteActionResult> {
   const parsed = guestVoteSchema.safeParse({ suggestionId });
   if (!parsed.success) {
     return { ok: false, code: 'invalid', message: "Couldn't add that one." };
+  }
+
+  const sessionId = await getGuestSessionId(token);
+  if (!sessionId) {
+    return { ok: false, ...mapGuestError({ message: 'no_such_session' }) };
   }
 
   const supabase = await createClient();
