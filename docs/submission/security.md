@@ -558,6 +558,19 @@ before it plays, and a queue row that never resolves is visibly flagged (`unreso
 than looking like an ordinary pending song — but neither is impossible, and the guarantee below is
 stated at the size it actually has, not the one an earlier draft claimed.
 
+**One more correction, this time strictly in the guarantee's favor: for the second case above, the
+guest's text no longer lands either.** Once a track id has resolved as a 404, its `spotify_tracks`
+row carries the sentinel title (`Unavailable track` / `—`), not a null. `dj_play_suggestion`'s
+`coalesce` then finds a non-null `v_resolved_title` and writes the sentinel — the coalesce falls
+through to the guest's own text only when the row is genuinely absent, i.e. only in the first case
+(played before any poll ran the resolver at all). This is deliberate, not a gap left standing: an
+honest sentinel recording "the DJ played something whose id doesn't resolve on Spotify" is strictly
+better in a permanent keepsake than trusting an attacker-controlled string, which is the exact
+fabrication §8.3's trust rule exists to keep out. The real cost, stated plainly: a track that 404s
+*after* being picked from genuine search results (removed from Spotify, market relinking) loses its
+real title in the recap along with the fabricated ones — rare, and the alternative is trusting text
+the design does not trust.
+
 ### 8.4 Abuse limits that are enforced, and by what
 
 | Rule | Enforced by |
