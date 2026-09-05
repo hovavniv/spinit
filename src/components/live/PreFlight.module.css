@@ -58,5 +58,6 @@
 .error {
   margin: 0 0 16px;
   font-size: 14px;
-  color: var(--accent-deep);
+  color: var(--error);
+  font-weight: 600;
 }

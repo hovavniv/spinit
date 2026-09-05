@@ -6,7 +6,8 @@
 
 .error {
   font-size: 13.5px;
-  color: var(--accent-deep);
+  color: var(--error);
+  font-weight: 600;
   margin: 0 0 12px;
 }
 

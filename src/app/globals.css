@@ -59,6 +59,16 @@
   --role-couple: oklch(0.3 0 0);
   --role-guest: oklch(0.3 0 0);
 
+  /* Validation errors. Ink rather than a hue: the canvas is near-monochrome and
+     has exactly one chromatic colour, so a red here would be the only other hue
+     in the app. Errors are separated from body text by WEIGHT instead, which is
+     what --error exists to pair with -- the token alone is not a signal.
+
+     It has its own name rather than reusing --ink-dark so that the decision has
+     somewhere to live: if a red is ever wanted, this is the one line to change,
+     and every error in the app follows. */
+  --error: oklch(0.14 0 0);
+
   /* positive/played states, live screen only.
      Neutral, matching the Live artboard's played rows. The guest screen used to
      share these for its "voted" state and no longer does: the Guest artboard

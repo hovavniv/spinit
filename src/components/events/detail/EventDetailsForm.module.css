@@ -28,7 +28,8 @@
 
 .error {
   font-size: 13px;
-  color: var(--accent-deep);
+  color: var(--error);
+  font-weight: 600;
 }
 
 .save {
