@@ -5,7 +5,8 @@ are, what the indexes do, how over-fetching is avoided, where the client/server 
 what the current limits are, and what I would improve with more time.
 
 **Status.** §1–§5 describe merged code. §6 describes the Spotify integration, designed and
-partly built on `feat/spotify` but not merged. §7 is the honest list of limits.
+partly built on `feat/spotify` but not merged, plus §6.6 which covers the live-event slice's
+own Spotify usage and IS merged and running. §7 is the honest list of limits.
 
 ---
 
@@ -113,6 +114,32 @@ Every ordered read therefore adds the primary key: `order by created_at, id`. Th
 real bug in `detailDal.ts`, design-reviewed and shipped, caught before push. It is a
 correctness issue that presents as a scale issue, because it only shows up once there is
 enough data to tie.
+
+### 2.5 The live poll — the one query this product runs on a fixed clock, not on demand
+
+`GET /api/live/[id]/state` is polled every 8 seconds for the whole duration of an event,
+which makes it the only query in this product whose call volume is driven by a timer rather
+than a person clicking something. Three index-backed reads, one per poll:
+
+```sql
+create index guest_sessions_event_idx on public.guest_sessions (event_id);
+create index song_suggestions_event_status_idx on public.song_suggestions (event_id, status, created_at);
+create index suggestion_votes_guest_idx on public.suggestion_votes (guest_id);
+```
+
+The vote count is **tallied in TypeScript from a second bare-column query**, not
+`suggestion_votes(count)` embedded on the first — PostgREST's aggregate functions are gated
+behind `db-aggregates-enabled`, and this project's setting was verified with one `curl` rather
+than assumed from the client library's own type signatures accepting the syntax. One extra
+round trip, no redesign, and a claim about a dependency's configuration that was checked
+rather than guessed.
+
+**Ranking happens on the server, every poll, and never crosses the wire.** `rankQueue` runs in
+the route handler; the client receives ranked rows with their reasons already attached, never
+the do-not-play list or the couple's must-play list itself. Smaller payload, and one fewer
+copy of the couple's private rules sitting in a place it does not need to be — a scale
+decision and a security decision again turning out to be the same decision, as `security.md`
+§8's genre and blocklist matching already establishes.
 
 ---
 
@@ -260,6 +287,35 @@ one at a time. Hydrating 50 artists is 50 requests where it used to be 1.
 The global cache is what makes this tolerable, and it is why the cache is global rather than
 per-event. Without it, this constraint alone would make the feature impractical.
 
+### 6.6 The live event's own Spotify usage — merged and running, not designed
+
+Two places in the live-event slice call Spotify, and both are load-bearing for the same
+reason §6.1 already names: the guest side is the side with a real number, so it is the side
+that gets a bound.
+
+**Resolving a suggestion's track, on the DJ's own poll, bounded at 10 per cycle with
+concurrency 5.** `resolveTracks(ids, { max: 10, concurrency: 5 })` runs against Spotify's
+**singular** `GET /tracks/{id}` endpoint, never the batch `GET /tracks?ids=` — verified by a
+real call with this app's own client-credentials token: the singular endpoint and `/search`
+both return 200, the batch endpoint returns **403, three retries, with and without the
+`market` parameter**, consistent with Spotify's post-2024 access tiers gating some catalogue
+endpoints for development-mode apps. No documentation was found confirming the cause; the
+behaviour itself is verified, not assumed, which is the standard the rest of this document
+already holds every other Spotify claim to. Capping at 10 unresolved tracks per poll, with 5
+in flight at once, bounds worst-case Spotify calls per 8-second cycle to a small, fixed
+number regardless of how many suggestions are pending — a full queue of 40 pending suggestions
+still costs at most 10 calls per cycle, not 40, and the remaining 30 resolve over the next
+three cycles.
+
+**Guest search shares the one Spotify app token every event in this project uses.**
+`guest_search_allow`'s per-session ceiling of 60 (§6.2, `security.md` §8.4) exists
+specifically to protect this shared token from one guest session's unlimited searching — the
+same cross-tenant concern §6.1 raises for the couple's own connect flow, one layer down at the
+guest boundary instead. **The ceiling is per session, and nothing bounds session-minting**
+(`security.md` §8.5), so this protection is real against an ordinary guest and not against a
+determined one holding the token — recorded here as a scale-relevant instance of a security
+gap already disclosed, not a new finding.
+
 ---
 
 ## 7. Current limits
@@ -285,6 +341,15 @@ Ordered by how soon each would bite.
 9. **No load testing has been done.** Every number here is reasoned from documented limits
    and measured API behaviour, not from a load test. That is a real gap and I would rather
    state it than imply otherwise.
+10. **The 8-second live poll's cost scales with pending suggestions, not with guest count.**
+    A guest joining or voting is one small RPC; the DJ's poll re-ranks the whole pending queue
+    and resolves up to 10 unresolved tracks every 8 seconds regardless of how many guests are
+    connected, because there is exactly one DJ screen per event. This is favourable, not a
+    risk — it is named here so it is not accidentally conflated with the guest-count numbers
+    in §1.
+11. **Nothing bounds guest session-minting**, and therefore nothing bounds either votes or the
+    60-search-per-session budget's real effectiveness (`security.md` §8.5). A per-event
+    session ceiling is the honest fix and is not built.
 
 ---
 
@@ -299,8 +364,15 @@ Ordered by how soon each would bite.
 4. **A `played_songs_count` column** on `events`, maintained by trigger, retiring the view's
    aggregate.
 5. **Age out the artist cache** on `fetched_at`, so genre data can be corrected.
-6. **Realtime for the guest screen.** Vote counts currently need a refresh; Supabase Realtime
-   would push them, and would replace polling that does not yet exist but would otherwise
-   have to.
+6. **Realtime, replacing the DJ's 8-second poll.** The poll exists and works — it holds the
+   last good render on failure and never blanks the queue — but it is a deliberate choice of
+   the simpler tool, not the absence of one. A DJ's decision cycle is a three-minute song, so
+   sub-second freshness buys nothing against the cost of a websocket configuration this
+   project does not have. Realtime would still be the better fit for the guest's own queue
+   view, which currently has no live update at all — a guest sees the queue only when they
+   open or reload the picker.
+7. **A per-event guest session ceiling** (`guest_count * 3`, or a flat number where
+   `guest_count` is null) — §7 item 11's honest fix, and the one item on this list that closes
+   a disclosed security gap rather than only improving a number.
 
 The first is the one that matters. The rest are guesses until it runs.
