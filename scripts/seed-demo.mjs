@@ -1,6 +1,21 @@
 /* ---------------------------------------------------------------------------
-   Demo data for the Past events screen.
+   Demo data for the Past events screen, and (Task 19, live-event slice) one
+   `live` event for the DJ's live screen.
    docs/specs/2026-08-29-past-events-design.md §12.
+   docs/specs/2026-09-04-live-event-design.md.
+
+   The live event's GUEST-side rows (guest_sessions, song_suggestions,
+   suggestion_votes) are deliberately NOT seeded here, and not because of an
+   oversight: `authenticated` has no insert grant on any of those three
+   tables (design §3.6) -- the only insert path is the anon-reachable RPCs
+   Migration B creates (guest_join, guest_suggest, guest_vote), which are
+   held behind a security review before they are even pushed. Seeding those
+   three tables as the signed-in DJ is not merely undocumented, it is
+   impossible under the grants as written; a service-role key would work
+   around it but would defeat the exact RLS-proving point this file's own
+   philosophy states below. Until Migration B lands and is pushed, the live
+   event's request queue is empty by construction -- ceremony cues,
+   must-plays and the do-not-play list are all real, the queue is not.
 
    Signs in as a real DJ with the PUBLISHABLE (anon) key and writes through
    PostgREST, exactly as the app does. There is deliberately no service-role
@@ -105,6 +120,41 @@ function inDays(n) {
   return `${d.getFullYear()}-${month}-${day}`;
 }
 
+/**
+ * A deterministic 22-char base62 join_token, matching the `join_token_shape`
+ * CHECK (`^[A-Za-z0-9]{22}$`) -- derived the same way `derivedId` derives
+ * event ids, so re-running the seed keeps the SAME token rather than
+ * rotating it out from under a QR code already printed for a demo.
+ *
+ * `byte % 62` is measurably biased (256 is not a multiple of 62 --
+ * `src/lib/live/token.ts`'s own doc comment on `randomToken` explains why),
+ * which matters for the REAL token `startEvent` mints because it affects an
+ * unguessability argument. It does not matter here: this token's only job is
+ * to satisfy the CHECK constraint's character class for a fixed demo row,
+ * not to resist guessing.
+ */
+function deriveToken(djId, slug) {
+  const hash = createHash('sha256').update(`${djId}:${slug}:join-token`).digest();
+  const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+  let token = '';
+  for (let i = 0; i < 22; i += 1) token += alphabet[hash[i] % alphabet.length];
+  return token;
+}
+
+/**
+ * Asia/Jerusalem wall clock 'HH:mm' for `now` -- same composition
+ * `startEvent` uses (src/lib/live/liveActions.ts), so the seeded row is
+ * shaped exactly like one `startEvent` would have written.
+ */
+function jerusalemTime(now) {
+  return new Intl.DateTimeFormat('en-GB', {
+    timeZone: 'Asia/Jerusalem',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  }).format(now);
+}
+
 // The first two match design/artboards/Spinit Past Events.dc.html exactly, so
 // the screen can be compared against the artboard side by side. The third and
 // fourth exist to make two things visible on the real screen that the
@@ -119,12 +169,13 @@ function inDays(n) {
 // It is invisible here -- past_events_with_counts filters to
 // status = 'completed' -- so it costs this slice one row and nothing else.
 //
-// There is deliberately NO `live` row. A live event means "this wedding is
-// happening right now", and nothing in this slice can transition it out: there
-// is no delete policy, no delete grant, and no UI that changes status. A
-// seeded live event would be a permanent falsehood sitting at the top of the
-// dashboard claiming a party is in progress on a date months past. Stale data
-// is survivable; false data is not.
+// There WAS deliberately no `live` row here (an earlier version of this
+// comment said so) -- reasoning that no longer holds. It said nothing could
+// transition a live event back out, which was true before the live-event
+// slice existed: the DJ's "End event" button (src/lib/events/detailActions.ts)
+// now moves `live -> completed` same as it always could for `upcoming`, so a
+// seeded live event is not a permanent falsehood, only a temporary one an
+// End click clears. The sixth event below (Task 19) is that row.
 const EVENTS = [
   {
     slug: 'noa-eitan',
@@ -195,10 +246,9 @@ const EVENTS = [
     couple_names: 'Maya & Tom',
     venue: 'Vineyard Terrace',
     // Computed, not hardcoded. A fixed future date silently becomes an
-    // "upcoming" event whose date has already passed -- the same class of wrong
-    // data as the `live` row this seed deliberately omits, just slower to go
-    // wrong. Re-running the seed refreshes it, and the id is derived from the
-    // slug, so it updates in place instead of adding a second row.
+    // "upcoming" event whose date has already passed. Re-running the seed
+    // refreshes it, and the id is derived from the slug, so it updates in
+    // place instead of adding a second row.
     event_date: inDays(21),
     status: 'upcoming',
     songs: [], // an event that has not happened yet has no played songs
@@ -233,6 +283,33 @@ const EVENTS = [
     ],
     notes: "Alex's dad wants to do a surprise speech around 9pm — leave room in the timeline.",
   },
+  {
+    slug: 'sara-daniel',
+    couple_names: 'Sara & Daniel',
+    venue: 'The Old Chapel',
+    // A live event's OWN date should already have arrived -- an event
+    // "live" on a future date is exactly the kind of false data the old
+    // no-live-row comment above was right to worry about, just for the
+    // wrong reason (the real fix is a real date, not omitting the row).
+    event_date: inDays(0),
+    status: 'live',
+    // Task 19: the live event's own columns, shaped exactly like startEvent
+    // would have written them -- phase_started_at a little in the past so
+    // minutesLeftInPhase has something real to compute against, not 0.
+    phase: 'open-floor',
+    phaseStartedAt: new Date(Date.now() - 25 * 60_000).toISOString(),
+    songs: [],
+    mustPlay: [
+      // Same verified real ids as priya-alex's fixture -- looked up once,
+      // reused rather than re-verified, since a Spotify id's shape needs no
+      // per-event uniqueness.
+      ['ceremony', 'A Thousand Years', 'Christina Perri', 'Walking down the aisle', '6z5Yh7kOKeLjqIsNdokIpU'],
+      ['ceremony', 'Hava Nagila', 'Traditional', 'Breaking the glass', '7Ihr8qtzuseTCJ7OmpxW5g'],
+      ['party', 'September', 'Earth, Wind & Fire', 'Guaranteed dance-floor filler', '2grjqo0Frpf2okIBiifQKs'],
+    ],
+    blocklist: [['party', 'artist', 'Nickelback', '6deZN1bslXzeGvOLaLMOIF']],
+    notes: null,
+  },
 ];
 
 async function main() {
@@ -249,6 +326,16 @@ async function main() {
   for (const event of EVENTS) {
     const eventId = derivedId(djId, event.slug);
 
+    const liveColumns =
+      event.status === 'live'
+        ? {
+            phase: event.phase,
+            phase_started_at: event.phaseStartedAt,
+            start_time: jerusalemTime(new Date(event.phaseStartedAt)),
+            join_token: deriveToken(djId, event.slug),
+          }
+        : {};
+
     const { error: eventError } = await supabase.from('events').upsert(
       {
         id: eventId,
@@ -257,6 +344,7 @@ async function main() {
         venue: event.venue,
         event_date: event.event_date,
         status: event.status,
+        ...liveColumns,
       },
       { onConflict: 'id' },
     );
