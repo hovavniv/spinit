@@ -22,11 +22,18 @@ import { guestNameSchema, guestSuggestSchema, guestVoteSchema } from './liveVali
  * `httpOnly` guarantee, and a live contradiction of this design's own
  * stated principle (a uuid being unguessable is not an authorization
  * control). The cookie is the only place these actions get the id from now.
+ *
+ * `joinAction` is F3's third call site: it used to return the freshly-minted
+ * `sessionId` in its result, which is exactly as reachable by client script
+ * as a prop would be -- a resolved Server Action value, not the cookie
+ * itself. The cookie (set here, server-side, one line above the return) is
+ * the only place the id should ever live; nothing reads the returned value,
+ * so nothing needs it.
  */
 
 type GuestActionFailure = { ok: false; code: GuestErrorCode | 'unknown' | 'invalid'; message: string };
 
-export type JoinActionResult = { ok: true; sessionId: string } | GuestActionFailure;
+export type JoinActionResult = { ok: true } | GuestActionFailure;
 
 export type SuggestActionResult =
   | { ok: true; suggestionId: string; wasExisting: boolean }
@@ -57,7 +64,7 @@ export async function joinAction(token: string, displayName: string): Promise<Jo
   const sessionId = data as string;
   await setGuestSessionCookie(token, sessionId);
 
-  return { ok: true, sessionId };
+  return { ok: true };
 }
 
 export async function suggestAction(

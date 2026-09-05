@@ -33,12 +33,17 @@ describe('joinAction', () => {
     expect(rpc).not.toHaveBeenCalled();
   });
 
-  it('sets the guest session cookie on success', async () => {
+  it('sets the guest session cookie on success, and never returns the session id to the caller', async () => {
     rpc.mockResolvedValue({ data: SESSION_ID, error: null });
 
     const result = await joinAction(TOKEN, 'Table 7');
 
-    expect(result).toEqual({ ok: true, sessionId: SESSION_ID });
+    // The cookie -- set server-side, above -- is the only place this id
+    // should ever live. Returning it in the action's result would put it in
+    // a resolved Server Action value, reachable by client script exactly
+    // like a prop would be (F3's third call site).
+    expect(result).toEqual({ ok: true });
+    expect(result).not.toHaveProperty('sessionId');
     expect(cookieSet).toHaveBeenCalledWith(`spinit_guest_${TOKEN}`, SESSION_ID, expect.anything());
   });
 
