@@ -1,6 +1,22 @@
 /* ---------------------------------------------------------------------------
-   Demo data for the Past events screen.
+   Demo data for the Past events screen, and (Task 19, live-event slice) one
+   `live` event for the DJ's live screen, including guest-side data.
    docs/specs/2026-08-29-past-events-design.md §12.
+   docs/specs/2026-09-04-live-event-design.md.
+
+   The live event's GUEST-side rows (guest_sessions, song_suggestions,
+   suggestion_votes) are seeded through the real anon-reachable RPCs
+   (guest_join, guest_suggest, guest_vote -- Migration B, live as of
+   2026-09-05), using a SEPARATE, unauthenticated Supabase client, exactly
+   the path a real guest's browser takes. Not through a direct table insert
+   as the DJ: `authenticated` has no insert grant on any of the three guest
+   tables at all (design §3.6) -- the only insert path is those RPCs. This
+   is deliberately not a compromise: it exercises the real guards (the <=3
+   cap, the dedupe-into-a-vote rule) on the real boundary, which a direct
+   insert never would have. Skipped entirely (idempotent) if the event
+   already has any guest sessions, so re-running the seed does not keep
+   minting new guests forever -- guest_join has no natural upsert key the
+   way every other write in this script does.
 
    Signs in as a real DJ with the PUBLISHABLE (anon) key and writes through
    PostgREST, exactly as the app does. There is deliberately no service-role
@@ -105,6 +121,41 @@ function inDays(n) {
   return `${d.getFullYear()}-${month}-${day}`;
 }
 
+/**
+ * A deterministic 22-char base62 join_token, matching the `join_token_shape`
+ * CHECK (`^[A-Za-z0-9]{22}$`) -- derived the same way `derivedId` derives
+ * event ids, so re-running the seed keeps the SAME token rather than
+ * rotating it out from under a QR code already printed for a demo.
+ *
+ * `byte % 62` is measurably biased (256 is not a multiple of 62 --
+ * `src/lib/live/token.ts`'s own doc comment on `randomToken` explains why),
+ * which matters for the REAL token `startEvent` mints because it affects an
+ * unguessability argument. It does not matter here: this token's only job is
+ * to satisfy the CHECK constraint's character class for a fixed demo row,
+ * not to resist guessing.
+ */
+function deriveToken(djId, slug) {
+  const hash = createHash('sha256').update(`${djId}:${slug}:join-token`).digest();
+  const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+  let token = '';
+  for (let i = 0; i < 22; i += 1) token += alphabet[hash[i] % alphabet.length];
+  return token;
+}
+
+/**
+ * Asia/Jerusalem wall clock 'HH:mm' for `now` -- same composition
+ * `startEvent` uses (src/lib/live/liveActions.ts), so the seeded row is
+ * shaped exactly like one `startEvent` would have written.
+ */
+function jerusalemTime(now) {
+  return new Intl.DateTimeFormat('en-GB', {
+    timeZone: 'Asia/Jerusalem',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  }).format(now);
+}
+
 // The first two match design/artboards/Spinit Past Events.dc.html exactly, so
 // the screen can be compared against the artboard side by side. The third and
 // fourth exist to make two things visible on the real screen that the
@@ -119,12 +170,13 @@ function inDays(n) {
 // It is invisible here -- past_events_with_counts filters to
 // status = 'completed' -- so it costs this slice one row and nothing else.
 //
-// There is deliberately NO `live` row. A live event means "this wedding is
-// happening right now", and nothing in this slice can transition it out: there
-// is no delete policy, no delete grant, and no UI that changes status. A
-// seeded live event would be a permanent falsehood sitting at the top of the
-// dashboard claiming a party is in progress on a date months past. Stale data
-// is survivable; false data is not.
+// There WAS deliberately no `live` row here (an earlier version of this
+// comment said so) -- reasoning that no longer holds. It said nothing could
+// transition a live event back out, which was true before the live-event
+// slice existed: the DJ's "End event" button (src/lib/events/detailActions.ts)
+// now moves `live -> completed` same as it always could for `upcoming`, so a
+// seeded live event is not a permanent falsehood, only a temporary one an
+// End click clears. The sixth event below (Task 19) is that row.
 const EVENTS = [
   {
     slug: 'noa-eitan',
@@ -195,10 +247,9 @@ const EVENTS = [
     couple_names: 'Maya & Tom',
     venue: 'Vineyard Terrace',
     // Computed, not hardcoded. A fixed future date silently becomes an
-    // "upcoming" event whose date has already passed -- the same class of wrong
-    // data as the `live` row this seed deliberately omits, just slower to go
-    // wrong. Re-running the seed refreshes it, and the id is derived from the
-    // slug, so it updates in place instead of adding a second row.
+    // "upcoming" event whose date has already passed. Re-running the seed
+    // refreshes it, and the id is derived from the slug, so it updates in
+    // place instead of adding a second row.
     event_date: inDays(21),
     status: 'upcoming',
     songs: [], // an event that has not happened yet has no played songs
@@ -233,6 +284,33 @@ const EVENTS = [
     ],
     notes: "Alex's dad wants to do a surprise speech around 9pm — leave room in the timeline.",
   },
+  {
+    slug: 'sara-daniel',
+    couple_names: 'Sara & Daniel',
+    venue: 'The Old Chapel',
+    // A live event's OWN date should already have arrived -- an event
+    // "live" on a future date is exactly the kind of false data the old
+    // no-live-row comment above was right to worry about, just for the
+    // wrong reason (the real fix is a real date, not omitting the row).
+    event_date: inDays(0),
+    status: 'live',
+    // Task 19: the live event's own columns, shaped exactly like startEvent
+    // would have written them -- phase_started_at a little in the past so
+    // minutesLeftInPhase has something real to compute against, not 0.
+    phase: 'open-floor',
+    phaseStartedAt: new Date(Date.now() - 25 * 60_000).toISOString(),
+    songs: [],
+    mustPlay: [
+      // Same verified real ids as priya-alex's fixture -- looked up once,
+      // reused rather than re-verified, since a Spotify id's shape needs no
+      // per-event uniqueness.
+      ['ceremony', 'A Thousand Years', 'Christina Perri', 'Walking down the aisle', '6z5Yh7kOKeLjqIsNdokIpU'],
+      ['ceremony', 'Hava Nagila', 'Traditional', 'Breaking the glass', '7Ihr8qtzuseTCJ7OmpxW5g'],
+      ['party', 'September', 'Earth, Wind & Fire', 'Guaranteed dance-floor filler', '2grjqo0Frpf2okIBiifQKs'],
+    ],
+    blocklist: [['party', 'artist', 'Nickelback', '6deZN1bslXzeGvOLaLMOIF']],
+    notes: null,
+  },
 ];
 
 async function main() {
@@ -249,6 +327,16 @@ async function main() {
   for (const event of EVENTS) {
     const eventId = derivedId(djId, event.slug);
 
+    const liveColumns =
+      event.status === 'live'
+        ? {
+            phase: event.phase,
+            phase_started_at: event.phaseStartedAt,
+            start_time: jerusalemTime(new Date(event.phaseStartedAt)),
+            join_token: deriveToken(djId, event.slug),
+          }
+        : {};
+
     const { error: eventError } = await supabase.from('events').upsert(
       {
         id: eventId,
@@ -257,6 +345,7 @@ async function main() {
         venue: event.venue,
         event_date: event.event_date,
         status: event.status,
+        ...liveColumns,
       },
       { onConflict: 'id' },
     );
@@ -396,7 +485,121 @@ async function main() {
     );
   }
 
+  await seedGuestData(djId);
+
   console.log(`seed-demo: done. ${EVENTS.length} events.`);
+}
+
+/**
+ * Guest-side rows for the `sara-daniel` live event, through the real anon
+ * RPCs (Task 19) -- a SEPARATE, unauthenticated client, exactly the path a
+ * real guest's browser takes. Skipped entirely if the event already has any
+ * guest sessions: `guest_join` mints a fresh row every call with no natural
+ * upsert key, so re-running this unconditionally would add guests forever.
+ *
+ * Includes two guests suggesting the SAME track deliberately -- the
+ * dedupe-into-a-vote path (`was_existing = true`, no cap slot consumed) is
+ * the branch a fresh-context security review flagged as most likely to be
+ * silently broken; seeding it end to end through the real RPCs, not just
+ * proving it in isolated SQL, is worth the extra two lines.
+ */
+async function seedGuestData(djId) {
+  const eventId = derivedId(djId, 'sara-daniel');
+  const joinToken = deriveToken(djId, 'sara-daniel');
+
+  // As the DJ (authenticated): checking for existing guest data is a SELECT,
+  // which the DJ's own read policy already permits -- no anon client needed
+  // for this idempotency check.
+  const supabase = createClient(SUPABASE_URL, ANON_KEY);
+  const signIn = await supabase.auth.signInWithPassword({ email: EMAIL, password: PASSWORD });
+  if (signIn.error) {
+    console.error(`seed-demo: could not sign in to check for existing guest data: ${signIn.error.message}`);
+    process.exit(1);
+  }
+  const { data: existing, error: existingError } = await supabase
+    .from('guest_sessions')
+    .select('id')
+    .eq('event_id', eventId)
+    .limit(1);
+  if (existingError) {
+    console.error(`seed-demo: failed to check for existing guest data: ${existingError.message}`);
+    process.exit(1);
+  }
+  if (existing && existing.length > 0) {
+    console.log('seed-demo: sara-daniel already has guest data, skipping (idempotent)');
+    return;
+  }
+
+  // A genuinely separate, unauthenticated client -- persistSession: false so
+  // it never shares a storage slot with the DJ client above (the two-client
+  // gotcha CLAUDE.md records), though this script's short lifetime would
+  // make that collision unlikely to matter here regardless.
+  const guest = createClient(SUPABASE_URL, ANON_KEY, { auth: { persistSession: false } });
+
+  const sessions = [];
+  for (const name of ['Table 1', 'Table 2', 'Table 3']) {
+    const { data: sessionId, error } = await guest.rpc('guest_join', {
+      p_token: joinToken,
+      p_display_name: name,
+    });
+    if (error) {
+      console.error(`seed-demo: guest_join failed for ${name}: ${error.message}`);
+      process.exit(1);
+    }
+    sessions.push({ name, sessionId });
+  }
+
+  // Real, previously-verified Spotify ids (Task 12's live check, and the
+  // priya-alex fixture above) -- not invented, per this file's own standard.
+  const suggestions = [
+    { by: 0, trackId: '2grjqo0Frpf2okIBiifQKs', title: 'September', artist: 'Earth, Wind & Fire' },
+    { by: 1, trackId: '4PTG3Z6ehGkBFwjybzWkR8', title: 'Never Gonna Give You Up', artist: 'Rick Astley' },
+  ];
+  const bySuggestionKey = new Map();
+  for (const { by, trackId, title, artist } of suggestions) {
+    const { data, error } = await guest.rpc('guest_suggest', {
+      p_session_id: sessions[by].sessionId,
+      p_track_id: trackId,
+      p_title: title,
+      p_artist: artist,
+    });
+    if (error) {
+      console.error(`seed-demo: guest_suggest failed for ${sessions[by].name}: ${error.message}`);
+      process.exit(1);
+    }
+    bySuggestionKey.set(trackId, data[0].suggestion_id);
+  }
+
+  // Guest 3 (index 2) suggests the SAME track guest 1 already suggested --
+  // exercises the dedupe-into-a-vote path for real, through the boundary a
+  // hostile caller would actually use.
+  const { data: dup, error: dupError } = await guest.rpc('guest_suggest', {
+    p_session_id: sessions[2].sessionId,
+    p_track_id: '2grjqo0Frpf2okIBiifQKs',
+    p_title: 'September (dup request)',
+    p_artist: 'Earth, Wind & Fire',
+  });
+  if (dupError) {
+    console.error(`seed-demo: guest_suggest (dedupe case) failed: ${dupError.message}`);
+    process.exit(1);
+  }
+  if (!dup[0].was_existing) {
+    console.error('seed-demo: expected the duplicate suggestion to dedupe into a vote, it did not');
+    process.exit(1);
+  }
+
+  // Guest 2 also votes for "Never Gonna Give You Up" -- gives the demo a
+  // vote-count difference to actually rank on, not just a flat list of 1s.
+  const { error: voteError } = await guest.rpc('guest_vote', {
+    p_session_id: sessions[1].sessionId,
+    p_suggestion_id: bySuggestionKey.get('4PTG3Z6ehGkBFwjybzWkR8'),
+  });
+  if (voteError) {
+    console.error(`seed-demo: guest_vote failed: ${voteError.message}`);
+    process.exit(1);
+  }
+
+  console.log('seed-demo: seeded 3 guests, 2 distinct suggestions (one with 2 requesters via dedupe), 1 extra vote');
 }
 
 main().catch((error) => {

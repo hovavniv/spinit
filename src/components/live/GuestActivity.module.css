@@ -1,0 +1,28 @@
+.section {
+  padding: 16px 24px 32px;
+}
+
+.heading {
+  margin: 0 0 8px;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text-subtle);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 14px;
+  color: var(--text-muted);
+}
+
+.empty {
+  color: var(--text-placeholder);
+  font-style: italic;
+}

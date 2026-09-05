@@ -1,0 +1,62 @@
+.card {
+  max-width: 480px;
+  margin: 48px auto;
+  padding: 32px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+}
+
+.coupleNames {
+  font-size: 28px;
+  font-weight: 600;
+  color: var(--ink-dark);
+  margin: 0 0 4px;
+}
+
+.meta {
+  color: var(--text-muted);
+  margin: 0 0 24px;
+}
+
+.label {
+  display: block;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-subtle);
+  margin-bottom: 8px;
+}
+
+.phaseRow {
+  margin-bottom: 24px;
+}
+
+.startButton {
+  width: 100%;
+  padding: 14px 28px;
+  border: none;
+  border-radius: var(--radius-pill);
+  background: var(--accent);
+  color: white;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.startButton:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.hint {
+  margin: 16px 0 0;
+  font-size: 13px;
+  color: var(--text-muted);
+  text-align: center;
+}
+
+.error {
+  margin: 0 0 16px;
+  font-size: 14px;
+  color: var(--accent-deep);
+}

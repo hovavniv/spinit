@@ -6,11 +6,18 @@ const from = vi.fn();
 const agUpsert = vi.fn();
 const agUpsertSelect = vi.fn();
 
-// artist_genres read: select(...).eq(...).eq(...).maybeSingle()
+// artist_genres read (single artist): select(...).eq(...).eq(...).maybeSingle()
 const agReadSelect = vi.fn();
 const agReadEq1 = vi.fn();
 const agReadEq2 = vi.fn();
 const agReadMaybeSingle = vi.fn();
+
+// artist_genres bulk read (readGenresForEvent): select(...).eq(...).eq(...)
+// -- resolves directly, no .maybeSingle(). A different chain shape on the
+// SAME table, so `select` itself dispatches on its columns argument (below).
+const agBulkSelect = vi.fn();
+const agBulkEq1 = vi.fn();
+const agBulkEq2 = vi.fn();
 
 // event_blocklist read: select(...).eq(...).eq(...)  (resolves directly, no further chain)
 const blSelect = vi.fn();
@@ -19,7 +26,7 @@ const blEq2 = vi.fn();
 
 vi.mock('@/lib/supabase/server', () => ({ createClient: async () => ({ from }) }));
 
-import { writeGenres, readGenres, blockedGenres, writeGenreWeights } from './genresDal';
+import { writeGenres, readGenres, blockedGenres, writeGenreWeights, readGenresForEvent } from './genresDal';
 import type { ArtistGenresRow } from './enrich';
 
 // taste_profiles: update(row).eq('partner_id', p).select()
@@ -37,7 +44,14 @@ function artistGenresTable() {
   agUpsert.mockReturnValue({ select: agUpsertSelect });
   agReadEq2.mockReturnValue({ maybeSingle: agReadMaybeSingle });
   agReadEq1.mockReturnValue({ eq: agReadEq2 });
-  agReadSelect.mockReturnValue({ eq: agReadEq1 });
+  agBulkEq1.mockReturnValue({ eq: agBulkEq2 });
+  // Same table, two different `.select` call shapes distinguished by their
+  // columns argument -- readGenres asks for the three facet columns of ONE
+  // artist; readGenresForEvent asks for spotify_artist_id + genres across
+  // every resolved artist on the event.
+  agReadSelect.mockImplementation((columns: string) =>
+    columns.startsWith('spotify_artist_id') ? { eq: agBulkEq1 } : { eq: agReadEq1 },
+  );
   return { upsert: agUpsert, select: agReadSelect };
 }
 
@@ -52,6 +66,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   agUpsertSelect.mockResolvedValue({ data: [{ event_id: 'e1' }], error: null });
   agReadMaybeSingle.mockResolvedValue({ data: null, error: null });
+  agBulkEq2.mockResolvedValue({ data: [], error: null });
   tpUpdateSelect.mockResolvedValue({ data: [{ partner_id: 'p1' }], error: null });
   from.mockImplementation((table: string) => {
     if (table === 'artist_genres') return artistGenresTable();
@@ -235,5 +250,36 @@ describe('blockedGenres', () => {
   it('throws when the read errors', async () => {
     blEq2.mockReturnValueOnce(Promise.resolve({ data: null, error: { code: '500' } }));
     await expect(blockedGenres('e1')).rejects.toThrow(/event_blocklist read failed/);
+  });
+});
+
+describe('readGenresForEvent', () => {
+  it('returns one bulk read as spotifyArtistId -> genre -> weight, resolved rows only', async () => {
+    agBulkEq2.mockResolvedValueOnce({
+      data: [
+        { spotify_artist_id: 'artist1aaaaaaaaaaaaaaa', genres: { pop: 100, disco: 72 } },
+        { spotify_artist_id: 'artist2aaaaaaaaaaaaaaa', genres: { rock: 90 } },
+      ],
+      error: null,
+    });
+
+    const result = await readGenresForEvent('e1');
+
+    expect(agBulkEq1).toHaveBeenCalledWith('event_id', 'e1');
+    expect(agBulkEq2).toHaveBeenCalledWith('status', 'resolved');
+    expect(result).toEqual({
+      artist1aaaaaaaaaaaaaaa: { pop: 100, disco: 72 },
+      artist2aaaaaaaaaaaaaaa: { rock: 90 },
+    });
+  });
+
+  it('returns an empty object when nothing has resolved yet', async () => {
+    agBulkEq2.mockResolvedValueOnce({ data: [], error: null });
+    await expect(readGenresForEvent('e1')).resolves.toEqual({});
+  });
+
+  it('throws on a database error rather than returning a silently-empty map', async () => {
+    agBulkEq2.mockResolvedValueOnce({ data: null, error: { code: '42501' } });
+    await expect(readGenresForEvent('e1')).rejects.toThrow();
   });
 });

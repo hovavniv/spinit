@@ -1,0 +1,33 @@
+.group {
+  display: inline-flex;
+  gap: 4px;
+  padding: 4px;
+  background: var(--accent-tint);
+  border-radius: var(--radius-pill);
+}
+
+.option {
+  padding: 8px 16px;
+  border: none;
+  border-radius: var(--radius-pill);
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.option:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.optionSelected {
+  background: var(--accent);
+  color: white;
+}
+
+.option:focus-visible {
+  outline: 2px solid var(--accent-deep);
+  outline-offset: 2px;
+}

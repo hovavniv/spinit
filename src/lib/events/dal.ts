@@ -57,38 +57,50 @@ export const listPastEvents = cache(async (): Promise<PastEventRow[]> => {
 });
 
 /**
- * One ended event of the CURRENT verified DJ, with its playlist in order.
- * Returns null for anything this DJ may not see.
+ * One ended event the CURRENT verified user PARTICIPATES IN -- as its DJ or
+ * as a linked partner -- with its playlist in order. Returns null for
+ * anything this user may not see.
  *
  * Calls requireUser() itself for the same reason listPastEvents does: a
  * forgotten requireUser() upstream must not be able to turn this into a way to
- * read another DJ's event.
+ * read another event.
  *
- * FOUR CASES COLLAPSE INTO null, deliberately (design §4.2): a malformed id, a
- * nonexistent event, another DJ's event, and an event that has not ended.
- * The page turns all four into the same notFound(), so the route cannot be
- * used to probe which event ids exist.
+ * FOUR CASES COLLAPSE INTO null, deliberately (design §4.2, §15.4): a
+ * malformed id, a nonexistent event, an event this user does not participate
+ * in, and an event that has not ended. The page turns all four into the same
+ * notFound(), so the route cannot be used to probe which event ids exist.
+ * Under the couple-facing recap (§15) that indistinguishability holds across
+ * TWO roles, not one -- a DJ probing an id they do not own, a partner
+ * probing an id they are not on, and a partner probing an event that IS
+ * theirs but has not ended yet all produce the identical null. The third is
+ * the easy one to lose, because it is the only case where the caller
+ * genuinely is entitled to the row and is being refused on state rather than
+ * on identity.
  *
- * `.eq('dj_id', user.id)` IS the primary control here, not defence in depth --
- * and the comment that used to say the opposite was stale. The events select
- * policy has been `dj_id = auth.uid() OR is_event_partner(id)` since
- * 20260831090000, so RLS admits a partner to this row; only this predicate
- * keeps a recap DJ-only.
+ * No ownership predicate here, deliberately (design §15.4) -- the same move
+ * getEventDetail already made, for the same reason it records: "The DAL
+ * filters by the caller's RELATIONSHIP to the row, not by ownership. Where
+ * ownership is the relationship, the filter stays .eq('dj_id', user.id)...
+ * Here the relationship is participation." RLS is the primary control: the
+ * events select policy (`dj_id = auth.uid() OR is_event_partner(id)`, since
+ * 20260831090000) reaches this view through its `security_invoker` setting,
+ * so a non-participant's row is filtered out before this function ever sees
+ * it -- and the "not ended yet" case collapses to null for free, because
+ * `past_events_with_counts` only lists ended events in the first place.
  *
- * Do not remove it on the grounds that RLS covers it. It does not, and the
- * failure is silent rather than loud: played_songs' select policy was NOT
- * widened by that migration, so a partner who reached this function would get
- * their event back with an EMPTY playlist and no error (design §3.6a). A
- * partner-facing recap needs that policy widened first.
- *
- * The second query carries no owner predicate and needs none: played_songs'
- * select policy scopes rows through their event's dj_id, and the first query
- * has already established ownership or returned null.
+ * The second query ALSO carries no owner predicate, and now correctly so:
+ * `played_songs`' select policy is `dj or partner selects songs of event`
+ * (§15.3, this branch's migration) -- a partner is admitted to the songs of
+ * an event they participate in, the same relationship the first query
+ * already established. (An earlier version of this comment said "the first
+ * query has already established ownership"; participation is the accurate
+ * word now that a partner can reach this function at all.)
  *
  * ERRORS THROW, they are not swallowed into null (design §8). listPastEvents
  * returns [] on error because a degraded list is still a list. Here, returning
- * null would tell a DJ that a wedding they know they ran does not exist, with
- * no retry offered. Throwing reaches src/app/error.tsx, which has one.
+ * null would tell a participant that a wedding they know happened does not
+ * exist, with no retry offered. Throwing reaches src/app/error.tsx, which has
+ * one.
  */
 export const getEventRecap = cache(async (id: string): Promise<EventRecap | null> => {
   // Before any query: `where id = 'banana'` raises 22P02 in Postgres, which
@@ -105,7 +117,6 @@ export const getEventRecap = cache(async (id: string): Promise<EventRecap | null
     .from('past_events_with_counts')
     .select('id, couple_names, venue, event_date')
     .eq('id', id)
-    .eq('dj_id', user.id)
     .maybeSingle();
 
   if (eventError) {

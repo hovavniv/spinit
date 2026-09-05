@@ -11,7 +11,8 @@ import {
   endEvent,
 } from '@/lib/events/detailActions';
 import { savePrivateNotes, saveSharedNotes } from '@/lib/events/notesActions';
-import { todayInAppTimezone } from '@/lib/dashboard/now';
+import { hasEventDatePassed } from '@/lib/events/lifecycle';
+import { startEvent } from '@/lib/live/liveActions';
 import { StepHeader } from './StepHeader';
 import { StreamingSection, type StreamingConnections } from './StreamingSection';
 import { TasteProfileClient } from './TasteProfileClient';
@@ -22,6 +23,7 @@ import { NotesSection } from './NotesSection';
 import { SharedNotesSection } from './SharedNotesSection';
 import { EventDetailsForm } from './EventDetailsForm';
 import { EndEventSection } from './EndEventSection';
+import { StartEventSection } from './StartEventSection';
 import styles from './EventDetailScreen.module.css';
 
 interface EventDetailScreenProps {
@@ -60,9 +62,14 @@ export function EventDetailScreen({ event, viewer }: EventDetailScreenProps) {
   // against the date; a past-dated upcoming event has already ended and needs
   // no button (design §3.5, §3.6).
   const isEndable = event.status === 'upcoming' || event.status === 'live';
-  const alreadyEndedByDate =
-    event.status === 'upcoming' && event.event_date < todayInAppTimezone();
+  const alreadyEndedByDate = event.status === 'upcoming' && hasEventDatePassed(event.event_date);
   const canEnd = viewer.role === 'dj' && isEndable && !alreadyEndedByDate;
+
+  // Reuses alreadyEndedByDate rather than a second date comparison (design
+  // §5.2b, live-event slice): two predicates answering "has this event's
+  // date passed" is how they drift apart, and Start/End must agree on it or
+  // an event could show both buttons or neither.
+  const canStart = viewer.role === 'dj' && event.status === 'upcoming' && !alreadyEndedByDate;
 
   return (
     <div className={styles.page}>
@@ -156,6 +163,7 @@ export function EventDetailScreen({ event, viewer }: EventDetailScreenProps) {
 
         <EventDetailsForm eventId={event.id} saveAction={saveEventDetails} />
 
+        <StartEventSection eventId={event.id} canStart={canStart} startEventAction={startEvent} />
         <EndEventSection eventId={event.id} canEnd={canEnd} endAction={endEvent} />
       </div>
     </div>

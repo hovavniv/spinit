@@ -1,0 +1,50 @@
+.end {
+  background: none;
+  border: 1.5px solid var(--border-input);
+  color: var(--text-muted);
+  padding: 10px 20px;
+  border-radius: var(--radius-pill);
+  font-family: var(--font-inter), sans-serif;
+  font-weight: 600;
+  font-size: 13.5px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.confirmWrap {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+}
+
+.warning {
+  margin: 0;
+  font-size: 12.5px;
+  color: var(--text-muted);
+  text-align: right;
+}
+
+.confirm {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.cancel {
+  background: none;
+  border: 1.5px solid transparent;
+  color: var(--text-muted);
+  padding: 10px 16px;
+  border-radius: var(--radius-pill);
+  font-family: var(--font-inter), sans-serif;
+  font-weight: 600;
+  font-size: 13.5px;
+  cursor: pointer;
+}
+
+.error {
+  margin: 0;
+  font-size: 12.5px;
+  color: var(--accent-deep);
+}
