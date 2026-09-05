@@ -314,6 +314,18 @@ begin
 end;
 $$;
 
+-- A tightening, not a defence these functions relied on: security invoker
+-- plus zero anon table grants already makes them harmless if called by
+-- anon (they hit a permission wall on the first table touched), but
+-- PUBLIC-executable-by-default meant `anon` could still call them at all --
+-- which made the design's own "not granted to anon" description of the
+-- OUTCOME technically inaccurate about the MECHANISM, and would have made
+-- Migration B's six-function attack-surface count actually eight. Found by
+-- Migration B's own review checklist (checking anon cannot call
+-- dj_play_suggestion), not assumed.
+revoke all on function public.dj_play_suggestion(uuid, uuid) from public;
+grant execute on function public.dj_play_suggestion(uuid, uuid) to authenticated;
+
 create function public.dj_play_pick(p_event_id uuid, p_title text, p_artist text, p_track_id text)
 returns table ("position" int, was_already_played boolean)
 language plpgsql
@@ -355,3 +367,7 @@ begin
   return query select v_position, false;
 end;
 $$;
+
+-- Same tightening as dj_play_suggestion above, same reason.
+revoke all on function public.dj_play_pick(uuid, text, text, text) from public;
+grant execute on function public.dj_play_pick(uuid, text, text, text) to authenticated;
