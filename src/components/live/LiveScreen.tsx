@@ -45,17 +45,21 @@ export interface LiveScreenProps {
    * only place a real server action gets wired in.
    */
   endEvent: (formData: FormData) => Promise<ActionResult>;
-  /** `<siteUrl()>/join/<22-char token>` (design §7.2, §3.7) -- threaded down to LiveHeader's QR modal. */
-  joinUrl: string;
-  /** Server-rendered QR SVG markup for `joinUrl` (src/lib/live/qr.ts), computed once in the page. */
-  qrSvg: string;
+  /**
+   * `<siteUrl()>/join/<22-char token>` (design §7.2, §3.7) -- threaded down
+   * to LiveHeader's QR modal. `null` only for the anomalous "live event with
+   * no join_token" case -- see LiveHeader's own prop comment.
+   */
+  joinUrl: string | null;
+  /** Server-rendered QR SVG markup for `joinUrl` (src/lib/live/qr.ts), computed once in the page. `null` iff `joinUrl` is. */
+  qrSvg: string | null;
   queue: RankedSong[];
   blocked: RankedSong[];
   mustPlay: MustPlayRow[];
   blocklist: BlocklistRow[];
   played: PlayedTrack[];
   mustPlayProgress: { played: number; total: number };
-  /** Always `[]` for now (Task 16 scope note) -- Task 24 fills this in. */
+  /** From `readActivity` (Task 24) -- the last hour of requested/backed events, newest first, capped at 20. */
   activity: LiveActivityItem[];
 }
 

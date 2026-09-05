@@ -4,7 +4,7 @@ import { createClient } from '@/lib/supabase/server';
 import { readGenresForEvent } from '@/lib/genres/genresDal';
 import type { EventPhase } from '@/lib/dashboard/types';
 import type { BlocklistRow, MustPlayRow } from '@/lib/events/detailTypes';
-import type { PlayedTrack, QueueSuggestion } from './liveTypes';
+import type { ActivityItem, PlayedTrack, QueueSuggestion } from './liveTypes';
 
 /**
  * Everything `rankQueue`'s `RankInput` needs, minus `minutesLeftInPhase` --
@@ -226,4 +226,144 @@ export async function readLiveState(eventId: string): Promise<LiveState> {
 function firstRow<T>(embed: T | T[] | null | undefined): T | undefined {
   if (embed == null) return undefined;
   return Array.isArray(embed) ? embed[0] : embed;
+}
+
+/** A little over ACTIVITY_LIMIT: after merging two sources, the intermediate
+ *  per-query cap must still leave enough rows that the final merged-and-
+ *  truncated 20 is genuinely the newest 20 across BOTH tables, not just the
+ *  newest 20 of whichever table happened to be queried first. */
+const ACTIVITY_QUERY_LIMIT = 30;
+const ACTIVITY_LIMIT = 20;
+
+type ActivitySuggestionRow = {
+  id: string;
+  title: string;
+  artist: string;
+  created_at: string;
+  guest_sessions: { display_name: string } | { display_name: string }[] | null;
+};
+
+type ActivityVoteRow = {
+  suggestion_id: string;
+  guest_id: string;
+  created_at: string;
+  guest_sessions: { display_name: string } | { display_name: string }[] | null;
+};
+
+/**
+ * The DJ live screen's guest-activity feed (design §7.1, Task 24): every
+ * "requested" (song_suggestions) and "backed" (suggestion_votes) event for
+ * this event in the last hour, merged and sorted newest first, capped at 20.
+ *
+ * Two separate flat queries merged in TypeScript, not a nested PostgREST
+ * embed -- suggestion_votes has no event_id column of its own to filter by
+ * directly, matching this file's existing convention (spotify_tracks/
+ * spotify_track_artists above) of separate queries over relying on
+ * PostgREST's nested-filter embed syntax.
+ *
+ * A private, clearly separated concern from readLiveState -- called
+ * independently by both the poll route and the live page's first paint, the
+ * same two call sites readLiveState already has.
+ */
+export async function readActivity(eventId: string): Promise<ActivityItem[]> {
+  const supabase = await createClient();
+  const cutoff = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+
+  // "Requested": song_suggestions in the last hour. Same explicit FK
+  // disambiguation as readLiveState's own suggestion read above --
+  // song_suggestions has two paths to guest_sessions (the direct
+  // suggested_by FK, and an implicit one through suggestion_votes), and an
+  // unqualified embed here is a real PGRST201 against the live database.
+  const requestedRead = await supabase
+    .from('song_suggestions')
+    .select(
+      'id, title, artist, created_at, guest_sessions!song_suggestions_suggested_by_fkey (display_name)',
+    )
+    .eq('event_id', eventId)
+    .gte('created_at', cutoff)
+    .order('created_at', { ascending: false })
+    .order('id', { ascending: false })
+    .limit(ACTIVITY_QUERY_LIMIT);
+
+  if (requestedRead.error) {
+    throw new Error(`readActivity: song_suggestions read failed: ${requestedRead.error.code}`);
+  }
+
+  const requestedRows = (requestedRead.data ?? []) as ActivitySuggestionRow[];
+
+  // A second, UNFILTERED-by-time lookup of every suggestion for this event
+  // (id -> title/artist only): a vote can target a suggestion made well over
+  // an hour ago, and the feed must still show the correct song for that
+  // vote -- there is no "the voter's own text" to fall back on, since a vote
+  // carries no title/artist of its own.
+  const lookupRead = await supabase
+    .from('song_suggestions')
+    .select('id, title, artist')
+    .eq('event_id', eventId);
+
+  if (lookupRead.error) {
+    throw new Error(`readActivity: song_suggestions lookup read failed: ${lookupRead.error.code}`);
+  }
+
+  const suggestionLookup = new Map<string, { title: string; artist: string }>();
+  for (const row of (lookupRead.data ?? []) as { id: string; title: string; artist: string }[]) {
+    suggestionLookup.set(row.id, { title: row.title, artist: row.artist });
+  }
+  const allSuggestionIds = Array.from(suggestionLookup.keys());
+
+  // "Backed": suggestion_votes in the last hour, scoped to this event's
+  // suggestions via the lookup above. guest_sessions here has exactly ONE FK
+  // (guest_id) -- no PGRST201 ambiguity, verified against the live database
+  // rather than assumed from the schema (song_suggestions' own ambiguity
+  // above is the reason this was checked rather than taken on faith).
+  let voteRows: ActivityVoteRow[] = [];
+  if (allSuggestionIds.length > 0) {
+    const votesRead = await supabase
+      .from('suggestion_votes')
+      .select('suggestion_id, guest_id, created_at, guest_sessions (display_name)')
+      .in('suggestion_id', allSuggestionIds)
+      .gte('created_at', cutoff)
+      .order('created_at', { ascending: false })
+      .order('suggestion_id', { ascending: false })
+      .order('guest_id', { ascending: false })
+      .limit(ACTIVITY_QUERY_LIMIT);
+
+    if (votesRead.error) {
+      throw new Error(`readActivity: suggestion_votes read failed: ${votesRead.error.code}`);
+    }
+    voteRows = (votesRead.data ?? []) as ActivityVoteRow[];
+  }
+
+  const requested: ActivityItem[] = requestedRows.map((row) => ({
+    id: `requested-${row.id}`,
+    verb: 'requested',
+    guestName: firstRow(row.guest_sessions)?.display_name ?? '',
+    title: row.title,
+    artist: row.artist,
+    createdAt: row.created_at,
+  }));
+
+  const backed: ActivityItem[] = voteRows.map((row) => {
+    const suggestion = suggestionLookup.get(row.suggestion_id);
+    return {
+      id: `backed-${row.suggestion_id}-${row.guest_id}`,
+      verb: 'backed',
+      guestName: firstRow(row.guest_sessions)?.display_name ?? '',
+      title: suggestion?.title ?? '',
+      artist: suggestion?.artist ?? '',
+      createdAt: row.created_at,
+    };
+  });
+
+  // Merge newest first. A created_at tie (Postgres now() is transaction-start
+  // time -- see the module comment on readLiveState above) is broken by the
+  // item's own id string, descending -- deterministic, since the two source
+  // id spaces (song_suggestions.id vs. suggestion_id+guest_id) have no
+  // shared ordering that means anything on its own.
+  return [...requested, ...backed]
+    .sort((a, b) => {
+      if (a.createdAt !== b.createdAt) return a.createdAt < b.createdAt ? 1 : -1;
+      return a.id < b.id ? 1 : -1;
+    })
+    .slice(0, ACTIVITY_LIMIT);
 }

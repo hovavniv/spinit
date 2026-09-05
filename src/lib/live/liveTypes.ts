@@ -50,6 +50,23 @@ export interface RankedSong {
   blocked: Reason | null;
 }
 
+/**
+ * One line of the DJ's live activity feed (design §7.1, Task 24): a guest
+ * requesting or backing (voting for) a song, newest first. `guestName`,
+ * `title` and `artist` are all the guest's own UNTRUSTED display text
+ * (§3.3/§4.8) -- fine to display, same as `QueueSuggestion.title`/`artist`
+ * above; React's own escaping handles the XSS surface, this is not an
+ * escaping concern. Never matched on.
+ */
+export interface ActivityItem {
+  id: string;
+  verb: 'requested' | 'backed';
+  guestName: string;
+  title: string;
+  artist: string;
+  createdAt: string;
+}
+
 export interface RankInput {
   suggestions: QueueSuggestion[];
   mustPlay: MustPlayRow[];

@@ -23,34 +23,39 @@ const eventsChain = {
   maybeSingle,
 };
 
-// song_suggestions: no pending suggestions -- readLiveState's own file has
-// exhaustive coverage of this chain; this file only needs it not to throw.
-const suggestionsResult = vi.fn(async () => ({ data: [], error: null }));
-const suggestionsOrder2 = vi.fn(() => suggestionsResult());
-const suggestionsOrder1 = vi.fn(() => ({ order: suggestionsOrder2 }));
-const suggestionsEq2 = vi.fn(() => ({ order: suggestionsOrder1 }));
-const suggestionsEq1 = vi.fn(() => ({ eq: suggestionsEq2 }));
-const suggestionsSelect = vi.fn(() => ({ eq: suggestionsEq1 }));
-
-const votesIn = vi.fn(async () => ({ data: [], error: null }));
-const votesSelect = vi.fn(() => ({ in: votesIn }));
-
-const artistsResult = vi.fn(async () => ({ data: [], error: null }));
-const artistsOrder2 = vi.fn(() => artistsResult());
-const artistsOrder1 = vi.fn(() => ({ order: artistsOrder2 }));
-const artistsIn = vi.fn(() => ({ order: artistsOrder1 }));
-const artistsSelect = vi.fn(() => ({ in: artistsIn }));
-
-const tracksResult = vi.fn(async () => ({ data: [], error: null }));
-const tracksIn = vi.fn(() => tracksResult());
-const tracksSelect = vi.fn(() => ({ in: tracksIn }));
+// song_suggestions/suggestion_votes/spotify_track_artists/spotify_tracks: no
+// rows either way -- readLiveState's and readActivity's own test files each
+// have exhaustive coverage of their exact chain shapes (which differ from
+// each other -- see readActivity.test.ts's header comment on why). This
+// file's own tests only render the page shell (Start button, 404s) and never
+// assert on activity/queue content, so a generic auto-resolving stand-in
+// that answers ANY chained call with an empty result is sufficient here and
+// does not need to hard-code either function's exact method sequence.
+function emptyChain(): unknown {
+  const target: Record<string, unknown> = {};
+  const handler: ProxyHandler<typeof target> = {
+    get(_t, prop) {
+      if (prop === 'then') {
+        return (resolve: (v: { data: never[]; error: null }) => unknown) =>
+          Promise.resolve({ data: [], error: null }).then(resolve);
+      }
+      return () => proxy;
+    },
+  };
+  const proxy = new Proxy(target, handler);
+  return proxy;
+}
 
 const from = vi.fn((table: string) => {
   if (table === 'events') return eventsChain;
-  if (table === 'song_suggestions') return { select: suggestionsSelect };
-  if (table === 'suggestion_votes') return { select: votesSelect };
-  if (table === 'spotify_track_artists') return { select: artistsSelect };
-  if (table === 'spotify_tracks') return { select: tracksSelect };
+  if (
+    table === 'song_suggestions' ||
+    table === 'suggestion_votes' ||
+    table === 'spotify_track_artists' ||
+    table === 'spotify_tracks'
+  ) {
+    return { select: () => emptyChain() };
+  }
   throw new Error(`page.test.tsx: unexpected table "${table}"`);
 });
 
@@ -131,6 +136,22 @@ describe('/events/[id]/live', () => {
     await renderPage(EVENT_ID);
 
     expect(screen.queryByRole('button', { name: 'Start event' })).not.toBeInTheDocument();
+  });
+
+  it('with a live event but no join_token, shows the missing-link note (not a QR for a broken URL) and logs the anomaly', async () => {
+    maybeSingle.mockResolvedValue({ data: event({ status: 'live', phase: 'cocktails', join_token: null }) });
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    await renderPage(EVENT_ID);
+
+    expect(screen.getByText('No guest link for this event')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Guest QR code' })).not.toBeInTheDocument();
+    expect(errorSpy).toHaveBeenCalledWith(
+      'live page: live event has no join_token',
+      expect.objectContaining({ eventId: EVENT_ID }),
+    );
+
+    errorSpy.mockRestore();
   });
 
   it('404s for a draft event', async () => {

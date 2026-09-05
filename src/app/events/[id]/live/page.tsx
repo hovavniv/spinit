@@ -8,7 +8,7 @@ import { isUuid } from '@/lib/validation';
 import { formatCardDate } from '@/lib/dashboard/format';
 import { startEvent, setPhase, playSuggestion, skipSuggestion, playPick } from '@/lib/live/liveActions';
 import { endEvent } from '@/lib/events/detailActions';
-import { readLiveState } from '@/lib/live/liveDal';
+import { readActivity, readLiveState } from '@/lib/live/liveDal';
 import { rankQueue } from '@/lib/live/rank';
 import { minutesLeftInPhase } from '@/lib/live/phaseClock';
 import { siteUrl } from '@/lib/auth/site-url';
@@ -73,6 +73,9 @@ export default async function LiveEventPage({ params }: PageProps<'/events/[id]/
     // so this first paint shows the identical initial data a poll would --
     // the client-side 8-second re-polling itself is a later task.
     const state = await readLiveState(event.id);
+    // Task 24: same real read the poll route uses, so the first paint isn't
+    // a visible blank flash before the first poll fires 8 seconds later.
+    const activity = await readActivity(event.id);
     const now = new Date();
     const minsLeft = minutesLeftInPhase(state.event.phase, state.event.phaseStartedAt, now);
 
@@ -102,13 +105,22 @@ export default async function LiveEventPage({ params }: PageProps<'/events/[id]/
     // `window.location.origin` -- it is the one existing convention this
     // codebase already has for deriving its own origin, and its own header
     // states why: a forged `Host`/`X-Forwarded-Host` header must not be able
-    // to influence a link this app hands out and prints on paper. `join_token`
-    // is only ever null for a `live` row in the broken-row case `startEvent`
-    // is designed to prevent (§5.3) -- falls back to an empty token segment
-    // rather than throwing, matching `toLiveEvent`'s "log and refuse" posture
-    // elsewhere in this slice rather than crashing the whole screen.
-    const joinUrl = `${siteUrl()}/join/${event.join_token ?? ''}`;
-    const qrSvg = await generateQrSvg(joinUrl);
+    // to influence a link this app hands out and prints on paper.
+    //
+    // `join_token` is only ever null for a `live` row in the broken-row case
+    // `startEvent` is designed to prevent (§5.3) -- a row seeded live
+    // directly, or made live before the column existed. Genuinely refuse
+    // here (both `joinUrl`/`qrSvg` become `null`, and `LiveHeader` renders an
+    // explicit "No guest link for this event" note instead of its QR
+    // button) rather than building `.../join/` and silently generating a QR
+    // for a URL that is already known to be dead -- that would print
+    // physical table cards whose code 404s for every guest, with no signal
+    // anywhere on the DJ's own screen that anything is wrong.
+    if (!event.join_token) {
+      console.error('live page: live event has no join_token', { eventId: event.id });
+    }
+    const joinUrl = event.join_token ? `${siteUrl()}/join/${event.join_token}` : null;
+    const qrSvg = joinUrl ? await generateQrSvg(joinUrl) : null;
 
     liveScreen = (
       <LiveScreen
@@ -132,7 +144,7 @@ export default async function LiveEventPage({ params }: PageProps<'/events/[id]/
         blocklist={state.blocklist}
         played={state.played}
         mustPlayProgress={mustPlayProgress}
-        activity={[]}
+        activity={activity}
       />
     );
   }

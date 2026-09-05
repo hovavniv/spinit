@@ -1,15 +1,17 @@
 import { it, expect, vi, beforeEach, describe } from 'vitest';
 import type { LiveState } from '@/lib/live/liveDal';
+import type { ActivityItem } from '@/lib/live/liveTypes';
 import type { ResolvedTrack } from '@/lib/spotify/tracks';
 
 // Every collaborator the route has, mocked at the module boundary. Declared
 // with vi.hoisted so the vi.mock factories below can close over them, same
 // pattern as enrich-next/route.test.ts.
-const { requireUser, createClient, readLiveState, resolveTracks, from, eventsSelect, eventsEq, eventsMaybeSingle, upsert } =
+const { requireUser, createClient, readLiveState, readActivity, resolveTracks, from, eventsSelect, eventsEq, eventsMaybeSingle, upsert } =
   vi.hoisted(() => ({
     requireUser: vi.fn(async () => ({ id: 'u-dj-1' })),
     createClient: vi.fn(),
     readLiveState: vi.fn(),
+    readActivity: vi.fn(async (): Promise<ActivityItem[]> => []),
     resolveTracks: vi.fn(async (_ids: string[], _opts?: { max?: number; concurrency?: number }): Promise<ResolvedTrack[]> => []),
     from: vi.fn(),
     eventsSelect: vi.fn(),
@@ -20,7 +22,7 @@ const { requireUser, createClient, readLiveState, resolveTracks, from, eventsSel
 
 vi.mock('@/lib/auth/dal', () => ({ requireUser }));
 vi.mock('@/lib/supabase/server', () => ({ createClient }));
-vi.mock('@/lib/live/liveDal', () => ({ readLiveState }));
+vi.mock('@/lib/live/liveDal', () => ({ readLiveState, readActivity }));
 vi.mock('@/lib/spotify/tracks', () => ({ resolveTracks }));
 
 import { GET } from './route';
@@ -59,6 +61,7 @@ beforeEach(() => {
   requireUser.mockResolvedValue({ id: 'u-dj-1' });
   resolveTracks.mockResolvedValue([]);
   readLiveState.mockResolvedValue(baseLiveState());
+  readActivity.mockResolvedValue([]);
 
   from.mockImplementation((table: string) => {
     if (table === 'events') return eventsTable({ id: EVENT_ID, dj_id: 'u-dj-1', status: 'live' });
@@ -145,12 +148,36 @@ describe('GET /api/live/[id]/state', () => {
     const body = await res.json();
     expect(body).toHaveProperty('queue');
     expect(body).toHaveProperty('blocked');
+    // readActivity is mocked to resolve [] by default in this file's own
+    // beforeEach -- this asserts the route's OWN wiring passes that mocked
+    // result through untouched, not that readActivity itself returns [].
+    // readActivity's real behaviour is pinned in liveDal's own test file.
     expect(body.activity).toEqual([]);
     expect(body).toHaveProperty('mustPlayProgress');
     expect(body).toHaveProperty('unresolvedArtistIds');
     expect(body).toHaveProperty('now');
     expect(Array.isArray(body.queue)).toBe(true);
     expect(body.queue.length).toBe(2);
+  });
+
+  it('passes readActivity\'s result through as the response\'s activity field, by event id', async () => {
+    const activity = [
+      {
+        id: 'requested-s1',
+        verb: 'requested' as const,
+        guestName: 'Noa',
+        title: 'September',
+        artist: 'Earth, Wind & Fire',
+        createdAt: '2026-01-01T00:00:00.000Z',
+      },
+    ];
+    readActivity.mockResolvedValue(activity);
+
+    const res = await GET(req(), params(EVENT_ID));
+    const body = await res.json();
+
+    expect(body.activity).toEqual(activity);
+    expect(readActivity).toHaveBeenCalledWith(EVENT_ID);
   });
 
   it('returns played, so CeremonyCues and CoupleRules can turn a row green without a page refresh', async () => {

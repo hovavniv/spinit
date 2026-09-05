@@ -3,7 +3,7 @@ import { NextResponse } from 'next/server';
 import { requireUser } from '@/lib/auth/dal';
 import { createClient } from '@/lib/supabase/server';
 import { isUuid } from '@/lib/validation';
-import { readLiveState } from '@/lib/live/liveDal';
+import { readActivity, readLiveState } from '@/lib/live/liveDal';
 import { resolveTracks } from '@/lib/spotify/tracks';
 import { rankQueue } from '@/lib/live/rank';
 import { minutesLeftInPhase as computeMinutesLeftInPhase } from '@/lib/live/phaseClock';
@@ -36,6 +36,9 @@ export async function GET(
   if (event.status !== 'live') return new Response(null, { status: 404 });
 
   const state = await readLiveState(id);
+  // Task 24: its own reads, separate from readLiveState -- see readActivity's
+  // own header comment for why this is a clearly separated concern.
+  const activity = await readActivity(id);
 
   // Some pending suggestions may never have resolved against Spotify at all
   // (artistIds: []). Resolve up to 10 of them, write the results into
@@ -136,7 +139,7 @@ export async function GET(
   return NextResponse.json({
     queue,
     blocked,
-    activity: [],
+    activity,
     mustPlayProgress,
     unresolvedArtistIds,
     // Additive field: CeremonyCues and CoupleRules' "Played" column both

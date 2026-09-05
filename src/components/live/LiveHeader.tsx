@@ -98,10 +98,17 @@ export function LiveHeader({
   queueCount: number;
   mustPlayProgress: { played: number; total: number };
   endEvent: (formData: FormData) => Promise<ActionResult>;
-  /** `<siteUrl()>/join/<22-char token>` (design §7.2, §3.7) -- built by the page. */
-  joinUrl: string;
-  /** Server-rendered QR SVG markup for `joinUrl` (src/lib/live/qr.ts). */
-  qrSvg: string;
+  /**
+   * `<siteUrl()>/join/<22-char token>` (design §7.2, §3.7) -- built by the
+   * page. `null` only for the anomalous case of a `live` event with no
+   * `join_token` (a row that never went through `startEvent`'s normal
+   * minting path) -- the page computes both this and `qrSvg` as `null`
+   * together in that case, logging server-side, rather than handing this
+   * component a URL it already knows is broken.
+   */
+  joinUrl: string | null;
+  /** Server-rendered QR SVG markup for `joinUrl` (src/lib/live/qr.ts). `null` iff `joinUrl` is. */
+  qrSvg: string | null;
 }) {
   const minutes = minutesSinceStart(eventDate, startTime, now);
   const [qrOpen, setQrOpen] = useState(false);
@@ -118,13 +125,24 @@ export function LiveHeader({
             {formatDuration(minutes)}
           </p>
         </div>
-        <button type="button" className={styles.qrButton} onClick={() => setQrOpen(true)}>
-          Guest QR code
-        </button>
+        {joinUrl && qrSvg ? (
+          <button type="button" className={styles.qrButton} onClick={() => setQrOpen(true)}>
+            Guest QR code
+          </button>
+        ) : (
+          // The anomalous "live but no join_token" case (see the joinUrl
+          // prop's own comment) -- made visible on the DJ's own screen
+          // rather than silently rendering a QR for a URL already known to
+          // be broken (which would 404 on every guest's phone with the DJ
+          // never seeing anything wrong here).
+          <span className={styles.qrMissing} role="status">
+            No guest link for this event
+          </span>
+        )}
         <EndEventControl eventId={eventId} endAction={endEvent} />
       </div>
 
-      {qrOpen && (
+      {qrOpen && joinUrl && qrSvg && (
         <GuestQrModal
           coupleNames={coupleNames}
           joinUrl={joinUrl}
