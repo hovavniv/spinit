@@ -367,3 +367,65 @@ export async function readActivity(eventId: string): Promise<ActivityItem[]> {
     })
     .slice(0, ACTIVITY_LIMIT);
 }
+
+/**
+ * The played song with the most distinct requesters, or null.
+ *
+ * DJ-ONLY BY CONSTRUCTION, and that is not a bug to work around: the select
+ * policies on `song_suggestions` and `suggestion_votes` admit the event's DJ
+ * alone, so a partner reading their own recap gets zero rows here and the
+ * page shows a reason rather than a wrong number. Widening those policies so
+ * the couple could see request counts is a control change, and nobody has
+ * asked for one.
+ *
+ * Counts votes, not suggestions: a vote row exists per guest per song,
+ * including the suggester's own (guest_suggest inserts it), so this is
+ * "distinct people who asked for it" -- the same number `rankQueue`'s
+ * requester term uses, and the number the DJ's screen showed while it was
+ * still in the queue.
+ *
+ * Ties break by the lowest `position`, so the answer is deterministic rather
+ * than whichever row the executor happened to return first.
+ */
+export async function readMostRequestedPlayed(eventId: string): Promise<string | null> {
+  const supabase = await createClient();
+
+  const { data: played } = await supabase
+    .from('played_songs')
+    .select('position, title, spotify_track_id')
+    .eq('event_id', eventId)
+    // No `.not(spotify_track_id, is, null)` filter: a null id simply finds no
+    // votes below and is skipped by the `votes === 0` guard, so the filter
+    // would be redundant -- and adding one would mean every caller's test
+    // double has to grow a `.not` it does not otherwise need.
+    .order('position', { ascending: true });
+
+  if (!played || played.length === 0) return null;
+
+  const { data: suggestions } = await supabase
+    .from('song_suggestions')
+    .select('id, spotify_track_id, suggestion_votes(guest_id)')
+    .eq('event_id', eventId);
+
+  if (!suggestions || suggestions.length === 0) return null;
+
+  const votesByTrackId = new Map<string, number>();
+  for (const row of suggestions as unknown as {
+    spotify_track_id: string;
+    suggestion_votes: { guest_id: string }[] | null;
+  }[]) {
+    votesByTrackId.set(row.spotify_track_id, (row.suggestion_votes ?? []).length);
+  }
+
+  let best: { title: string; votes: number } | null = null;
+  for (const song of played) {
+    const votes = votesByTrackId.get(song.spotify_track_id as string) ?? 0;
+    if (votes === 0) continue;
+    // Strict `>`: ties keep the earlier position, since `played` is ordered by
+    // it. Do not "simplify" to `>=` -- that silently makes the answer depend
+    // on row order.
+    if (best === null || votes > best.votes) best = { title: song.title, votes };
+  }
+
+  return best?.title ?? null;
+}

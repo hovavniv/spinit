@@ -11,6 +11,11 @@ vi.mock('@/lib/auth/dal', () => ({
   getProfile: () => getProfile(),
 }));
 vi.mock('@/lib/events/dal', () => ({ getEventRecap: (id: string) => getEventRecap(id) }));
+// Mocked at the DAL, matching how `getEventRecap` is handled above, rather
+// than by teaching the Supabase double a third query shape. This file tests
+// the sidebar identity; `readMostRequestedPlayed`'s own logic is covered in
+// `liveDal.test.ts`.
+vi.mock('@/lib/live/liveDal', () => ({ readMostRequestedPlayed: async () => null }));
 vi.mock('@/lib/supabase/server', () => ({
   createClient: async () => ({
     from: () => ({ select: () => ({ eq: () => ({ maybeSingle }) }) }),
