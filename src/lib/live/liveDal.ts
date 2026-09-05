@@ -78,9 +78,21 @@ export async function readLiveState(eventId: string): Promise<LiveState> {
   const event = eventRead.data as EventRow;
 
   // Read 2: pending suggestions, same created_at+id tiebreaker.
+  //
+  // guest_sessions is named explicitly by FK constraint, not just by table
+  // name: song_suggestions has TWO paths to guest_sessions once
+  // suggestion_votes exists -- the direct `suggested_by` FK, and an
+  // implicit many-to-many through suggestion_votes (which itself FKs to
+  // both tables). PostgREST reports this ambiguity (PGRST201) against real
+  // data regardless of row count; it is a schema-shape issue, not something
+  // any mocked test or the throwaway-Postgres harness surfaces, since
+  // neither replays PostgREST's own schema cache. Found running the guest
+  // seed checkpoint walk against the live project (Task 19).
   const suggestionRead = await supabase
     .from('song_suggestions')
-    .select('id, spotify_track_id, title, artist, created_at, guest_sessions (display_name)')
+    .select(
+      'id, spotify_track_id, title, artist, created_at, guest_sessions!song_suggestions_suggested_by_fkey (display_name)',
+    )
     .eq('event_id', eventId)
     .eq('status', 'pending')
     .order('created_at', { ascending: true })
