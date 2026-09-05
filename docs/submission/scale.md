@@ -350,6 +350,20 @@ Ordered by how soon each would bite.
 11. **Nothing bounds guest session-minting**, and therefore nothing bounds either votes or the
     60-search-per-session budget's real effectiveness (`security.md` §8.5). A per-event
     session ceiling is the honest fix and is not built.
+12. **`guest_sessions` and `song_suggestions` have no delete grant for any role — including the
+    DJ — so both grow permanently, and this is measured rather than reasoned.** Every run of
+    `guest.integration.test.ts` mints fresh guest sessions and suggestions on the shared,
+    live `sara-daniel` fixture event and cannot clean them up afterward (§5.4 of
+    `test-plan.md` already names this as a known cost of that suite). Observed directly,
+    twice in one evening: the event accumulated to 214 guest sessions and 167 pending
+    suggestions before a demo walk, and a single subsequent gate run alone added 28 more
+    pending suggestions. Both times the DJ's own existing `update` grant was used to move the
+    accumulated rows to `status = 'skipped'` — a legitimate state the schema already has,
+    within existing grants, and the only lever available; the rows themselves cannot be
+    reclaimed, only hidden from the pending queue. This sits on the hot path of the live
+    screen's main poll query (§2.5), so unlike most of this document's numbers, it is not a
+    future concern — it is already true today, every time the test suite runs against the
+    linked project.
 
 ---
 
@@ -374,5 +388,8 @@ Ordered by how soon each would bite.
 7. **A per-event guest session ceiling** (`guest_count * 3`, or a flat number where
    `guest_count` is null) — §7 item 11's honest fix, and the one item on this list that closes
    a disclosed security gap rather than only improving a number.
+8. **A delete grant and a retention job for `guest_sessions`/`song_suggestions`** — §7 item
+   12's fix, and the only item on this list backed by a measurement made three separate times
+   in one evening rather than a projection.
 
 The first is the one that matters. The rest are guesses until it runs.
