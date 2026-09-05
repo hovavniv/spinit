@@ -1,11 +1,11 @@
 .section {
-  border-top: 1px solid oklch(0.91 0.012 60);
+  border-top: 1px solid var(--divider);
   padding-top: 28px;
   margin-bottom: 28px;
 }
 
 .waiting {
-  border-top: 1px solid oklch(0.91 0.012 60);
+  border-top: 1px solid var(--divider);
   padding-top: 28px;
   margin-bottom: 28px;
   color: var(--text-subtle);

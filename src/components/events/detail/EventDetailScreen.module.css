@@ -28,7 +28,7 @@
 }
 
 .segment {
-  border-top: 1px solid oklch(0.91 0.012 60);
+  border-top: 1px solid var(--divider);
   padding-top: 28px;
   margin-bottom: 28px;
 }
