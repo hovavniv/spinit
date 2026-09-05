@@ -52,6 +52,22 @@ describe('GET /join/[token]/search', () => {
     expect(rpc).not.toHaveBeenCalled();
   });
 
+  // M5: a malformed `q` must never spend one of the 60 guest_search_allow
+  // calls -- it can never produce a search result either way, and burning
+  // rate-limit budget on it is a hostile caller's cheapest way to exhaust a
+  // guest's search allowance.
+  it('400s a malformed q WITHOUT calling guest_search_allow', async () => {
+    cookieGet.mockReturnValue({ value: SESSION_ID });
+    const { request: req, context } = request(VALID_TOKEN, '');
+
+    const response = await GET(req, context);
+    const body = await response.json();
+
+    expect(response.status).toBe(400);
+    expect(body).toEqual({ error: 'bad_query' });
+    expect(rpc).not.toHaveBeenCalled();
+  });
+
   it('429s with search_limit when guest_search_allow returns false', async () => {
     cookieGet.mockReturnValue({ value: SESSION_ID });
     rpc.mockResolvedValue({ data: false, error: null });

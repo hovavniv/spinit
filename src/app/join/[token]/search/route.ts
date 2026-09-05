@@ -36,6 +36,17 @@ export async function GET(request: Request, { params }: { params: Promise<{ toke
     return NextResponse.json({ error: 'no_session' }, { status: 401 });
   }
 
+  // M5: validate `q` BEFORE spending one of the 60 guest_search_allow calls
+  // -- a malformed query can never produce a search, so charging the guest's
+  // rate limit for it first was pure waste, and cheap for a hostile caller
+  // to exploit deliberately.
+  const searchParams = new URL(request.url).searchParams;
+  const parsed = spotifySearchSchema.safeParse({ q: searchParams.get('q') ?? '', type: 'track' });
+
+  if (!parsed.success) {
+    return NextResponse.json({ error: 'bad_query' }, { status: 400 });
+  }
+
   const supabase = await createClient();
   const { data: allowed, error: allowError } = await supabase.rpc('guest_search_allow', {
     p_session_id: sessionId,
@@ -46,13 +57,6 @@ export async function GET(request: Request, { params }: { params: Promise<{ toke
   }
   if (!allowed) {
     return NextResponse.json({ error: 'search_limit' }, { status: 429 });
-  }
-
-  const searchParams = new URL(request.url).searchParams;
-  const parsed = spotifySearchSchema.safeParse({ q: searchParams.get('q') ?? '', type: 'track' });
-
-  if (!parsed.success) {
-    return NextResponse.json({ error: 'bad_query' }, { status: 400 });
   }
 
   try {
