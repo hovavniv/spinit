@@ -354,6 +354,43 @@ describe('rankQueue', () => {
     expect(row?.reasons).toContainEqual({ kind: 'genre-pending' });
   });
 
+  // Widened 2026-09-05 (Task 12a): a track with a RESOLVED artist that has
+  // not been genre-enriched yet must look the same to the DJ as an
+  // unresolved one -- both mean "the do-not-play genre check has not run".
+  // Without this, a song could pass the genre check purely because
+  // enrichment hasn't caught up, with no signal it was never actually
+  // checked -- the same failure shape as a blocked song silently vanishing.
+  it('emits genre-pending when the artist is resolved but has no genre entry yet', () => {
+    const suggestion = makeSuggestion({ id: 's1', artistIds: ['artist-1'] });
+    // A DIFFERENT artist has genre data; 'artist-1' has none at all -- not
+    // even an empty {} entry, which would mean "checked, no genres found"
+    // rather than "not checked yet".
+    const input = makeInput({
+      suggestions: [suggestion],
+      genresByArtistId: { 'artist-other': { pop: 100 } },
+    });
+
+    const result = rankQueue(input);
+
+    const row = result.queue.find((r) => r.suggestion.id === 's1');
+    expect(row?.reasons).toContainEqual({ kind: 'genre-pending' });
+  });
+
+  it('does NOT emit genre-pending when the artist is resolved with genuinely zero genres', () => {
+    const suggestion = makeSuggestion({ id: 's1', artistIds: ['artist-1'] });
+    // An EMPTY entry (not a missing one) means the check ran and found
+    // nothing -- a real, valid outcome distinct from "not yet checked".
+    const input = makeInput({
+      suggestions: [suggestion],
+      genresByArtistId: { 'artist-1': {} },
+    });
+
+    const result = rankQueue(input);
+
+    const row = result.queue.find((r) => r.suggestion.id === 's1');
+    expect(row?.reasons).not.toContainEqual({ kind: 'genre-pending' });
+  });
+
   it('is invariant under input permutation', () => {
     const suggestions = ['a', 'b', 'c', 'd'].map((id) =>
       makeSuggestion({

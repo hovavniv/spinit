@@ -105,17 +105,29 @@ export function rankQueue(input: RankInput): { queue: RankedSong[]; blocked: Ran
     }
 
     // Term 6: phase fit.
+    //
+    // genre-pending fires on EITHER of two states the DJ cannot tell apart by
+    // looking at the queue otherwise (design §6.2b, widened 2026-09-05,
+    // Task 12a): a track with no resolved artists at all, OR one whose
+    // artists are resolved but have no genresByArtistId ENTRY yet (not
+    // enriched). Both mean "the do-not-play genre check has not run for this
+    // song" -- and a song that was never checked must not look identical to
+    // one that WAS checked and genuinely has no matching genre. `anyResolved`
+    // tracks entry PRESENCE, deliberately distinct from whether that entry
+    // has any genre keys: an artist resolved with zero identified genres
+    // (a real, valid outcome) still counts as checked and gets no reason at
+    // all, same as before -- only a MISSING entry means "not yet known".
     if (suggestion.artistIds.length > 0) {
       const wants = new Set(PHASE_GENRES[phase].wants);
       const avoids = new Set(PHASE_GENRES[phase].avoids);
-      let anyGenreData = false;
+      let anyResolved = false;
       let fitsWants = false;
       let fitsAvoids = false;
       for (const artistId of suggestion.artistIds) {
         const genres = genresByArtistId[artistId];
         if (genres === undefined) continue;
+        anyResolved = true;
         for (const genre of Object.keys(genres)) {
-          anyGenreData = true;
           if (wants.has(genre)) fitsWants = true;
           if (avoids.has(genre)) fitsAvoids = true;
         }
@@ -126,11 +138,13 @@ export function rankQueue(input: RankInput): { queue: RankedSong[]; blocked: Ran
       } else if (fitsAvoids) {
         score -= 8;
         reasons.push({ kind: 'phase-fit', phase, fits: false });
-      } else if (!anyGenreData) {
-        // No genre data at all -- no reason, no score change.
+      } else if (!anyResolved) {
+        reasons.push({ kind: 'genre-pending' });
       }
+      // else: every artist resolved, none matched wants or avoids -- checked,
+      // genuinely no signal. No reason, no score change.
     } else {
-      // Term "genre-pending": track has no resolved artists yet.
+      // No resolved artists at all -- the track itself hasn't resolved yet.
       reasons.push({ kind: 'genre-pending' });
     }
 
