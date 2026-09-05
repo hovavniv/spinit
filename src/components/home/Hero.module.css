@@ -105,7 +105,7 @@
   width: 90px;
   height: 20px;
   background: var(--ink-dark);
-  border-radius: 12px;
+  border-radius: var(--radius);
   margin: 0 auto 8px;
 }
 

@@ -13,7 +13,7 @@
   right: 0;
   background: white;
   border: 1px solid oklch(0.9 0.012 60);
-  border-radius: 12px;
+  border-radius: var(--radius);
   box-shadow: 0 12px 28px oklch(0.2 0.02 50 / 0.14);
   z-index: 20;
   overflow: hidden;

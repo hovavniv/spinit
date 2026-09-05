@@ -15,7 +15,7 @@
   width: 100%;
   max-width: 380px;
   background: var(--surface);
-  border-radius: 20px;
+  border-radius: var(--radius);
   border: 1px solid var(--border);
   padding: 32px 28px;
   display: flex;

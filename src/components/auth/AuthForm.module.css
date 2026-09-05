@@ -45,7 +45,7 @@
 .phoneInput {
   width: 100%;
   padding: 13px 14px;
-  border-radius: 12px;
+  border-radius: var(--radius);
   border: 1.5px solid var(--border-input);
   font-family: var(--font-body), sans-serif;
   font-size: 14.5px;
@@ -69,7 +69,7 @@
 
 .dialCode {
   padding: 13px 10px;
-  border-radius: 12px;
+  border-radius: var(--radius);
   border: 1.5px solid var(--border-input);
   font-family: var(--font-body), sans-serif;
   font-size: 14.5px;
@@ -132,7 +132,7 @@
   font-size: 13.5px;
   color: var(--text-muted);
   background: var(--accent-tint);
-  border-radius: 12px;
+  border-radius: var(--radius);
   padding: 12px 14px;
   margin: 0 0 20px;
 }

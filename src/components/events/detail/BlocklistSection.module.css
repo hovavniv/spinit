@@ -35,7 +35,7 @@
   justify-content: space-between;
   gap: 12px;
   padding: 12px 14px;
-  border-radius: 12px;
+  border-radius: var(--radius);
   background: var(--bg);
   border: 1px solid var(--border);
 }
@@ -106,7 +106,7 @@
 
 .select {
   padding: 11px 13px;
-  border-radius: 10px;
+  border-radius: var(--radius);
   border: 1.5px solid var(--border-input);
   font-family: var(--font-body), sans-serif;
   font-size: 13.5px;
@@ -117,7 +117,7 @@
 .input {
   flex: 1 1 160px;
   padding: 11px 13px;
-  border-radius: 10px;
+  border-radius: var(--radius);
   border: 1.5px solid var(--border-input);
   font-family: var(--font-body), sans-serif;
   font-size: 13.5px;
@@ -137,7 +137,7 @@
   color: white;
   border: none;
   padding: 0 20px;
-  border-radius: 10px;
+  border-radius: var(--radius);
   font-family: var(--font-body), sans-serif;
   font-weight: 700;
   font-size: 13.5px;

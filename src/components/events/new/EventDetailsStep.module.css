@@ -40,7 +40,7 @@
 .input {
   padding: 13px 14px;
   border: 1.5px solid var(--border-input);
-  border-radius: 12px;
+  border-radius: var(--radius);
   background: var(--surface);
   color: var(--ink-dark);
   font-family: inherit;

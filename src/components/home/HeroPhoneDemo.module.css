@@ -48,7 +48,7 @@
   align-items: center;
   justify-content: space-between;
   padding: 10px 12px;
-  border-radius: 16px;
+  border-radius: var(--radius);
   background: var(--bg);
   transition: transform 0.2s ease;
   transform: scale(1);
@@ -96,7 +96,7 @@
 
 .requestRow {
   padding: 10px 12px;
-  border-radius: 16px;
+  border-radius: var(--radius);
   background: var(--bg);
   cursor: pointer;
   border: none;

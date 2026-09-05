@@ -74,7 +74,7 @@
 .featureIcon {
   width: 26px;
   height: 26px;
-  border-radius: 8px;
+  border-radius: var(--radius);
   background: var(--panel-raised);
   flex-shrink: 0;
 }

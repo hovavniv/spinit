@@ -23,7 +23,7 @@
 
 .row {
   border: 1.5px solid var(--border-input);
-  border-radius: 12px;
+  border-radius: var(--radius);
   padding: 16px 18px;
 }
 

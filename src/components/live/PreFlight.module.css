@@ -4,7 +4,7 @@
   padding: 32px;
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: 16px;
+  border-radius: var(--radius);
 }
 
 .coupleNames {

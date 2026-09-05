@@ -27,7 +27,7 @@
   gap: 2px;
   padding: 10px 12px;
   background: var(--accent-tint);
-  border-radius: 10px;
+  border-radius: var(--radius);
 }
 
 .title {

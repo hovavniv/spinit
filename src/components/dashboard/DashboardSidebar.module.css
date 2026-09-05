@@ -56,7 +56,7 @@
 
 .navItem {
   padding: 11px 16px;
-  border-radius: 12px;
+  border-radius: var(--radius);
   color: oklch(0.75 0.01 50);
   font-weight: 600;
   font-size: 14px;
@@ -71,7 +71,7 @@
 
 .navItemCurrent {
   padding: 11px 16px;
-  border-radius: 12px;
+  border-radius: var(--radius);
   background: var(--panel-raised);
   color: white;
   font-weight: 600;
@@ -87,7 +87,7 @@
   width: 100%;
   padding: 10px 12px;
   border: 0;
-  border-radius: 8px;
+  border-radius: var(--radius);
   background: transparent;
   /* the same value .navItem uses, so sign-out reads as part of the rail */
   color: oklch(0.75 0.01 50);

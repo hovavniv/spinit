@@ -14,7 +14,7 @@
   min-height: 44px;
   padding: 10px 14px;
   border: 1px solid var(--border-input);
-  border-radius: 12px;
+  border-radius: var(--radius);
   font-size: 16px;
   background: var(--surface);
   color: var(--ink-dark);
