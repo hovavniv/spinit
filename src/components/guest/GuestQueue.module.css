@@ -28,8 +28,8 @@
 }
 
 .rowBacked {
-  border-color: var(--ok);
-  background: var(--ok-tint);
+  border-color: var(--accent);
+  background: var(--surface);
 }
 
 .badge {
@@ -71,7 +71,7 @@
   min-height: 44px;
   padding: 0 14px;
   border-radius: var(--radius-pill);
-  border: 1px solid var(--border);
+  border: 1.5px solid var(--border-control);
   background: var(--surface);
   font-size: 13px;
   font-weight: 600;
@@ -80,7 +80,7 @@
 }
 
 .backButtonActive {
-  border-color: var(--ok);
-  background: var(--ok-tint);
-  color: var(--ok);
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--on-accent);
 }
