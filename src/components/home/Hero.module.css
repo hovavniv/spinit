@@ -49,7 +49,7 @@
 
 .primaryCta {
   background: var(--accent);
-  color: white;
+  color: var(--on-accent);
   padding: 14px 28px;
   border-radius: var(--radius-pill);
   font-weight: 600;

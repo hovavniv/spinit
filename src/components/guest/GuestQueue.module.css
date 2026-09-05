@@ -46,7 +46,7 @@
 }
 
 .badgeTop {
-  color: white;
+  color: var(--on-accent);
   background: var(--accent);
 }
 

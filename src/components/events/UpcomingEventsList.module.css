@@ -168,7 +168,7 @@
    written out in full, the same way that file writes .value and .valuePending. */
 .pillActive {
   background: var(--accent);
-  color: white;
+  color: var(--on-accent);
   border: 1.5px solid var(--accent);
   padding: 9px 15px;
   border-radius: var(--radius-pill);

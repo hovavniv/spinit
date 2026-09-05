@@ -33,7 +33,7 @@
 
 .save {
   background: var(--accent);
-  color: white;
+  color: var(--on-accent);
   border: none;
   padding: 13px 26px;
   border-radius: var(--radius-pill);

@@ -45,7 +45,7 @@
 
 .tabActive {
   background: var(--accent);
-  color: white;
+  color: var(--on-accent);
 }
 
 /* Below 900px: the login/register split collapses to one column, the

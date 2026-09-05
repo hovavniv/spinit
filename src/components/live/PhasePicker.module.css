@@ -24,7 +24,7 @@
 
 .optionSelected {
   background: var(--accent);
-  color: white;
+  color: var(--on-accent);
 }
 
 .option:focus-visible {

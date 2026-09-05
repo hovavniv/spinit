@@ -22,7 +22,7 @@
 
 .tabActive {
   background: var(--accent);
-  color: white;
+  color: var(--on-accent);
 }
 
 .title {
@@ -133,7 +133,7 @@
 
 .rankBadgeTop {
   background: var(--accent);
-  color: white;
+  color: var(--on-accent);
 }
 
 .requestTitle {

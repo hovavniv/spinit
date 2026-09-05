@@ -51,7 +51,7 @@
 
 .send {
   background: var(--accent);
-  color: white;
+  color: var(--on-accent);
   border: none;
   padding: 12px 22px;
   border-radius: var(--radius-pill);

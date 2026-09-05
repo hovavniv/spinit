@@ -105,7 +105,7 @@
 .copyButton {
   flex-shrink: 0;
   background: var(--accent);
-  color: white;
+  color: var(--on-accent);
   border: none;
   border-radius: var(--radius-pill);
   padding: 8px 16px;

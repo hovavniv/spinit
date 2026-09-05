@@ -71,7 +71,7 @@
   padding: 13px 26px;
   border-radius: var(--radius-pill);
   background: var(--accent);
-  color: white;
+  color: var(--on-accent);
   font-size: 14.5px;
   font-weight: 700;
 }

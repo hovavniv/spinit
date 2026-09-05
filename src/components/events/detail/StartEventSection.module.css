@@ -25,7 +25,7 @@
 .start {
   background: var(--accent);
   border: none;
-  color: white;
+  color: var(--on-accent);
   padding: 10px 20px;
   border-radius: var(--radius-pill);
   font-family: var(--font-body), sans-serif;

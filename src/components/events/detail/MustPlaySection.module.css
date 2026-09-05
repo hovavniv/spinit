@@ -100,7 +100,7 @@
 
 .add {
   background: var(--accent);
-  color: white;
+  color: var(--on-accent);
   border: none;
   padding: 0 20px;
   border-radius: var(--radius);

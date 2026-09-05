@@ -96,7 +96,7 @@
 .submit {
   width: 100%;
   background: var(--accent);
-  color: white;
+  color: var(--on-accent);
   border: none;
   padding: 14px 0;
   border-radius: var(--radius-pill);

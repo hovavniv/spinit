@@ -28,7 +28,7 @@
 
 .cta {
   background: var(--accent);
-  color: white;
+  color: var(--on-accent);
   padding: 10px 22px;
   border-radius: var(--radius-pill);
   font-weight: 600;
