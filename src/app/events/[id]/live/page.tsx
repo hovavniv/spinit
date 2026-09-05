@@ -11,6 +11,8 @@ import { endEvent } from '@/lib/events/detailActions';
 import { readLiveState } from '@/lib/live/liveDal';
 import { rankQueue } from '@/lib/live/rank';
 import { minutesLeftInPhase } from '@/lib/live/phaseClock';
+import { siteUrl } from '@/lib/auth/site-url';
+import { generateQrSvg } from '@/lib/live/qr';
 import { AppShell } from '@/components/shell/AppShell';
 import { DashboardSidebar } from '@/components/dashboard/DashboardSidebar';
 import { PreFlight } from '@/components/live/PreFlight';
@@ -94,6 +96,20 @@ export default async function LiveEventPage({ params }: PageProps<'/events/[id]/
     ).length;
     const mustPlayProgress = { played: mustPlayPlayed, total: state.mustPlay.length };
 
+    // The real join URL, never the artboard's illustrative readable slug
+    // (design §7.2, §3.7): `<site>/join/<22-char token>`. `siteUrl()`
+    // (src/lib/auth/site-url.ts) rather than `headers()` or
+    // `window.location.origin` -- it is the one existing convention this
+    // codebase already has for deriving its own origin, and its own header
+    // states why: a forged `Host`/`X-Forwarded-Host` header must not be able
+    // to influence a link this app hands out and prints on paper. `join_token`
+    // is only ever null for a `live` row in the broken-row case `startEvent`
+    // is designed to prevent (§5.3) -- falls back to an empty token segment
+    // rather than throwing, matching `toLiveEvent`'s "log and refuse" posture
+    // elsewhere in this slice rather than crashing the whole screen.
+    const joinUrl = `${siteUrl()}/join/${event.join_token ?? ''}`;
+    const qrSvg = await generateQrSvg(joinUrl);
+
     liveScreen = (
       <LiveScreen
         eventId={event.id}
@@ -108,6 +124,8 @@ export default async function LiveEventPage({ params }: PageProps<'/events/[id]/
         skipSuggestion={skipSuggestion}
         playPick={playPick}
         endEvent={endEvent}
+        joinUrl={joinUrl}
+        qrSvg={qrSvg}
         queue={queue}
         blocked={blocked}
         mustPlay={state.mustPlay}

@@ -45,6 +45,10 @@ export interface LiveScreenProps {
    * only place a real server action gets wired in.
    */
   endEvent: (formData: FormData) => Promise<ActionResult>;
+  /** `<siteUrl()>/join/<22-char token>` (design §7.2, §3.7) -- threaded down to LiveHeader's QR modal. */
+  joinUrl: string;
+  /** Server-rendered QR SVG markup for `joinUrl` (src/lib/live/qr.ts), computed once in the page. */
+  qrSvg: string;
   queue: RankedSong[];
   blocked: RankedSong[];
   mustPlay: MustPlayRow[];
@@ -77,6 +81,8 @@ export function LiveScreen({
   skipSuggestion,
   playPick,
   endEvent,
+  joinUrl,
+  qrSvg,
   queue,
   blocked,
   mustPlay,
@@ -131,6 +137,8 @@ export function LiveScreen({
         queueCount={polled.queue.length}
         mustPlayProgress={polled.mustPlayProgress}
         endEvent={endEvent}
+        joinUrl={joinUrl}
+        qrSvg={qrSvg}
       />
       <CeremonyCues
         mustPlay={mustPlay}

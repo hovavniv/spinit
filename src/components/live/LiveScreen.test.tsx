@@ -191,6 +191,8 @@ async function renderLiveScreen() {
       skipSuggestion={skipSuggestion}
       playPick={playPick}
       endEvent={endEvent}
+      joinUrl="https://spinit.live/join/aB3xY9kLp2QmN4rT7vW1zX"
+      qrSvg="<svg></svg>"
       queue={queue}
       blocked={blocked}
       mustPlay={state.mustPlay}
@@ -273,6 +275,8 @@ describe('LiveScreen', () => {
         skipSuggestion={vi.fn(async () => ({ ok: true as const }))}
         playPick={vi.fn(async () => ({ ok: true as const, position: 1, wasAlreadyPlayed: false }))}
         endEvent={vi.fn(async () => ({ ok: true as const }))}
+        joinUrl="https://spinit.live/join/aB3xY9kLp2QmN4rT7vW1zX"
+        qrSvg="<svg></svg>"
         queue={[]}
         blocked={[]}
         mustPlay={[]}

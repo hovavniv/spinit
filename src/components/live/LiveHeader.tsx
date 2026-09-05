@@ -1,9 +1,12 @@
 'use client';
 
+import { useState } from 'react';
+
 import type { EventPhase } from '@/lib/dashboard/types';
 import type { ActionResult } from '@/lib/auth/errors';
 import { PhasePicker } from './PhasePicker';
 import { EndEventControl } from './EndEventControl';
+import { GuestQrModal } from './GuestQrModal';
 import styles from './LiveHeader.module.css';
 
 /**
@@ -81,6 +84,8 @@ export function LiveHeader({
   queueCount,
   mustPlayProgress,
   endEvent,
+  joinUrl,
+  qrSvg,
 }: {
   eventId: string;
   coupleNames: string;
@@ -93,8 +98,13 @@ export function LiveHeader({
   queueCount: number;
   mustPlayProgress: { played: number; total: number };
   endEvent: (formData: FormData) => Promise<ActionResult>;
+  /** `<siteUrl()>/join/<22-char token>` (design §7.2, §3.7) -- built by the page. */
+  joinUrl: string;
+  /** Server-rendered QR SVG markup for `joinUrl` (src/lib/live/qr.ts). */
+  qrSvg: string;
 }) {
   const minutes = minutesSinceStart(eventDate, startTime, now);
+  const [qrOpen, setQrOpen] = useState(false);
 
   return (
     <header className={styles.header}>
@@ -108,12 +118,20 @@ export function LiveHeader({
             {formatDuration(minutes)}
           </p>
         </div>
-        {/* Opens the guest QR modal -- Stage 5, not this task (Task 16). */}
-        <button type="button" className={styles.qrButton}>
+        <button type="button" className={styles.qrButton} onClick={() => setQrOpen(true)}>
           Guest QR code
         </button>
         <EndEventControl eventId={eventId} endAction={endEvent} />
       </div>
+
+      {qrOpen && (
+        <GuestQrModal
+          coupleNames={coupleNames}
+          joinUrl={joinUrl}
+          qrSvg={qrSvg}
+          onClose={() => setQrOpen(false)}
+        />
+      )}
 
       <div className={styles.stats}>
         <span className={styles.stat}>{queueCount} in queue</span>
