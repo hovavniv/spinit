@@ -1,7 +1,9 @@
 'use client';
 
 import type { EventPhase } from '@/lib/dashboard/types';
+import type { ActionResult } from '@/lib/auth/errors';
 import { PhasePicker } from './PhasePicker';
+import { EndEventControl } from './EndEventControl';
 import styles from './LiveHeader.module.css';
 
 /**
@@ -68,6 +70,7 @@ function formatClock12h(startTime: string): string {
  * actually calls the `setPhase` server action.
  */
 export function LiveHeader({
+  eventId,
   coupleNames,
   venue,
   eventDate,
@@ -77,7 +80,9 @@ export function LiveHeader({
   onPhaseChange,
   queueCount,
   mustPlayProgress,
+  endEvent,
 }: {
+  eventId: string;
   coupleNames: string;
   venue: string;
   eventDate: string;
@@ -87,6 +92,7 @@ export function LiveHeader({
   onPhaseChange: (phase: EventPhase) => void;
   queueCount: number;
   mustPlayProgress: { played: number; total: number };
+  endEvent: (formData: FormData) => Promise<ActionResult>;
 }) {
   const minutes = minutesSinceStart(eventDate, startTime, now);
 
@@ -106,6 +112,7 @@ export function LiveHeader({
         <button type="button" className={styles.qrButton}>
           Guest QR code
         </button>
+        <EndEventControl eventId={eventId} endAction={endEvent} />
       </div>
 
       <div className={styles.stats}>

@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 
 import type { EventPhase } from '@/lib/dashboard/types';
+import type { ActionResult } from '@/lib/auth/errors';
 import type { BlocklistRow, MustPlayRow } from '@/lib/events/detailTypes';
 import type { PlayedTrack, RankedSong } from '@/lib/live/liveTypes';
 import type { LiveActionResult, PlayResult } from '@/lib/live/liveActions';
@@ -37,6 +38,13 @@ export interface LiveScreenProps {
   playSuggestion: (eventId: string, suggestionId: string) => Promise<PlayResult>;
   skipSuggestion: (eventId: string, suggestionId: string) => Promise<LiveActionResult>;
   playPick: (eventId: string, title: string, artist: string, trackId: string) => Promise<PlayResult>;
+  /**
+   * `feat/upcoming-events`' own `endEvent` (design §12: this branch calls it,
+   * never writes `status = 'completed'` itself). Taken as a prop, the same
+   * pattern as every other action here -- a Server Component page is the
+   * only place a real server action gets wired in.
+   */
+  endEvent: (formData: FormData) => Promise<ActionResult>;
   queue: RankedSong[];
   blocked: RankedSong[];
   mustPlay: MustPlayRow[];
@@ -68,6 +76,7 @@ export function LiveScreen({
   playSuggestion,
   skipSuggestion,
   playPick,
+  endEvent,
   queue,
   blocked,
   mustPlay,
@@ -109,6 +118,7 @@ export function LiveScreen({
         </p>
       )}
       <LiveHeader
+        eventId={eventId}
         coupleNames={coupleNames}
         venue={venue}
         eventDate={eventDate}
@@ -120,6 +130,7 @@ export function LiveScreen({
         }}
         queueCount={polled.queue.length}
         mustPlayProgress={polled.mustPlayProgress}
+        endEvent={endEvent}
       />
       <CeremonyCues
         mustPlay={mustPlay}

@@ -175,6 +175,7 @@ async function renderLiveScreen() {
   const playSuggestion = vi.fn(async () => ({ ok: true as const, position: 1, wasAlreadyPlayed: false }));
   const skipSuggestion = vi.fn(async () => ({ ok: true as const }));
   const playPick = vi.fn(async () => ({ ok: true as const, position: 1, wasAlreadyPlayed: false }));
+  const endEvent = vi.fn(async () => ({ ok: true as const }));
 
   render(
     <LiveScreen
@@ -189,6 +190,7 @@ async function renderLiveScreen() {
       playSuggestion={playSuggestion}
       skipSuggestion={skipSuggestion}
       playPick={playPick}
+      endEvent={endEvent}
       queue={queue}
       blocked={blocked}
       mustPlay={state.mustPlay}
@@ -199,7 +201,7 @@ async function renderLiveScreen() {
     />,
   );
 
-  return { queue, blocked, setPhase, playSuggestion, skipSuggestion, playPick };
+  return { queue, blocked, setPhase, playSuggestion, skipSuggestion, playPick, endEvent };
 }
 
 describe('LiveScreen', () => {
@@ -270,6 +272,7 @@ describe('LiveScreen', () => {
         playSuggestion={vi.fn(async () => ({ ok: true as const, position: 1, wasAlreadyPlayed: false }))}
         skipSuggestion={vi.fn(async () => ({ ok: true as const }))}
         playPick={vi.fn(async () => ({ ok: true as const, position: 1, wasAlreadyPlayed: false }))}
+        endEvent={vi.fn(async () => ({ ok: true as const }))}
         queue={[]}
         blocked={[]}
         mustPlay={[]}
