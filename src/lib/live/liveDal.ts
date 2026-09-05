@@ -147,16 +147,43 @@ export async function readLiveState(eventId: string): Promise<LiveState> {
     }
   }
 
-  const suggestions: QueueSuggestion[] = suggestionRows.map((row) => ({
-    id: row.id,
-    spotifyTrackId: row.spotify_track_id,
-    title: row.title,
-    artist: row.artist,
-    artistIds: artistIdsByTrackId.get(row.spotify_track_id) ?? [],
-    requesters: voteTally.get(row.id) ?? 0,
-    createdAt: row.created_at,
-    suggestedByName: firstRow(row.guest_sessions)?.display_name ?? '',
-  }));
+  // spotify_tracks: the resolved DISPLAY title/artist (design §8.1) --
+  // separate from spotify_track_artists above, and from the guest's own
+  // untrusted title/artist on song_suggestions. Same "own query, not an
+  // embed" reasoning: spotify_track_id is a bare text match, not a declared
+  // FK. Screens (Task 16) prefer this over the guest's text when non-null;
+  // rankQueue never reads either pair -- matching is on ids only (§4.3).
+  const resolvedTrackById = new Map<string, { title: string; artist: string }>();
+  if (distinctTrackIds.length > 0) {
+    const trackRead = await supabase
+      .from('spotify_tracks')
+      .select('spotify_track_id, title, artist')
+      .in('spotify_track_id', distinctTrackIds);
+
+    if (trackRead.error) {
+      throw new Error(`readLiveState: spotify_tracks read failed: ${trackRead.error.code}`);
+    }
+
+    for (const row of (trackRead.data ?? []) as { spotify_track_id: string; title: string; artist: string }[]) {
+      resolvedTrackById.set(row.spotify_track_id, { title: row.title, artist: row.artist });
+    }
+  }
+
+  const suggestions: QueueSuggestion[] = suggestionRows.map((row) => {
+    const resolved = resolvedTrackById.get(row.spotify_track_id);
+    return {
+      id: row.id,
+      spotifyTrackId: row.spotify_track_id,
+      title: row.title,
+      artist: row.artist,
+      resolvedTitle: resolved?.title ?? null,
+      resolvedArtist: resolved?.artist ?? null,
+      artistIds: artistIdsByTrackId.get(row.spotify_track_id) ?? [],
+      requesters: voteTally.get(row.id) ?? 0,
+      createdAt: row.created_at,
+      suggestedByName: firstRow(row.guest_sessions)?.display_name ?? '',
+    };
+  });
 
   const played: PlayedTrack[] = playedRows.map((row) => ({
     position: row.position,

@@ -50,11 +50,13 @@ export async function GET(
     const resolved = await resolveTracks(unresolvedTrackIds, { max: 10, concurrency: 5 });
 
     const artistIdsByTrackId = new Map<string, string[]>();
+    const displayByTrackId = new Map<string, { title: string; artist: string }>();
     for (const track of resolved) {
       artistIdsByTrackId.set(
         track.id,
         track.artists.map((a) => a.id),
       );
+      displayByTrackId.set(track.id, { title: track.title, artist: track.artist });
 
       await supabase.from('spotify_tracks').upsert({
         spotify_track_id: track.id,
@@ -79,11 +81,20 @@ export async function GET(
     }
 
     // In-place patch (cheaper than re-calling readLiveState): the resolved
-    // array's own `artists` field already has everything needed.
+    // array's own fields already have everything needed, including the
+    // resolved display title/artist -- so a track resolved mid-poll shows
+    // its real name immediately too, not just its artist ids.
     if (artistIdsByTrackId.size > 0) {
       state.suggestions = state.suggestions.map((s) => {
         const artistIds = artistIdsByTrackId.get(s.spotifyTrackId);
-        return artistIds ? { ...s, artistIds } : s;
+        if (!artistIds) return s;
+        const display = displayByTrackId.get(s.spotifyTrackId);
+        return {
+          ...s,
+          artistIds,
+          resolvedTitle: display?.title ?? s.resolvedTitle,
+          resolvedArtist: display?.artist ?? s.resolvedArtist,
+        };
       });
     }
   }

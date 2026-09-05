@@ -10,6 +10,8 @@ function makeSuggestion(overrides: Partial<QueueSuggestion> = {}): QueueSuggesti
     spotifyTrackId: 'track-1',
     title: 'Some Song',
     artist: 'Some Artist',
+    resolvedTitle: null,
+    resolvedArtist: null,
     artistIds: ['artist-1'],
     requesters: 1,
     createdAt: '2026-09-05T10:00:00.000Z',

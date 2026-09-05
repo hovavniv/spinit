@@ -82,11 +82,17 @@ const artistsOrder1 = vi.fn((col: string, opts: unknown) => {
 const artistsIn = vi.fn(() => ({ order: artistsOrder1 }));
 const artistsSelect = vi.fn(() => ({ in: artistsIn }));
 
+// ---- spotify_tracks chain: .select().in(), resolves directly ----
+const tracksResult = vi.fn();
+const tracksIn = vi.fn(() => tracksResult());
+const tracksSelect = vi.fn(() => ({ in: tracksIn }));
+
 const from = vi.fn((table: string) => {
   if (table === 'events') return eventsChain;
   if (table === 'song_suggestions') return { select: suggestionsSelect };
   if (table === 'suggestion_votes') return { select: votesSelect };
   if (table === 'spotify_track_artists') return { select: artistsSelect };
+  if (table === 'spotify_tracks') return { select: tracksSelect };
   throw new Error(`liveDal.test.ts: unexpected table "${table}"`);
 });
 
@@ -124,6 +130,7 @@ beforeEach(() => {
   suggestionsResult.mockResolvedValue({ data: [], error: null });
   votesIn.mockResolvedValue({ data: [], error: null });
   artistsResult.mockResolvedValue({ data: [], error: null });
+  tracksResult.mockResolvedValue({ data: [], error: null });
   (readGenresForEvent as ReturnType<typeof vi.fn>).mockResolvedValue({});
   (createClient as ReturnType<typeof vi.fn>).mockResolvedValue({ from });
 });
@@ -262,6 +269,44 @@ describe('readLiveState', () => {
     const state = await readLiveState(EVENT);
 
     expect(state.suggestions[0].artistIds).toEqual(['artist-1', 'artist-2']);
+  });
+
+  it('resolves the DISPLAY title/artist from spotify_tracks, separate from the guest\'s own text', async () => {
+    suggestionsResult.mockResolvedValue({
+      data: [{ id: 's1', spotify_track_id: 'aaaaaaaaaaaaaaaaaaaaaa', title: 'guest typed this', artist: 'guest artist', created_at: '2026-01-01', guest_sessions: { display_name: 'Noa' } }],
+      error: null,
+    });
+    tracksResult.mockResolvedValue({
+      data: [{ spotify_track_id: 'aaaaaaaaaaaaaaaaaaaaaa', title: 'September', artist: 'Earth, Wind & Fire' }],
+      error: null,
+    });
+
+    const state = await readLiveState(EVENT);
+
+    expect(state.suggestions[0].title).toBe('guest typed this');
+    expect(state.suggestions[0].resolvedTitle).toBe('September');
+    expect(state.suggestions[0].resolvedArtist).toBe('Earth, Wind & Fire');
+  });
+
+  it('leaves resolvedTitle/resolvedArtist null for a track with no spotify_tracks row', async () => {
+    suggestionsResult.mockResolvedValue({
+      data: [{ id: 's1', spotify_track_id: 'aaaaaaaaaaaaaaaaaaaaaa', title: 'A', artist: 'B', created_at: '2026-01-01', guest_sessions: { display_name: 'Noa' } }],
+      error: null,
+    });
+    tracksResult.mockResolvedValue({ data: [], error: null });
+
+    const state = await readLiveState(EVENT);
+
+    expect(state.suggestions[0].resolvedTitle).toBeNull();
+    expect(state.suggestions[0].resolvedArtist).toBeNull();
+  });
+
+  it('skips the spotify_tracks query when there are no distinct track ids', async () => {
+    suggestionsResult.mockResolvedValue({ data: [], error: null });
+
+    await readLiveState(EVENT);
+
+    expect(tracksSelect).not.toHaveBeenCalled();
   });
 
   it('gives a suggestion whose track has no spotify_track_artists rows an empty artistIds', async () => {
