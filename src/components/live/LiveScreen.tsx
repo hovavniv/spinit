@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation';
 import type { EventPhase } from '@/lib/dashboard/types';
 import type { BlocklistRow, MustPlayRow } from '@/lib/events/detailTypes';
 import type { PlayedTrack, RankedSong } from '@/lib/live/liveTypes';
-import type { LiveActionResult } from '@/lib/live/liveActions';
+import type { LiveActionResult, PlayResult } from '@/lib/live/liveActions';
 import { LiveHeader } from './LiveHeader';
 import { CeremonyCues } from './CeremonyCues';
 import { RequestQueue } from './RequestQueue';
@@ -34,6 +34,9 @@ export interface LiveScreenProps {
    * that wires the real action in.
    */
   setPhase: (eventId: string, phase: EventPhase) => Promise<LiveActionResult>;
+  playSuggestion: (eventId: string, suggestionId: string) => Promise<PlayResult>;
+  skipSuggestion: (eventId: string, suggestionId: string) => Promise<LiveActionResult>;
+  playPick: (eventId: string, title: string, artist: string, trackId: string) => Promise<PlayResult>;
   queue: RankedSong[];
   blocked: RankedSong[];
   mustPlay: MustPlayRow[];
@@ -62,6 +65,9 @@ export function LiveScreen({
   now,
   phase,
   setPhase,
+  playSuggestion,
+  skipSuggestion,
+  playPick,
   queue,
   blocked,
   mustPlay,
@@ -78,6 +84,7 @@ export function LiveScreen({
     activity,
     mustPlayProgress,
     unresolvedArtistIds: [],
+    played,
     now,
   });
 
@@ -114,13 +121,21 @@ export function LiveScreen({
         queueCount={polled.queue.length}
         mustPlayProgress={polled.mustPlayProgress}
       />
-      <CeremonyCues mustPlay={mustPlay} played={played} />
-      <RequestQueue queue={polled.queue} />
+      <CeremonyCues
+        mustPlay={mustPlay}
+        played={polled.played}
+        onPlayNow={(title, artist, trackId) => playPick(eventId, title, artist, trackId)}
+      />
+      <RequestQueue
+        queue={polled.queue}
+        onPlay={(suggestionId) => playSuggestion(eventId, suggestionId)}
+        onSkip={(suggestionId) => skipSuggestion(eventId, suggestionId)}
+      />
       <BlockedGroup blocked={polled.blocked} />
       <CoupleRules
         mustPlay={mustPlay}
         blocklist={blocklist}
-        played={played}
+        played={polled.played}
         mustPlayProgress={polled.mustPlayProgress}
       />
       <GuestActivity activity={polled.activity} />

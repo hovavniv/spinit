@@ -139,6 +139,14 @@ export async function GET(
     activity: [],
     mustPlayProgress,
     unresolvedArtistIds,
+    // Additive field: CeremonyCues and CoupleRules' "Played" column both
+    // match on spotify_track_id against this array. Without it, a song
+    // played after the first paint never turns green on screen until a
+    // manual refresh -- mustPlayProgress's aggregate count updates but the
+    // specific rows do not, which is worse than not showing progress at all
+    // (the count and the list would visibly disagree). No contract break:
+    // readLiveState already returns this, it just wasn't in the response.
+    played: state.played,
     now: now.toISOString(),
   });
 }

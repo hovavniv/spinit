@@ -58,6 +58,11 @@
   cursor: pointer;
 }
 
+.playNow:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
 .playedBadge {
   padding: 4px 10px;
   border-radius: var(--radius-pill);
@@ -65,4 +70,9 @@
   color: var(--ok);
   font-size: 12px;
   font-weight: 700;
+}
+
+.error {
+  font-size: 12.5px;
+  color: var(--accent-deep);
 }

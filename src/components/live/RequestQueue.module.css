@@ -84,6 +84,12 @@
   color: var(--text-muted);
 }
 
+.error {
+  margin: 4px 0 0;
+  font-size: 13px;
+  color: var(--accent-deep);
+}
+
 .actions {
   flex: 0 0 auto;
   display: flex;
@@ -110,4 +116,10 @@
   font-size: 13px;
   font-weight: 600;
   cursor: pointer;
+}
+
+.playButton:disabled,
+.skipButton:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
 }

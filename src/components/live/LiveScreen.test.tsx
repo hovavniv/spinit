@@ -1,5 +1,5 @@
-import { render, screen } from '@testing-library/react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { render, screen, waitFor } from '@testing-library/react';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 /* ---------------------------------------------------------------------------
    WHY THIS FILE MOCKS SUPABASE, NOT readLiveState/rankQueue (Task 16).
@@ -172,6 +172,9 @@ async function renderLiveScreen() {
 
   const mustPlayProgress = { played: 0, total: state.mustPlay.length };
   const setPhase = vi.fn(async () => ({ ok: true as const }));
+  const playSuggestion = vi.fn(async () => ({ ok: true as const, position: 1, wasAlreadyPlayed: false }));
+  const skipSuggestion = vi.fn(async () => ({ ok: true as const }));
+  const playPick = vi.fn(async () => ({ ok: true as const, position: 1, wasAlreadyPlayed: false }));
 
   render(
     <LiveScreen
@@ -183,6 +186,9 @@ async function renderLiveScreen() {
       now="2026-09-04T19:00:00.000Z"
       phase={state.event.phase}
       setPhase={setPhase}
+      playSuggestion={playSuggestion}
+      skipSuggestion={skipSuggestion}
+      playPick={playPick}
       queue={queue}
       blocked={blocked}
       mustPlay={state.mustPlay}
@@ -193,7 +199,7 @@ async function renderLiveScreen() {
     />,
   );
 
-  return { queue, blocked, setPhase };
+  return { queue, blocked, setPhase, playSuggestion, skipSuggestion, playPick };
 }
 
 describe('LiveScreen', () => {
@@ -261,6 +267,9 @@ describe('LiveScreen', () => {
         now="2026-09-04T19:00:00.000Z"
         phase="dinner"
         setPhase={vi.fn(async () => ({ ok: true as const }))}
+        playSuggestion={vi.fn(async () => ({ ok: true as const, position: 1, wasAlreadyPlayed: false }))}
+        skipSuggestion={vi.fn(async () => ({ ok: true as const }))}
+        playPick={vi.fn(async () => ({ ok: true as const, position: 1, wasAlreadyPlayed: false }))}
         queue={[]}
         blocked={[]}
         mustPlay={[]}
@@ -272,5 +281,68 @@ describe('LiveScreen', () => {
     );
 
     expect(container.querySelector('[aria-live="polite"]')).not.toBeNull();
+  });
+});
+
+describe('LiveScreen live-poll integration (Task 17: the played staleness fix)', () => {
+  beforeEach(() => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.unstubAllGlobals();
+  });
+
+  it('a must-play row turns green on the next poll, without a page refresh', async () => {
+    eventsMaybeSingle.mockResolvedValue({
+      data: eventRow({
+        event_must_play: [
+          {
+            id: 'mp-1',
+            segment: 'party',
+            title: 'September',
+            artist: 'Earth, Wind & Fire',
+            moment: null,
+            spotify_track_id: TRACK_GOOD,
+            spotify_artist_id: null,
+            created_at: '2026-01-01T00:00:00Z',
+          },
+        ],
+      }),
+      error: null,
+    });
+
+    const fetchMock = vi.fn(async () => ({
+      ok: true,
+      json: async () => ({
+        queue: [],
+        blocked: [],
+        activity: [],
+        mustPlayProgress: { played: 1, total: 1 },
+        unresolvedArtistIds: [],
+        played: [{ position: 1, spotifyTrackId: TRACK_GOOD, artistIds: ['artist-1'] }],
+        now: '2026-09-04T20:00:00.000Z',
+      }),
+    }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await renderLiveScreen();
+
+    // Before any poll: the must-play is unplayed, so it appears in "Must
+    // play", not "Played".
+    const mustPlayColumn = screen.getByText('Must play').closest('div')!;
+    expect(mustPlayColumn.textContent).toContain('September');
+    const playedColumn = screen.getByText('Played').closest('div')!;
+    expect(playedColumn.textContent).not.toContain('September');
+
+    await vi.advanceTimersByTimeAsync(8_000);
+
+    await waitFor(() => {
+      const nowPlayedColumn = screen.getByText('Played').closest('div')!;
+      expect(nowPlayedColumn.textContent).toContain('September');
+    });
+    const nowMustPlayColumn = screen.getByText('Must play').closest('div')!;
+    expect(nowMustPlayColumn.textContent).not.toContain('September');
   });
 });

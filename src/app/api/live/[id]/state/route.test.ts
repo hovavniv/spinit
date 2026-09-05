@@ -153,6 +153,19 @@ describe('GET /api/live/[id]/state', () => {
     expect(body.queue.length).toBe(2);
   });
 
+  it('returns played, so CeremonyCues and CoupleRules can turn a row green without a page refresh', async () => {
+    readLiveState.mockResolvedValue(
+      baseLiveState({
+        played: [{ position: 1, spotifyTrackId: 't-played-1', artistIds: [] }],
+      }),
+    );
+
+    const res = await GET(req(), params(EVENT_ID));
+    const body = await res.json();
+
+    expect(body.played).toEqual([{ position: 1, spotifyTrackId: 't-played-1', artistIds: [] }]);
+  });
+
   it('never includes the raw blocklist or genresByArtistId at the top level', async () => {
     readLiveState.mockResolvedValue(
       baseLiveState({

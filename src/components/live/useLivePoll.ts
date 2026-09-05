@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import type { RankedSong } from '@/lib/live/liveTypes';
+import type { PlayedTrack, RankedSong } from '@/lib/live/liveTypes';
 import type { LiveActivityItem } from './GuestActivity';
 
 export interface LivePollState {
@@ -10,6 +10,9 @@ export interface LivePollState {
   activity: LiveActivityItem[];
   mustPlayProgress: { played: number; total: number };
   unresolvedArtistIds: string[];
+  /** So CeremonyCues/CoupleRules' "Played" column moves live, not just on
+   *  refresh -- both match on spotifyTrackId (design §7.1). */
+  played: PlayedTrack[];
   now: string;
 }
 

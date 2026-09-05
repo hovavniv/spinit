@@ -6,7 +6,7 @@ import { requireUser, getProfile } from '@/lib/auth/dal';
 import { createClient } from '@/lib/supabase/server';
 import { isUuid } from '@/lib/validation';
 import { formatCardDate } from '@/lib/dashboard/format';
-import { startEvent, setPhase } from '@/lib/live/liveActions';
+import { startEvent, setPhase, playSuggestion, skipSuggestion, playPick } from '@/lib/live/liveActions';
 import { readLiveState } from '@/lib/live/liveDal';
 import { rankQueue } from '@/lib/live/rank';
 import { minutesLeftInPhase } from '@/lib/live/phaseClock';
@@ -103,6 +103,9 @@ export default async function LiveEventPage({ params }: PageProps<'/events/[id]/
         now={now.toISOString()}
         phase={state.event.phase}
         setPhase={setPhase}
+        playSuggestion={playSuggestion}
+        skipSuggestion={skipSuggestion}
+        playPick={playPick}
         queue={queue}
         blocked={blocked}
         mustPlay={state.mustPlay}

@@ -82,6 +82,108 @@ export async function startEvent(eventId: string, phase: EventPhase): Promise<Li
   return { ok: true };
 }
 
+/** `dj_play_suggestion`/`dj_play_pick`'s shared return shape (design §8.4). */
+export type PlayResult =
+  | { ok: true; position: number; wasAlreadyPlayed: boolean }
+  | { ok: false; reason: 'wrong-state' | 'invalid' };
+
+/**
+ * Plays a pending suggestion. `dj_play_suggestion` (Migration A) does the
+ * real work atomically -- inserts `played_songs` and flips the suggestion's
+ * status to `played` in one transaction, under a per-event advisory lock so
+ * two Plays landing at once cannot collide on `position`. This wrapper is
+ * thin by design: which title/artist get copied (resolved vs. the guest's
+ * untrusted text) is the RPC's own decision, not duplicated here.
+ */
+export async function playSuggestion(eventId: string, suggestionId: string): Promise<PlayResult> {
+  await requireUser();
+
+  const supabase = await createClient();
+  const { data, error } = await supabase.rpc('dj_play_suggestion', {
+    p_event_id: eventId,
+    p_suggestion_id: suggestionId,
+  });
+
+  if (error) {
+    console.error('playSuggestion: rpc failed', { eventId, suggestionId, message: error.message });
+    return { ok: false, reason: 'wrong-state' };
+  }
+  const row = (data as { position: number; was_already_played: boolean }[] | null)?.[0];
+  if (!row) return { ok: false, reason: 'wrong-state' };
+
+  revalidatePath(`/events/${eventId}/live`);
+  return { ok: true, position: row.position, wasAlreadyPlayed: row.was_already_played };
+}
+
+/**
+ * Plays a DJ pick with no suggestion behind it -- a ceremony cue, a
+ * must-play, or any song the DJ chooses directly. `dj_play_pick`'s own
+ * 60-second idempotency window (not a unique index) means a double-tap
+ * returns the existing position rather than inserting twice, while a
+ * legitimate replay later in the night still inserts a new row.
+ */
+export async function playPick(
+  eventId: string,
+  title: string,
+  artist: string,
+  trackId: string,
+): Promise<PlayResult> {
+  await requireUser();
+
+  const supabase = await createClient();
+  const { data, error } = await supabase.rpc('dj_play_pick', {
+    p_event_id: eventId,
+    p_title: title,
+    p_artist: artist,
+    p_track_id: trackId,
+  });
+
+  if (error) {
+    console.error('playPick: rpc failed', { eventId, trackId, message: error.message });
+    return { ok: false, reason: 'wrong-state' };
+  }
+  const row = (data as { position: number; was_already_played: boolean }[] | null)?.[0];
+  if (!row) return { ok: false, reason: 'wrong-state' };
+
+  revalidatePath(`/events/${eventId}/live`);
+  return { ok: true, position: row.position, wasAlreadyPlayed: row.was_already_played };
+}
+
+/**
+ * Skips a pending suggestion -- sets `status = 'skipped'` and nothing else.
+ * Filtered to `status = 'pending'` as a real correctness guard, not
+ * decoration: without it, skipping a suggestion the DJ already played (or
+ * already skipped) would silently overwrite `played` back to `skipped`,
+ * since the RLS update policy itself permits any status transition on the
+ * DJ's own event and does not know this rule.
+ */
+export async function skipSuggestion(eventId: string, suggestionId: string): Promise<LiveActionResult> {
+  await requireUser();
+
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from('song_suggestions')
+    .update({ status: 'skipped' })
+    .eq('id', suggestionId)
+    .eq('event_id', eventId)
+    .eq('status', 'pending')
+    .select();
+
+  if (error) {
+    console.error('skipSuggestion: database error', {
+      eventId,
+      suggestionId,
+      code: error.code,
+      message: error.message,
+    });
+    return { ok: false, reason: 'wrong-state' };
+  }
+  if (!data || data.length === 0) return { ok: false, reason: 'wrong-state' };
+
+  revalidatePath(`/events/${eventId}/live`);
+  return { ok: true };
+}
+
 /**
  * DJ-only phase control (§5.4). `phase_started_at` moves with `phase`,
  * always, in one statement -- they are two halves of one fact ("we have been

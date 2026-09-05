@@ -11,6 +11,7 @@ function state(overrides: Partial<LivePollState> = {}): LivePollState {
     activity: [],
     mustPlayProgress: { played: 0, total: 0 },
     unresolvedArtistIds: [],
+    played: [],
     now: '2026-09-05T20:00:00.000Z',
     ...overrides,
   };

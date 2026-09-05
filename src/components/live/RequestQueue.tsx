@@ -1,5 +1,7 @@
 'use client';
 
+import { useState } from 'react';
+
 import type { RankedSong } from '@/lib/live/liveTypes';
 import { renderReasons } from '@/lib/live/reasons';
 import styles from './RequestQueue.module.css';
@@ -9,11 +11,42 @@ import styles from './RequestQueue.module.css';
  * row is the whole point of the explainable-engine differentiator (CLAUDE.md)
  * -- rendered via `renderReasons`, never reimplemented here.
  *
- * Play/Skip are inert by design (Task 16 scope note): `playSuggestion` /
- * `skipSuggestion` don't exist until the next task. The buttons are real
- * elements with accessible names naming the song, not bare "Play"/"Skip".
+ * Play/Skip are wired for real (Task 17): `onPlay`/`onSkip` are the caller's
+ * job (LiveScreen threads through the real `playSuggestion`/`skipSuggestion`
+ * server actions, the page's the one place that imports them for real, the
+ * same pattern PreFlight/StartEventSection already use). Neither action's
+ * success is rendered optimistically here -- the next poll (at most 8s away)
+ * carries the real ranked truth; this component only shows a per-row pending
+ * state and surfaces a wrong-state error inline rather than failing silently.
  */
-export function RequestQueue({ queue }: { queue: RankedSong[] }) {
+export function RequestQueue({
+  queue,
+  onPlay,
+  onSkip,
+}: {
+  queue: RankedSong[];
+  onPlay: (suggestionId: string) => Promise<{ ok: boolean }>;
+  onSkip: (suggestionId: string) => Promise<{ ok: boolean }>;
+}) {
+  const [pendingId, setPendingId] = useState<string | null>(null);
+  const [errorId, setErrorId] = useState<string | null>(null);
+
+  async function handlePlay(suggestionId: string) {
+    setPendingId(suggestionId);
+    setErrorId(null);
+    const result = await onPlay(suggestionId);
+    setPendingId(null);
+    if (!result.ok) setErrorId(suggestionId);
+  }
+
+  async function handleSkip(suggestionId: string) {
+    setPendingId(suggestionId);
+    setErrorId(null);
+    const result = await onSkip(suggestionId);
+    setPendingId(null);
+    if (!result.ok) setErrorId(suggestionId);
+  }
+
   return (
     <section className={styles.section} aria-label="Request queue">
       <h2 className={styles.heading}>Request queue ({queue.length})</h2>
@@ -23,6 +56,7 @@ export function RequestQueue({ queue }: { queue: RankedSong[] }) {
           const artist = row.suggestion.resolvedArtist ?? row.suggestion.artist;
           const isMustPlay = row.reasons.some((reason) => reason.kind === 'must-play-unplayed');
           const why = renderReasons(row.reasons);
+          const isPending = pendingId === row.suggestion.id;
 
           return (
             <li key={row.suggestion.id} className={styles.row}>
@@ -39,15 +73,18 @@ export function RequestQueue({ queue }: { queue: RankedSong[] }) {
                   {row.suggestion.requesters} {row.suggestion.requesters === 1 ? 'request' : 'requests'}
                 </p>
                 {why && <p className={styles.why}>{why}</p>}
+                {errorId === row.suggestion.id && (
+                  <p className={styles.error}>Couldn&apos;t update that — try again.</p>
+                )}
               </div>
               <div className={styles.actions}>
                 <button
                   type="button"
                   className={styles.playButton}
                   aria-label={`Play ${title}`}
+                  disabled={isPending}
                   onClick={() => {
-                    // Inert by design (Task 16 scope note) -- `playSuggestion`
-                    // doesn't exist until the next task.
+                    void handlePlay(row.suggestion.id);
                   }}
                 >
                   Play
@@ -56,9 +93,9 @@ export function RequestQueue({ queue }: { queue: RankedSong[] }) {
                   type="button"
                   className={styles.skipButton}
                   aria-label={`Skip ${title}`}
+                  disabled={isPending}
                   onClick={() => {
-                    // Inert by design (Task 16 scope note) -- `skipSuggestion`
-                    // doesn't exist until the next task.
+                    void handleSkip(row.suggestion.id);
                   }}
                 >
                   Skip

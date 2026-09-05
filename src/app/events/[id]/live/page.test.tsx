@@ -64,7 +64,13 @@ vi.mock('@/lib/supabase/server', () => ({
 vi.mock('@/lib/genres/genresDal', () => ({
   readGenresForEvent: vi.fn(async () => ({})),
 }));
-vi.mock('@/lib/live/liveActions', () => ({ startEvent: vi.fn(), setPhase: vi.fn() }));
+vi.mock('@/lib/live/liveActions', () => ({
+  startEvent: vi.fn(),
+  setPhase: vi.fn(),
+  playSuggestion: vi.fn(),
+  skipSuggestion: vi.fn(),
+  playPick: vi.fn(),
+}));
 vi.mock('next/navigation', async (importOriginal) => ({
   ...(await importOriginal<typeof import('next/navigation')>()),
   useRouter: () => ({ refresh: vi.fn() }),

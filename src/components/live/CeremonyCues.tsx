@@ -1,5 +1,7 @@
 'use client';
 
+import { useState } from 'react';
+
 import { CEREMONY_SLOTS } from '@/lib/events/ceremonySlots';
 import type { MustPlayRow } from '@/lib/events/detailTypes';
 import type { PlayedTrack } from '@/lib/live/liveTypes';
@@ -10,13 +12,36 @@ import styles from './CeremonyCues.module.css';
  * `mustPlay` rows where `segment === 'ceremony'` by `moment`. A slot can be
  * unfilled -- the DJ hasn't picked a song for it yet.
  *
- * "Play now" is inert by design (Task 16 scope note): it will eventually call
- * `playPick`, which does not exist until a later task.
+ * "Play now" is wired for real (Task 17): `onPlayNow` is `playPick`, threaded
+ * through the same way every other action in this screen is (a prop, never
+ * imported directly, so the caller -- LiveScreen -- is the one place that
+ * wires the real server action in). A row with no `spotify_track_id` (a
+ * pre-picker slot, per the stale-type note `rank.ts` also carries) gets no
+ * button at all -- there is nothing to play.
  */
-export function CeremonyCues({ mustPlay, played }: { mustPlay: MustPlayRow[]; played: PlayedTrack[] }) {
+export function CeremonyCues({
+  mustPlay,
+  played,
+  onPlayNow,
+}: {
+  mustPlay: MustPlayRow[];
+  played: PlayedTrack[];
+  onPlayNow: (title: string, artist: string, trackId: string) => Promise<{ ok: boolean }>;
+}) {
+  const [pendingMoment, setPendingMoment] = useState<string | null>(null);
+  const [errorMoment, setErrorMoment] = useState<string | null>(null);
+
   const playedTrackIds = new Set(
     played.map((p) => p.spotifyTrackId).filter((id): id is string => id !== null),
   );
+
+  async function handlePlayNow(moment: string, title: string, artist: string, trackId: string) {
+    setPendingMoment(moment);
+    setErrorMoment(null);
+    const result = await onPlayNow(title, artist, trackId);
+    setPendingMoment(null);
+    if (!result.ok) setErrorMoment(moment);
+  }
 
   return (
     <section className={styles.section} aria-label="Ceremony cues">
@@ -25,6 +50,7 @@ export function CeremonyCues({ mustPlay, played }: { mustPlay: MustPlayRow[]; pl
         {CEREMONY_SLOTS.map((slot) => {
           const row = mustPlay.find((m) => m.segment === 'ceremony' && m.moment === slot.moment);
           const isPlayed = row?.spotify_track_id != null && playedTrackIds.has(row.spotify_track_id);
+          const isPending = pendingMoment === slot.moment;
 
           return (
             <li key={slot.moment} className={styles.row}>
@@ -37,20 +63,24 @@ export function CeremonyCues({ mustPlay, played }: { mustPlay: MustPlayRow[]; pl
               ) : (
                 <span className={styles.unfilled}>No song set</span>
               )}
-              {row && !isPlayed && (
+              {row && row.spotify_track_id !== null && !isPlayed && (
                 <button
                   type="button"
                   className={styles.playNow}
                   aria-label={`Play now: ${row.title}`}
+                  disabled={isPending}
                   onClick={() => {
-                    // Inert by design (Task 16 scope note) -- `playPick`
-                    // doesn't exist until a later task.
+                    const trackId = row.spotify_track_id;
+                    if (trackId !== null) void handlePlayNow(slot.moment, row.title, row.artist ?? '', trackId);
                   }}
                 >
                   Play now
                 </button>
               )}
               {isPlayed && <span className={styles.playedBadge}>Played</span>}
+              {errorMoment === slot.moment && (
+                <span className={styles.error}>Couldn&apos;t play that — try again.</span>
+              )}
             </li>
           );
         })}
