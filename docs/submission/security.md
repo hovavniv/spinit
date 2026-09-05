@@ -394,7 +394,8 @@ first is not "is this safe" but "what exactly forces it".
 ### 7.6 A control that is correct and still produces a wrong number
 
 `past_events_with_counts` is `security_invoker = on`, so widening `events` SELECT propagated
-into it: a partner on a **completed** event now sees that row, with `songs_played` always 0 —
+into it: a partner on an **ended** event — `status = 'completed'`, or an `upcoming` event
+whose `event_date` has already passed — now sees that row, with `songs_played` always 0 —
 because `played_songs` was deliberately *not* widened, so the left join is filtered to
 nothing.
 

@@ -48,6 +48,35 @@ describe('DashboardScreen', () => {
     expect(screen.getByText('Awaiting couple')).toBeInTheDocument();
   });
 
+  it('folds a partly-connected event into the same grey pill as awaiting-couple', () => {
+    render(
+      <DashboardScreen
+        data={{
+          ...demoData,
+          upcoming: [
+            ...demoData.upcoming,
+            {
+              id: 'dana-ori',
+              coupleNames: 'Dana & Ori',
+              venue: 'Beit Hanamal',
+              date: '2026-11-20',
+              status: 'partly-connected',
+            },
+          ],
+        }}
+      />,
+    );
+
+    const awaiting = screen.getAllByText('Awaiting couple');
+    expect(awaiting).toHaveLength(2);
+    // Same variant as each other...
+    expect(awaiting[0].className).toBe(awaiting[1].className);
+    // ...and a different one from the connected pill. Without this second
+    // assertion the first passes even if BOTH became the teal pill.
+    expect(awaiting[0].className).not.toBe(screen.getByText('Streaming connected').className);
+    expect(screen.queryByText('1 of 2 connected')).not.toBeInTheDocument();
+  });
+
   it('points "+ New event" and an upcoming card at the URLs design §7 specifies', () => {
     render(<DashboardScreen data={demoData} />);
 

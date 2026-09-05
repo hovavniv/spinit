@@ -73,7 +73,8 @@ function coupleStatusOf(row: DashboardEventRow): CoupleStatus {
   const connected = (row.event_partners ?? []).filter(
     (p) => firstRow(p.spotify_connections)?.status === 'connected',
   ).length;
-  return connected >= 2 ? 'streaming-connected' : 'awaiting-couple';
+  if (connected >= 2) return 'streaming-connected';
+  return connected === 1 ? 'partly-connected' : 'awaiting-couple';
 }
 
 /**
@@ -133,6 +134,8 @@ export function toLiveEvent(rows: DashboardEventRow[]): LiveEvent | null {
  * mean this branch cannot typecheck until their code lands (design §5). One
  * duplicated five-field interface is the price; a branch that cannot run
  * `npm run typecheck` is worse.
+ *
+ * Since 20260904120000 the view means "ended", not "status = completed".
  */
 export interface PastEventCountRow {
   id: string;

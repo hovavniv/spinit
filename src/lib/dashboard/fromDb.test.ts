@@ -127,7 +127,7 @@ describe('toUpcomingEvents', () => {
     ];
     expect(toUpcomingEvents(rows).map((event) => event.status)).toEqual([
       'streaming-connected',
-      'awaiting-couple',
+      'partly-connected',
     ]);
   });
 
@@ -143,23 +143,23 @@ describe('toUpcomingEvents', () => {
         'streaming-connected',
       ],
       [
-        'is awaiting-couple when only one partner is connected',
+        'is partly-connected when only one partner is connected',
         ['connected', null],
-        'awaiting-couple',
+        'partly-connected',
       ],
       [
         // 'failed' and 'invited' are both rows -- presence is not connectedness.
-        "is awaiting-couple when a partner's connection exists but FAILED",
+        "is partly-connected when a partner's connection exists but FAILED",
         ['connected', 'failed'],
-        'awaiting-couple',
+        'partly-connected',
       ],
       [
         // A half-set-up event must not read as connected just because its
         // single slot is. Count connected partners, never "no partner is
         // unconnected" (every() over a 1-element array is vacuously true).
-        'is awaiting-couple when the event has only ONE partner slot',
+        'is partly-connected when the event has only ONE partner slot',
         ['connected'],
-        'awaiting-couple',
+        'partly-connected',
       ],
       [
         'is awaiting-couple when the event has no partner slots at all',
@@ -170,6 +170,16 @@ describe('toUpcomingEvents', () => {
         'ignores a third partner row rather than throwing',
         ['connected', 'connected', 'invited'],
         'streaming-connected',
+      ],
+      [
+        'is streaming-connected with 2 of 3 partner rows connected',
+        ['connected', 'connected', null],
+        'streaming-connected',
+      ],
+      [
+        'counts an INVITED connection as not connected',
+        ['connected', 'invited'],
+        'partly-connected',
       ],
     ])('%s', (_description, statuses, expected) => {
       const [event] = toUpcomingEvents([row(partners(...statuses))]);

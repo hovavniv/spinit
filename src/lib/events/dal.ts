@@ -8,7 +8,8 @@ import { isUuid } from '@/lib/validation';
 import type { PastEventRow, EventRecap } from './types';
 
 /**
- * Every completed event of the CURRENT verified DJ, newest first.
+ * Every ended event of the CURRENT verified DJ, newest first — completed, or
+ * date-passed (see `20260904120000_ended_events_view.sql`).
  *
  * Takes no id argument, and calls requireUser() itself, so a forgotten
  * requireUser() upstream can never turn this into a way to read another DJ's
@@ -26,8 +27,9 @@ import type { PastEventRow, EventRecap } from './types';
  * The projection is explicit: `.select()` with no argument is `select('*')`,
  * which would also return dj_id and status that nothing renders.
  *
- * The view already filters to status = 'completed', so no status predicate
- * appears here.
+ * The view carries its own `ended` predicate — `status = 'completed'` OR an
+ * `upcoming` event whose date has passed — so no status predicate appears
+ * here.
  */
 export const listPastEvents = cache(async (): Promise<PastEventRow[]> => {
   const user = await requireUser();
@@ -55,7 +57,7 @@ export const listPastEvents = cache(async (): Promise<PastEventRow[]> => {
 });
 
 /**
- * One completed event of the CURRENT verified DJ, with its playlist in order.
+ * One ended event of the CURRENT verified DJ, with its playlist in order.
  * Returns null for anything this DJ may not see.
  *
  * Calls requireUser() itself for the same reason listPastEvents does: a
@@ -63,14 +65,21 @@ export const listPastEvents = cache(async (): Promise<PastEventRow[]> => {
  * read another DJ's event.
  *
  * FOUR CASES COLLAPSE INTO null, deliberately (design §4.2): a malformed id, a
- * nonexistent event, another DJ's event, and an event that is not completed.
+ * nonexistent event, another DJ's event, and an event that has not ended.
  * The page turns all four into the same notFound(), so the route cannot be
  * used to probe which event ids exist.
  *
- * `.eq('dj_id', user.id)` is defence in depth and NOT the primary control --
- * the RLS select policy on public.events is. Written for consistency with
- * listPastEvents, because two DALs in one repo applying opposite rules is
- * worse than either rule.
+ * `.eq('dj_id', user.id)` IS the primary control here, not defence in depth --
+ * and the comment that used to say the opposite was stale. The events select
+ * policy has been `dj_id = auth.uid() OR is_event_partner(id)` since
+ * 20260831090000, so RLS admits a partner to this row; only this predicate
+ * keeps a recap DJ-only.
+ *
+ * Do not remove it on the grounds that RLS covers it. It does not, and the
+ * failure is silent rather than loud: played_songs' select policy was NOT
+ * widened by that migration, so a partner who reached this function would get
+ * their event back with an EMPTY playlist and no error (design §3.6a). A
+ * partner-facing recap needs that policy widened first.
  *
  * The second query carries no owner predicate and needs none: played_songs'
  * select policy scopes rows through their event's dj_id, and the first query
@@ -90,11 +99,13 @@ export const getEventRecap = cache(async (id: string): Promise<EventRecap | null
   const supabase = await createClient();
 
   const { data: event, error: eventError } = await supabase
-    .from('events')
+    // The view, not the table: it already encodes "ended" (completed, or
+    // upcoming with a past date), so this function does not write that rule a
+    // second time. It projects every column selected here, dj_id included.
+    .from('past_events_with_counts')
     .select('id, couple_names, venue, event_date')
     .eq('id', id)
     .eq('dj_id', user.id)
-    .eq('status', 'completed')
     .maybeSingle();
 
   if (eventError) {

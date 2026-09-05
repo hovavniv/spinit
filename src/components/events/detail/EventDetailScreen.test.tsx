@@ -37,11 +37,19 @@ function assertNoFormIsNestedInAnotherForm(container: HTMLElement) {
  * <form>, not that EventDetailScreen's actual composition keeps the details
  * form as a sibling once every section is present together.
  */
-function buildEvent(): EventDetail {
+function buildEvent(overrides: Partial<EventDetail> = {}): EventDetail {
   return {
     id: EVENT_ID,
     couple_names: 'Noa & Eitan',
     dj_id: 'dj-1',
+    // Default 'live' + a fixed PAST date: 'live' is exempt from the
+    // End-event date rule, so for the default fixture the date is
+    // irrelevant to whether the End button would show, and a future date
+    // would be a time bomb that silently changes test behavior once it
+    // passes. Matches this codebase's fixtures, which run around
+    // September 2026.
+    status: 'live',
+    event_date: '2026-01-01',
     privateNotes: 'DJ private note',
     sharedNotes: 'Couple shared note',
     // A real partner in the 'invited' state (no connection row yet) so
@@ -75,6 +83,7 @@ function buildEvent(): EventDetail {
     ],
     genresByArtistId: {},
     enrichmentProgress: { settled: 0, total: 0 },
+    ...overrides,
   };
 }
 
@@ -338,6 +347,31 @@ describe('EventDetailScreen', () => {
 
       expect(screen.getByText(/still analysing/i)).toBeInTheDocument();
     });
+  });
+
+  test('shows End event to a DJ on a live event', () => {
+    render(<EventDetailScreen event={buildEvent({ status: 'live' })} viewer={{ role: 'dj' }} />);
+    expect(screen.getByRole('button', { name: 'End event' })).toBeInTheDocument();
+  });
+
+  test('hides End event on an upcoming event whose date has already passed', () => {
+    render(
+      <EventDetailScreen
+        event={buildEvent({ status: 'upcoming', event_date: '2020-01-01' })}
+        viewer={{ role: 'dj' }}
+      />,
+    );
+    expect(screen.queryByRole('button', { name: 'End event' })).not.toBeInTheDocument();
+  });
+
+  test('never shows End event to a partner', () => {
+    render(
+      <EventDetailScreen
+        event={buildEvent({ status: 'live' })}
+        viewer={{ role: 'partner', partnerId: 'p1' }}
+      />,
+    );
+    expect(screen.queryByRole('button', { name: 'End event' })).not.toBeInTheDocument();
   });
 
   afterEach(() => {

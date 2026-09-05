@@ -12,6 +12,7 @@ import {
   rowRefSchema,
   eventDetailsSchema,
   ceremonySlotSchema,
+  endEventSchema,
 } from '@/lib/validation';
 import { CEREMONY_SLOTS } from './ceremonySlots';
 import type { DetailActionState } from './detailTypes';
@@ -34,8 +35,12 @@ import type { DetailActionState } from './detailTypes';
  * Ownership is NOT pre-checked with a select. Each write passes event_id and
  * lets RLS refuse: one enforcement point rather than two that can disagree.
  * Insert and update are refused by `with check`, which RAISES (42501). Delete
- * has only `using`, which FILTERS: another DJ's delete affects zero rows and
- * returns no error. Both are correct outcomes.
+ * and guard-filtered update have only `using`, which FILTERS: the statement
+ * affects zero rows and returns NO error. That is not treated as success —
+ * every remove and update here appends `.select()` and reports a zero-row
+ * result as a failure, because a caller who is told "saved" when nothing was
+ * written has been lied to. The one deliberate no-op is the never-filled
+ * ceremony slot below, whose comment says why.
  */
 
 const GENERIC_FAILURE = 'Could not save that. Try again.';
@@ -296,5 +301,58 @@ export async function saveEventDetails(
   }
 
   revalidatePath(`/events/${eventId}`);
+  return { ok: true };
+}
+
+/**
+ * Ends an event: the only code in this application that writes
+ * `status = 'completed'` (design §3.6).
+ *
+ * The status filter is a transition guard, not decoration. The UPDATE grant on
+ * public.events is TABLE-level and the `dj updates own events` policy scopes
+ * which ROWS a DJ may write, not which VALUES — so without it this endpoint
+ * would resurrect a completed event or promote a draft straight past the
+ * wizard. It admits 'live' because a live event is exempt from the date rule
+ * and this button is the only thing that can end one.
+ *
+ * `.select()` and the zero-row check follow the other removes and updates in
+ * this file: a policy-filtered or guard-refused write affects zero rows and
+ * returns no error, and reporting that as success would tell a DJ their
+ * wedding was closed out when nothing happened.
+ *
+ * Ownership is not pre-checked with a select; RLS refuses. One enforcement
+ * point rather than two that can disagree.
+ *
+ * ONE ARGUMENT, matching removeMustPlay and removeBlocklistEntry in this file.
+ * Nothing supplies a prevState here — no useActionState wraps the control — and
+ * the two-argument shape would need a second exported wrapper purely to strip
+ * it before a Server Component could pass this to a client component. That is
+ * an extra endpoint on a 'use server' module bought for nothing.
+ */
+export async function endEvent(formData: FormData): Promise<ActionResult> {
+  await requireUser();
+
+  const parsed = endEventSchema.safeParse(formDataToRecord(formData));
+  if (!parsed.success) return { ok: false, formErrors: firstFieldErrors(parsed.error.issues) };
+
+  const { eventId } = parsed.data;
+  const supabase = await createClient();
+  const { data: updated, error } = await supabase
+    .from('events')
+    .update({ status: 'completed' })
+    .eq('id', eventId)
+    .in('status', ['upcoming', 'live'])
+    .select();
+
+  if (error) return failure('endEvent', eventId, error);
+  if (!updated || updated.length === 0) {
+    return failure('endEvent', eventId, { message: 'end matched zero rows' });
+  }
+
+  // The four places this row's membership just changed.
+  revalidatePath(`/events/${eventId}`);
+  revalidatePath('/events/upcoming');
+  revalidatePath('/events/past');
+  revalidatePath('/dashboard');
   return { ok: true };
 }

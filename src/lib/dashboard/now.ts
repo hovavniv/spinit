@@ -14,6 +14,7 @@
  * it — a later slice, whose default would be this constant anyway.
  */
 export const APP_TIMEZONE = 'Asia/Jerusalem';
+// Duplicated in SQL by 20260904120000_ended_events_view.sql — see todayInAppTimezone.
 
 const FORMATTER = new Intl.DateTimeFormat('en-CA', {
   timeZone: APP_TIMEZONE,
@@ -45,4 +46,19 @@ export function currentLocalNow(clock: Date = new Date()): string {
   // makes exactly this argument about `phase`, and an earlier version of this
   // task wrote precisely the branch it warns against).
   return `${get('year')}-${get('month')}-${get('day')}T${get('hour')}:${get('minute')}`;
+}
+
+/**
+ * Today's date in APP_TIMEZONE as 'YYYY-MM-DD'.
+ *
+ * Built on currentLocalNow and FORWARDING its `clock` parameter, which is the
+ * only reason this is testable: a version calling `new Date()` itself could
+ * not be pinned to an instant where UTC and Jerusalem disagree about the date.
+ *
+ * The migration `20260904120000_ended_events_view.sql` hard-codes the same
+ * timezone in SQL, because a view body cannot import this constant. If
+ * APP_TIMEZONE ever moves, that migration moves with it.
+ */
+export function todayInAppTimezone(clock: Date = new Date()): string {
+  return currentLocalNow(clock).slice(0, 10);
 }

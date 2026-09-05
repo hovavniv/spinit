@@ -11,6 +11,10 @@ interface UpcomingEventsProps {
 
 const STATUS_LABEL: Record<UpcomingEvent['status'], string> = {
   'streaming-connected': 'Streaming connected',
+  // Folded into the same grey pill as 'awaiting-couple': the DJ Dashboard
+  // artboard draws two variants and this slice does not redraw it. The full
+  // three-way distinction is on /events/upcoming (design §3.2).
+  'partly-connected': 'Awaiting couple',
   'awaiting-couple': 'Awaiting couple',
 };
 

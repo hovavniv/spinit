@@ -820,3 +820,189 @@ see the no-session section above for what was.)*
 - **Steps 6, 7, 9, 10, 11 — NOT REPORTED.** No attested pass/fail has come
   back for these steps. Do not read their absence here as a pass; they are
   simply unattested as of this writing.
+
+---
+
+## Upcoming events + derived end-of-event migration (Task 14)
+
+**Date:** 2026-09-04. Migration `supabase/migrations/20260904120000_ended_events_view.sql`
+(`docs/specs/2026-09-04-upcoming-events-plan.md`, Task 6/14) pushed by Niv Hovav directly
+(`supabase db push` is blocked outright for agents by the permission classifier). Verified
+read-only afterward via `supabase db query --linked` — no service-role key used.
+
+```
+$ supabase db query --linked "select relname, reloptions from pg_class where relname = 'past_events_with_counts';"
+{"relname": "past_events_with_counts", "reloptions": ["security_invoker=on"]}
+```
+`security_invoker=on` present. Without this, `CREATE OR REPLACE VIEW` would have silently reset
+the view to run under its owner's (`postgres`, which carries `rolbypassrls`) permissions,
+returning every DJ's ended events to every signed-in DJ.
+
+```
+$ supabase db query --linked "select relname, relacl from pg_class where relname = 'past_events_with_counts';"
+{"relacl": "{postgres=arwdDxtm/postgres,authenticated=r/postgres,service_role=Dxtm/postgres}"}
+```
+`authenticated=r/postgres` present, no unexpected grant to `anon`. Grants preserved across the
+`CREATE OR REPLACE`, as expected.
+
+```
+$ supabase db query --linked "select status, count(*) from public.past_events_with_counts group by status;"
+{"status": "upcoming", "count": 1}
+{"status": "completed", "count": 3}
+```
+**Only `completed` and `upcoming` present — no `draft`, `cancelled`, or `live` row leaked into the
+view.** This is the check that matters: an earlier draft of this same predicate would have leaked
+170 undeletable `draft` rows (dated 2026-12-01, from `src/lib/dashboard/rls.integration.test.ts`'s
+teardown-less fixtures) the moment their date passed, and would have made two cancelled-wedding
+integration tests (`src/lib/events/rls.integration.test.ts:357`, `:590`) fail. Checking "does the
+result set contain anything but the two expected statuses" — not "are the date-passed upcoming
+rows present" — is what would have caught that leak; the latter question finds only the rows it
+went looking for.
+
+All three checks pass. The migration is live.
+
+**The third check above is weaker than it looks, and here is the query that closes the gap.**
+"No draft/cancelled/live row appears in the view" is an *absence*, and an absence has more than
+one possible explanation. The 170 leaked `draft` rows are all dated **2026-12-01** — in the
+future relative to today — so `event_date < today` is false for them regardless of whether the
+status conjunct is present at all. Their absence from the view today is consistent with the
+conjunct working AND with the conjunct having been silently dropped; it cannot distinguish the
+two. The seeded `cancelled` row (Lena & Mark, 2026-04-11) is different: its date is in the past,
+so it is exactly the row a conjunct-less predicate would wrongly admit *right now*. Running the
+conjunct-less version (the shape the design's first draft would have shipped) against the same
+live data, for comparison only — not applied to any object, read-only:
+
+```
+$ supabase db query --linked "select status, count(*) from public.events
+   where event_date < (now() at time zone 'Asia/Jerusalem')::date
+      or status = 'completed'
+   group by status;"
+{"status": "upcoming", "count": 1}
+{"status": "cancelled", "count": 1}
+{"status": "completed", "count": 3}
+```
+
+The conjunct-less predicate admits the cancelled wedding; the shipped predicate (checked above)
+does not. That is the status conjunct being load-bearing *today*, demonstrated by a differential
+comparison rather than inferred from an absence — and it is the live confirmation of the second
+design review's finding 1 (previously reasoned, not executed).
+
+**Still unproven, and left that way rather than papered over:** the `draft` half of the conjunct's
+protection. Those 170 rows are future-dated, so no query run before 2026-12-02 can demonstrate
+that the conjunct is what keeps them out of the view versus their date simply not having arrived
+yet. This will only become checkable once that date passes.
+
+Task 15 (the manual walk of `/events/upcoming` and the End-event button) is still outstanding as
+of this entry.
+
+---
+
+## Task 15 — the Upcoming events manual walk
+
+**Date:** 2026-09-04. Dev server: `npm run dev`, bound to port 3000. Confirmed via
+`lsof -p <pid> | grep cwd` that its `cwd` is `/Users/niv.hovav/Documents/School/Spinit/spinit` —
+this clone, not `../spinit-live` (this repo runs multiple worktrees with their own dev servers
+simultaneously; CLAUDE.md records this as a real trap).
+
+**No browser automation tool was available in this session** (Claude in Chrome declined). The
+curl-testable no-session checks below were run for real; the rest of the walk (Steps 2 and
+onward — sign in, click through search/filters/rows, the End-event button) needs a real browser
+with a real session and is handed to Niv rather than fabricated.
+
+**No-session checks, run for real:**
+
+```
+$ curl -sI http://localhost:3000/events/upcoming
+HTTP/1.1 307 Temporary Redirect
+```
+Signed out, `/events/upcoming` redirects to `/login` rather than 404ing — confirms the route
+exists and is gated, without needing a session.
+
+```
+$ curl -s -o /dev/null -w "%{http_code}\n" http://localhost:3000/events/definitely-not-a-real-route
+404
+```
+Sanity check that the app's 404 handling is real (not the redirect above masking every miss).
+
+**Authenticated walk — NOT machine-verified, needs a real browser (attested by whoever runs it):**
+
+1. Sign in as a DJ with at least two upcoming events in different months. *Expected:* the sidebar's
+   "Upcoming events" nav item renders as the current page (non-link, `aria-current="page"`), not a
+   link — confirming it is no longer just a dead 404 target.
+2. From `/dashboard`, click "View all upcoming events". *Expected:* lands on `/events/upcoming`
+   without a 404 — this link has 404'd since before this slice existed.
+3. Confirm month grouping: at least two month headings, events sorted ascending within each.
+4. Search by couple name, then by venue. *Expected:* the list narrows to matching rows only.
+5. Click each of the four filter pills in turn (All / Streaming connected / 1 of 2 connected / No
+   profiles connected). *Expected:* `aria-pressed` moves to the clicked pill, the list narrows
+   accordingly.
+6. Combine a search term with a filter pill. *Expected:* both apply together (AND, not OR).
+7. Search or filter down to nothing. *Expected:* "No events match your search or filters." —
+   distinct from the all-events-empty state's "No upcoming events yet. Create one to get it on the
+   board."
+8. Click a row. *Expected:* opens `/events/[id]` for that event, not the wizard.
+9. On an upcoming or live event's `/events/[id]` page, as the DJ: the "End event" button appears.
+   Click it once — *Expected:* a confirm step appears ("This closes the event... [End it]
+   [Cancel]"), the event is NOT yet ended. Click Cancel — *Expected:* returns to the first step,
+   nothing changed. Click "End event" again, then "End it" — *Expected:* the event leaves
+   `/events/upcoming`, appears on `/events/past`, and its recap opens (not a 404).
+10. As a partner (not the DJ) on the same event, confirm the End event button never appears,
+    regardless of the event's status.
+
+**Step 2b, resolved separately.** Niv approved a direct `status = 'live'` write as its own decision
+(distinct from the gate approval). spinit-3f made the write, tested against it, and reverted it —
+verified read-only afterward by spinit-b1: `select count(*) from events where status = 'live'` →
+`0`; Priya & Alex confirmed back to `status = 'upcoming'`, `event_date = '2026-09-13'`,
+`phase = null`.
+
+What it established, by differential (neither session could drive a browser, so this is the
+closest available check on Task 5's `.or()` filter string, which had never actually executed
+against PostgREST before this):
+
+```
+malformed or= filter  → PostgREST 400, PGRST100 "failed to parse logic tree"
+this slice's real filter → Postgres 401/42501 "permission denied for table events"
+```
+
+A Postgres-level error means PostgREST successfully parsed the filter string into SQL — so
+`or=(status.eq.live,event_date.gte.<today>)` is syntactically valid. **Syntax verified. Semantics
+(does it select the right rows for a signed-in DJ) is NOT verified** — that still needs a real
+browser session, which neither session had available. Recorded as partial, not complete.
+
+**Visual comparison against the artboard — done in the same walk, per this file's own precedent
+for other screens.** spinit-3f re-fetched `Spinit Upcoming Events.dc.html` and re-checked every
+measurement against the landed code. Two cosmetic drifts found, both minor, neither a blocker —
+flag them for the pre-push review rather than fixing now:
+
+1. **Inactive filter pill text colour** is `var(--text-muted)` = `oklch(0.45 0.02 50)`; the
+   artboard draws `oklch(0.4 0.02 50)` — slightly darker/more saturated than what's shipped. No
+   design-system token exists at exactly 0.4, so the choice was reasonable, but it's a deviation
+   that was never recorded as one until now.
+2. **Month heading is uppercased twice** — the component calls `.toUpperCase()` in JS AND the
+   CSS carries `text-transform: uppercase` (copied from `PastEventsList`). Visually identical to
+   the artboard, but means the actual DOM text is `SEPTEMBER 2026`, not `September 2026` styled
+   uppercase — a difference from the artboard's own markup, though not from what a viewer sees.
+
+Everything else checked and matched exactly: all three badge colour pairs, the 52px date tile
+(12px radius, Sora 18px/800 day, 10.5px weekday), row gap/padding/radius (20px / 16px 12px / 14px),
+the search field (320px max / 220px min, 38px left padding), the h1 (Sora 32px/800, -0.02em), the
+`+ New event` pill (14px 26px), the 70px right-aligned days-away column, and the page's own
+padding/wrapper (48px/56px, 1040px).
+
+### Steps 1-10, with the two visual checks folded in
+
+Run 1-8 and 10 as originally written above. For **step 9** (End event), additionally: while on
+the screen, compare the inactive filter pills' text colour and the month heading against the
+artboard side by side — expect them to read as visually the same family as Past events even
+though the two drifts above exist technically. That "does it read as one family" judgment matters
+more than either measurement and is the one a human has to make.
+
+### Results (2026-09-05)
+
+Run by Niv Hovav. All ten steps pass. **Attested by the person who ran them, not
+machine-verified** — no browser automation was available to either agent session working this
+slice, which is why the steps above are written to be run by hand rather than scripted.
+
+Step 9's visual comparison was included in the run. The two recorded drifts — the inactive
+filter pill at `oklch(0.45 0.02 50)` against the artboard's `0.4`, and the month heading
+uppercased in both JS and CSS — were not raised as problems and remain as shipped.

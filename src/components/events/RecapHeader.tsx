@@ -23,8 +23,12 @@ export function RecapHeader({ event }: { event: RecapEvent }) {
 
       <div className={styles.row}>
         <div>
-          {/* Safe to hardcode: the DAL only ever returns completed events,
-              so there is no other state this screen can render. */}
+          {/* Hardcoded, and no longer for the reason this comment used to give. The DAL
+              returns ENDED events, which since 20260904120000 means completed OR
+              date-passed -- so this can render for an event whose status is still
+              'upcoming' and which no DJ ever ended. "Completed" is still the right word
+              for a wedding that has happened; if that ever stops being true, the fix is
+              to derive the label from the row, which now carries `status`. */}
           <div className={styles.eyebrow}>Completed</div>
           <h1 className={styles.title}>{event.couple_names}</h1>
           <div className={styles.subtitle}>

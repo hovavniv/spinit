@@ -14,6 +14,7 @@ import {
   addBlocklistEntry,
   removeBlocklistEntry,
   saveEventDetails,
+  endEvent,
 } from './detailActions';
 
 const EVENT_ID = '11111111-2222-4333-8444-555555555555';
@@ -54,6 +55,7 @@ function tableDouble(result: {
     delete: vi.fn().mockReturnThis(),
     select: vi.fn().mockReturnThis(),
     eq,
+    in: vi.fn().mockReturnThis(),
     then: (resolve: (value: unknown) => void) => resolve(resolved),
   };
   return builder;
@@ -493,5 +495,58 @@ describe('saveEventDetails', () => {
     }));
 
     expect(result).toEqual({ ok: false, message: 'Could not save that. Try again.' });
+  });
+});
+
+describe('endEvent', () => {
+  test('completes the event, guarding the transition on both admitted statuses', async () => {
+    const table = tableDouble({ error: null });
+    from.mockReturnValue(table);
+
+    const result = await endEvent(formData({ eventId: EVENT_ID }));
+
+    expect(result).toEqual({ ok: true });
+    expect(table.update).toHaveBeenCalledWith({ status: 'completed' });
+    expect(table.eq).toHaveBeenCalledWith('id', EVENT_ID);
+    // The guard, asserted by value. Naming both admitted statuses means a
+    // later widening to 'draft' or 'completed' fails here rather than
+    // silently turning this endpoint into a way to resurrect an event.
+    expect(table.in).toHaveBeenCalledWith('status', ['upcoming', 'live']);
+    expect(revalidatePath).toHaveBeenCalledWith(`/events/${EVENT_ID}`);
+    expect(revalidatePath).toHaveBeenCalledWith('/events/upcoming');
+  });
+
+  test('calls requireUser before parsing', async () => {
+    await endEvent(formData({ eventId: 'not-a-uuid' }));
+    expect(requireUser).toHaveBeenCalled();
+    expect(from).not.toHaveBeenCalled();
+  });
+
+  test('rejects a malformed event id without querying', async () => {
+    const result = await endEvent(formData({ eventId: 'banana' }));
+    expect(result).toMatchObject({ ok: false });
+    expect(from).not.toHaveBeenCalled();
+  });
+
+  test('treats a guard-refused write as a failure, not a silent success', async () => {
+    // data: [] is the shape of "the row existed but the status guard excluded
+    // it" — an already-completed event, or another DJ's row filtered by the
+    // policy's USING clause. Without .select() in the action this assertion
+    // would pass no matter what the guard did.
+    from.mockReturnValue(tableDouble({ error: null, data: [] }));
+
+    const result = await endEvent(formData({ eventId: EVENT_ID }));
+
+    expect(result).toMatchObject({ ok: false });
+    expect(revalidatePath).not.toHaveBeenCalled();
+  });
+
+  test('reports a database error without leaking it', async () => {
+    from.mockReturnValue(tableDouble({ error: { code: '42501', message: 'denied' } }));
+
+    const result = await endEvent(formData({ eventId: EVENT_ID }));
+
+    expect(result).toMatchObject({ ok: false });
+    expect(result).not.toMatchObject({ message: expect.stringContaining('denied') });
   });
 });
