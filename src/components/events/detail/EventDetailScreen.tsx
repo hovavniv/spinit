@@ -11,7 +11,7 @@ import {
   endEvent,
 } from '@/lib/events/detailActions';
 import { savePrivateNotes, saveSharedNotes } from '@/lib/events/notesActions';
-import { todayInAppTimezone } from '@/lib/dashboard/now';
+import { hasEventDatePassed } from '@/lib/events/lifecycle';
 import { startEvent } from '@/lib/live/liveActions';
 import { StepHeader } from './StepHeader';
 import { StreamingSection, type StreamingConnections } from './StreamingSection';
@@ -62,8 +62,7 @@ export function EventDetailScreen({ event, viewer }: EventDetailScreenProps) {
   // against the date; a past-dated upcoming event has already ended and needs
   // no button (design §3.5, §3.6).
   const isEndable = event.status === 'upcoming' || event.status === 'live';
-  const alreadyEndedByDate =
-    event.status === 'upcoming' && event.event_date < todayInAppTimezone();
+  const alreadyEndedByDate = event.status === 'upcoming' && hasEventDatePassed(event.event_date);
   const canEnd = viewer.role === 'dj' && isEndable && !alreadyEndedByDate;
 
   // Reuses alreadyEndedByDate rather than a second date comparison (design
