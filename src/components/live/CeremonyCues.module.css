@@ -1,0 +1,68 @@
+.section {
+  padding: 16px 24px;
+  border-bottom: 1px solid var(--border);
+}
+
+.heading {
+  margin: 0 0 8px;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text-subtle);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  background: var(--accent-tint);
+  border-radius: 12px;
+}
+
+.label {
+  flex: 0 0 auto;
+  font-weight: 600;
+  color: var(--ink-dark);
+}
+
+.song {
+  flex: 1;
+  color: var(--text-muted);
+}
+
+.unfilled {
+  flex: 1;
+  color: var(--text-placeholder);
+  font-style: italic;
+}
+
+.playNow {
+  padding: 6px 14px;
+  border: none;
+  border-radius: var(--radius-pill);
+  background: var(--accent);
+  color: white;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.playedBadge {
+  padding: 4px 10px;
+  border-radius: var(--radius-pill);
+  background: var(--ok-tint);
+  color: var(--ok);
+  font-size: 12px;
+  font-weight: 700;
+}

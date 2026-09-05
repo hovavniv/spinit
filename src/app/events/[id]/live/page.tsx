@@ -1,14 +1,19 @@
 import type { Metadata } from 'next';
+import type { ReactNode } from 'react';
 import { notFound } from 'next/navigation';
 
 import { requireUser, getProfile } from '@/lib/auth/dal';
 import { createClient } from '@/lib/supabase/server';
 import { isUuid } from '@/lib/validation';
 import { formatCardDate } from '@/lib/dashboard/format';
-import { startEvent } from '@/lib/live/liveActions';
+import { startEvent, setPhase } from '@/lib/live/liveActions';
+import { readLiveState } from '@/lib/live/liveDal';
+import { rankQueue } from '@/lib/live/rank';
+import { minutesLeftInPhase } from '@/lib/live/phaseClock';
 import { AppShell } from '@/components/shell/AppShell';
 import { DashboardSidebar } from '@/components/dashboard/DashboardSidebar';
 import { PreFlight } from '@/components/live/PreFlight';
+import { LiveScreen } from '@/components/live/LiveScreen';
 
 export const metadata: Metadata = {
   title: 'Live — Spinit',
@@ -44,7 +49,9 @@ export default async function LiveEventPage({ params }: PageProps<'/events/[id]/
   const supabase = await createClient();
   const { data: event } = await supabase
     .from('events')
-    .select('id, dj_id, couple_names, venue, event_date, status, phase, phase_started_at, join_token')
+    .select(
+      'id, dj_id, couple_names, venue, event_date, start_time, status, phase, phase_started_at, join_token',
+    )
     .eq('id', id)
     .maybeSingle();
 
@@ -57,6 +64,56 @@ export default async function LiveEventPage({ params }: PageProps<'/events/[id]/
     company: profile?.business_name || 'Independent DJ',
   };
 
+  let liveScreen: ReactNode = null;
+  if (event.status === 'live') {
+    // Mirrors the poll route's own wiring (src/app/api/live/[id]/state/route.ts)
+    // so this first paint shows the identical initial data a poll would --
+    // the client-side 8-second re-polling itself is a later task.
+    const state = await readLiveState(event.id);
+    const now = new Date();
+    const minsLeft = minutesLeftInPhase(state.event.phase, state.event.phaseStartedAt, now);
+
+    const { queue, blocked } = rankQueue({
+      suggestions: state.suggestions,
+      mustPlay: state.mustPlay,
+      blocklist: state.blocklist,
+      genresByArtistId: state.genresByArtistId,
+      played: state.played,
+      phase: state.event.phase,
+      minutesLeftInPhase: minsLeft,
+    });
+
+    const playedTrackIds = new Set(
+      state.played
+        .map((p) => p.spotifyTrackId)
+        .filter((trackId): trackId is string => trackId !== null),
+    );
+    const mustPlayPlayed = state.mustPlay.filter(
+      (row) => row.spotify_track_id !== null && playedTrackIds.has(row.spotify_track_id),
+    ).length;
+    const mustPlayProgress = { played: mustPlayPlayed, total: state.mustPlay.length };
+
+    liveScreen = (
+      <LiveScreen
+        eventId={event.id}
+        coupleNames={event.couple_names}
+        venue={event.venue}
+        eventDate={event.event_date}
+        startTime={(event.start_time ?? '00:00:00').slice(0, 5)}
+        now={now.toISOString()}
+        phase={state.event.phase}
+        setPhase={setPhase}
+        queue={queue}
+        blocked={blocked}
+        mustPlay={state.mustPlay}
+        blocklist={state.blocklist}
+        played={state.played}
+        mustPlayProgress={mustPlayProgress}
+        activity={[]}
+      />
+    );
+  }
+
   return (
     <AppShell sidebar={<DashboardSidebar dj={dj} current="none" />}>
       {event.status === 'upcoming' ? (
@@ -68,11 +125,7 @@ export default async function LiveEventPage({ params }: PageProps<'/events/[id]/
           startEvent={startEvent}
         />
       ) : (
-        // Placeholder for the live artboard, built in Task 16
-        // (src/components/live/LiveScreen.tsx). Deliberately not a separate
-        // component yet: Task 16 replaces this branch's content directly
-        // rather than wiring a component that doesn't exist until then.
-        <p>The event is live.</p>
+        liveScreen
       )}
     </AppShell>
   );

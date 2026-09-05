@@ -47,6 +47,10 @@
   --panel-text-dim: oklch(0.6 0.01 50);
 
   --radius-pill: 999px;
+
+  /* positive/played states (live screen, Task 16) */
+  --ok: oklch(0.55 0.13 145);
+  --ok-tint: oklch(0.96 0.04 145);
 }
 
 /* --------------------------------------------------------------------------
