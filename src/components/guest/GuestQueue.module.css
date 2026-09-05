@@ -1,0 +1,86 @@
+.wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--ink-dark);
+}
+
+.empty {
+  font-size: 14px;
+  color: var(--text-muted);
+  padding: 24px 0;
+  text-align: center;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+}
+
+.rowBacked {
+  border-color: var(--ok);
+  background: var(--ok-tint);
+}
+
+.badge {
+  min-width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-muted);
+  background: var(--border);
+}
+
+.badgeTop {
+  color: white;
+  background: var(--accent);
+}
+
+.text {
+  flex: 1;
+  min-width: 0;
+}
+
+.songTitle {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--ink-dark);
+}
+
+.meta {
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+.backButton {
+  min-width: 44px;
+  min-height: 44px;
+  padding: 0 14px;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--border);
+  background: var(--surface);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink-dark);
+  cursor: pointer;
+}
+
+.backButtonActive {
+  border-color: var(--ok);
+  background: var(--ok-tint);
+  color: var(--ok);
+}
