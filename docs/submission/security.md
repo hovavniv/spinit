@@ -6,8 +6,9 @@ what they send, protects its keys — and what is still open.
 **Status of this document.** Everything in §1–§6 describes code that is merged and running
 unless marked otherwise. §7 describes the Spotify integration's authorization layer, which
 is **applied to the live database and verified against it** (§7.7); the application code
-above it is on `feat/spotify` and not yet merged. §8 is the honest list of what is still
-wrong.
+above it is on `feat/spotify` and not yet merged. §8 describes the guest boundary added by
+the live-event slice, applied and verified against the live database. §9 is the honest list
+of what is still wrong.
 
 ---
 
@@ -68,7 +69,7 @@ client.
 
 **What is missing:** Google OAuth. The original design offered it as the compliant path with
 password auth as a secondary option. It is deferred (issue #2), so today password auth is the
-*only* method — see §8.1, which is the most significant open item in this document.
+*only* method — see §9.1, which is the most significant open item in this document.
 
 ---
 
@@ -122,7 +123,7 @@ error**. Another DJ's delete silently does nothing. That is the correct outcome,
 affected-row count, not the absence of an error.
 
 **A policy that admits no rows is indistinguishable from success.** This is the single most
-recurrent bug in this project — it has appeared three times in different disguises, and §8.5
+recurrent bug in this project — it has appeared three times in different disguises, and §9.5
 records why.
 
 ### 3.3 Column-level grants, where RLS cannot reach
@@ -193,8 +194,9 @@ API.
 a non-uuid path segment 404s rather than reaching the database and failing with
 `22P02 invalid input syntax for type uuid` logged as though it were a genuine failure.
 
-**Output encoding** is React's, which escapes interpolated values by default. There is no
-`dangerouslySetInnerHTML` anywhere in the codebase.
+**Output encoding** is React's, which escapes interpolated values by default. `dangerouslySetInnerHTML`
+appears exactly once in the codebase, for a server-generated QR code SVG — see §8.8 for why that one
+case is safe and deliberate rather than a lapse of this rule.
 
 ---
 
@@ -342,7 +344,7 @@ and returns a trimmed shape rather than Spotify's raw response.
 
 Today it requires a session. That gate is honestly **necessary but not sufficient** — signup
 is open, so it turns "anyone can hammer this" into "anyone willing to register can." A
-per-user rate limit is not built (§8.4).
+per-user rate limit is not built (§9.4).
 
 ### 7.5 The elevated key this project does not have, and why it nearly did
 
@@ -463,36 +465,214 @@ splitting them is how one gets fixed and the other does not.
 
 ---
 
-## 8. Remaining risks
+## 8. The guest boundary
+
+A guest has no account. They scan a QR code, type a name, and suggest songs. That makes this the
+only part of the product an unauthenticated stranger can reach, and it is where most of the
+security thinking in this project went.
+
+### 8.1 The problem RLS cannot solve on its own
+
+Row Level Security is this app's authorization control (§3), and every policy in it is shaped
+`auth.uid() = <owner>`. **A guest has no `auth.uid()`.** There is no predicate that distinguishes
+"a guest who scanned this event's QR code" from "the internet", so RLS has nothing to key on.
+
+The two obvious ways out were both rejected:
+
+- **Grant `anon` insert on the guest tables** and write permissive policies. That is a door anyone
+  can walk through: the publishable key ships in the browser bundle, so a caller can `POST` to
+  PostgREST directly and insert a thousand suggestions on any event whose id they can guess. The
+  three-songs-per-guest cap would become a UI suggestion.
+- **Use the service-role key** in the guest server actions. That places a credential which bypasses
+  RLS entirely into the request path of the one route unauthenticated people can reach. §7.5
+  records why this project does not hold that key at all.
+
+### 8.2 What was built instead: six functions, and nothing else
+
+**`anon` holds no table grants whatsoever.** It holds `execute` on exactly six
+`security definer` functions, verified directly against the live database's `pg_proc.proacl`
+rather than assumed from the migration source:
+
+| Function | Purpose |
+|---|---|
+| `guest_event(token)` | Couple's name + is-it-live, for the landing screen. The only one that does not require a live event |
+| `guest_join(token, name)` | Mints a session, returns its id |
+| `guest_suggest(session, track, title, artist)` | Suggest, or vote if the track is already up |
+| `guest_vote(session, suggestion)` | Back someone else's suggestion |
+| `guest_queue(session)` | The guest's view of the queue |
+| `guest_search_allow(session)` | The per-session search budget |
+
+**That count is the definition of the guest attack surface**, which is why it is stated as a number
+rather than implied by a list. It went from five to six during design: `guest_event` was added
+because the landing screen renders the couple's name and a live/ended state *before any session
+exists*, and nothing in the other five could supply that. It is recorded as a deliberate widening
+rather than allowed to drift, and it is the narrowest function of the six — two return values, and
+reachable only by someone holding a printed token.
+
+`security definer` means these run as their owner and bypass RLS. That is the point: it is how an
+unauthenticated caller performs a bounded, checked write. It also means **every guard has to be
+inside the function body**, and that `revoke all on function … from public` must precede each
+grant — Postgres grants `execute` to `PUBLIC` by default, so a function merely *not granted* to
+`anon` is still callable by `anon`. That one line is the difference between a boundary and a
+decoration, and a test asserts it rather than a comment claiming it. The two DJ-only play
+functions (`dj_play_suggestion`, `dj_play_pick`) carry the same revoke-then-grant treatment in the
+other direction — their live `proacl` shows `postgres` and `authenticated` only, no `anon` and no
+bare `PUBLIC` entry.
+
+### 8.3 The trust rule: a guest's arguments are never trusted for anything that matters
+
+The first design had `guest_suggest` accept the artist name and artist id from the caller. A review
+found the hole: since the anon key is public, a caller could supply a real track with a **fabricated
+artist**, and the couple's do-not-play artist and genre checks would then match against the
+fabrication and never fire. The product removes free-text song requests in the UI for exactly this
+reason; accepting a caller-supplied artist in the function reopened the same door one layer down.
+
+**The rule now: the only thing a guest supplies that anything trusts is a Spotify track id.**
+
+- `title` and `artist` on a suggestion are stored as **untrusted display text**. They render, and
+  nothing matches on them — not the blocklist, not the must-play list, not the artist-repeat rule,
+  not the recap.
+- Every ranking and blocklist decision keys on ids resolved by **the DJ's own server**, which is
+  authenticated and holds the grants, into a `spotify_tracks` / `spotify_track_artists` cache
+  `anon` cannot write.
+
+What a hostile caller gains is therefore a row that *looks* wrong in the DJ's queue, and nothing
+else. They cannot affect a ranking, evade the do-not-play list, or influence what the couple's
+recap records. **The fabrication's consequences were removed rather than the input policed.**
+
+### 8.4 Abuse limits that are enforced, and by what
+
+| Rule | Enforced by |
+|---|---|
+| At most 3 songs suggested per guest | A count inside `guest_suggest`, under an advisory lock taken as its first statement — without the lock it is a check-then-insert race |
+| Suggesting a song already up votes for it instead | `unique (event_id, spotify_track_id)`, a **database constraint**, so the rule holds under concurrency rather than only in the happy path |
+| One vote per guest per song | `primary key (suggestion_id, guest_id)` — a double-tap is a no-op by construction |
+| A vote cannot cross events | An explicit check in `guest_vote`; a uuid being unguessable is not an authorization control |
+| A token is inert unless the event is live | `status = 'live'` in five of the six functions |
+| Search is capped per session | `guest_search_allow`, a counter on the session row |
+
+The session id lives in an `httpOnly` cookie scoped to `/join`, keyed on the token so a guest at two
+weddings in one weekend has two independent sessions. It is a bearer token, so no client script has
+any reason to read it.
+
+### 8.5 What this does NOT prevent — stated plainly
+
+**Clearing cookies yields a fresh session and three more suggestions.** The cap is per session row
+and nothing ties a session to a person. A determined guest can suggest as many songs as they have
+patience for. The fix is a real guest list, where each invited person gets their own row; it was
+considered and set aside for this slice.
+
+**Nothing bounds session-minting, and therefore nothing bounds votes.** An earlier draft of this
+document claimed the three-song cap bounded the blast radius of minting sessions in a loop. **That
+was false and is retracted here rather than quietly corrected.** The cap bounds *suggestions*;
+**votes are unlimited by design**, and votes are the base term of the ranking and the number the
+DJ's screen leads with. So a token-holder can drive any song to rank 1 at no cost. The same gap
+defeats the 60-search budget, because that ceiling is per session and sessions are free — leaving
+calls to the Spotify app token *shared by every event in this project* bounded only by patience.
+A per-event session ceiling is the honest fix and **is not built**.
+
+What makes this tolerable rather than fatal: the attacker must already hold the token — be at the
+wedding, or have been given the link — and **the DJ approves every song before it plays**. The worst
+outcome is a misleading ranking, never a song on the floor.
+
+**Anyone who obtains the token can join.** A QR code on a table is a shared secret by construction.
+It is why the token only works while the event is live.
+
+### 8.6 The do-not-play list is exact on songs and artists, best-effort on genres
+
+Song and artist blocks match on Spotify ids and fire the moment a track is resolved. **Genre blocks
+depend on enrichment that lags the queue** — genres come from MusicBrainz and Last.fm, one artist
+per request, so a freshly-suggested artist ranks without its genre check until enrichment catches
+up. The row carries a visible "genre check pending" reason rather than failing silently, but **a
+song can reach the floor before its genre was ever checked.** That distinction belongs to the couple
+before it belongs to a document.
+
+### 8.7 Two deliberate decisions that widen access
+
+**A linked partner can read `join_token`.** RLS has no column granularity, and the `events` select
+policy admits `dj_id = auth.uid() OR is_event_partner(id)`. The partners are the couple — if anyone
+besides the DJ should be able to hand a guest the link, it is them. The alternative (column-level
+grants enumerating every other column) breaks silently the next time a column is added.
+
+**`getEventRecap` reads under RLS alone.** Its application-level `dj_id` filter was removed, because
+a participant check cannot be expressed as a column filter and the couple must be able to read their
+own recap. The `dj or partner selects event` policy is now the only control on that read. The two
+failure directions differ and both are worth knowing: a regression in `played_songs`' policy
+**hides** songs; a regression in `events`' policy **exposes** a recap.
+
+### 8.8 A server-generated SVG is rendered via `dangerouslySetInnerHTML` — the one exception to §4's rule
+
+§4 states this app avoids `dangerouslySetInnerHTML` entirely; the guest QR modal is a deliberate,
+narrow exception, not a lapse. The SVG markup comes from this app's own `qrcode` library, run
+server-side against a URL this app fully controls (a shape-checked 22-character token appended to
+`siteUrl()`, never a request header — see §7's parallel reasoning for why a forged `Host` must not
+influence a URL this app generates), never from guest-supplied or third-party input. It is the only
+`dangerouslySetInnerHTML` call in the codebase, and a code comment on both call sites says so.
+
+A related, non-security defect was caught and fixed before merge: an event whose `join_token` was
+somehow null would have silently produced a broken join URL and rendered a QR code for it — a dead
+link with no signal anywhere on the DJ's screen, discoverable only by a guest scanning a printed
+card at the actual event. Fixed by never generating a QR for a URL known to be malformed, logging
+the anomaly instead. Recorded here because it is a case where a security-adjacent habit (never
+trust a value you have not checked) caught a pure correctness bug that had nothing to do with an
+attacker.
+
+### 8.9 What is verified, and what is only shape-checked
+
+Every migration in this slice was applied to a throwaway PostgreSQL 17 before being pushed — which
+caught a `CHECK` constraint containing a subquery that does not compile, and a `max(position) + 1`
+that returns NULL on an event's first song. **That harness has two blind spots and they are named
+here rather than glossed:** its stub `auth.uid()` returns null, so it proves no RLS *behaviour*; and
+it never runs PostgREST, so it cannot see an ambiguous embed (one shipped for a day behind a green
+test suite, until a real HTTP call against the live database surfaced it as a 500).
+
+**The six guest functions are the exception and were genuinely proven locally**, as `anon`, via
+`set role anon` — because they take the session id as an argument and never call `auth.uid()`.
+
+**RLS behaviour is verified by the integration suite against the live project**, using real
+accounts: a partner can read their event's played songs, a partner on another event cannot, and a
+partner cannot insert, update or delete one. The negative cases are what pin the policy to
+`for select` — a test proving only that a partner can read would pass just as well against a much
+wider `for all` grant.
+
+The guest functions were additionally reviewed by a fresh adversarial pass before being pushed,
+which found one real defect: `btrim` strips only ASCII space, so a display name of tabs or newlines
+passed the length guard and would have rendered blank on the DJ's screen and in the couple's
+permanent recap. Fixed before deployment, and the deployed function was verified to be the fixed one
+via `pg_get_functiondef` rather than by assuming the push carried it.
+
+---
+
+## 9. Remaining risks
 
 Honest, and ordered by how much they matter.
 
-### 8.1 Email and password is the only auth method
+### 9.1 Email and password is the only auth method
 
 Secure-coding rule 1 prohibits password auth; Google OAuth was to be the compliant path.
 It is deferred (issue #2) and `signInWithGoogle` does not exist. **Today there is no
 compliant alternative offered at all**, which is materially worse than the original design
 intended. Open until issue #2 ships.
 
-### 8.2 A copied session cookie outlives sign-out
+### 9.2 A copied session cookie outlives sign-out
 
 `signOut()` revokes the refresh token and clears cookies, but an already-issued access JWT
 is stateless and stays valid until it expires — one hour by default. `secure_password_change`
 stops it becoming a permanent takeover; the one-hour read window is unclosed. `jwt_expiry` is
 the only lever available on the free tier. Idle timeout is a Pro-plan feature.
 
-### 8.3 No session expiry or idle timeout
+### 9.3 No session expiry or idle timeout
 
 `enable_refresh_token_rotation` is on with no `timebox` or `inactivity_timeout`, so a session
 can live indefinitely while it keeps refreshing. Gated to Pro plans; unfixable as scoped.
 
-### 8.4 No application-level rate limiting
+### 9.4 No application-level rate limiting
 
 Beyond Supabase Auth's per-IP limits, nothing throttles login, registration or the search
 proxy. Signup is open, so an account is a thirty-second obstacle. The fix is a shared-store
 limiter (Upstash Redis or similar) in front of the auth actions and the proxy.
 
-### 8.5 The silent zero-row write is a recurring class, not a fixed bug
+### 9.5 The silent zero-row write is a recurring class, not a fixed bug
 
 A policy that admits no rows **filters** — it returns success having written nothing. So does
 an `UPDATE` against a row that does not exist. This has appeared three times: in RLS, in a
@@ -503,19 +683,19 @@ than update, backfills cover every row rather than the non-null ones, and the in
 tests assert affected-row counts rather than the absence of an error. It is listed here
 because the *class* is still live wherever someone writes a plain `.update()`.
 
-### 8.6 `data.user.identities` enumerates confirmed emails
+### 9.6 `data.user.identities` enumerates confirmed emails
 
 Readable from Supabase's public signup endpoint, it reveals whether an address is already
 confirmed — bypassing this app's own generic error mapper. Not mitigated; it is Supabase's
 endpoint, not ours.
 
-### 8.7 The artist cache is never re-fetched
+### 9.7 The artist cache is never re-fetched
 
 Once resolved, a genre stays cached. `fetched_at` is recorded so a future slice can age rows
 out; nothing reads it today. A staleness limit rather than a security one — the write path is
 closed (§7.5) — but a wrong genre is permanent.
 
-### 8.8 Built-in SMTP, 2 emails/hour project-wide — and a test defect hiding behind it
+### 9.8 Built-in SMTP, 2 emails/hour project-wide — and a test defect hiding behind it
 
 Adequate for one controlled demo, fragile otherwise.
 
@@ -530,43 +710,92 @@ single-browser and single-signup-at-a-time: template customisation is unavailabl
 tier, so the flow relies on Supabase's stock link and one fixed PKCE cookie name. Fix: custom
 SMTP, which lifts both.
 
-### 8.9 No Content-Security-Policy header
+### 9.9 No Content-Security-Policy header
 
-Not set. React's escaping and the absence of `dangerouslySetInnerHTML` are the current XSS
-defences; a CSP would be defence in depth.
+Not set. React's escaping, plus the single, reviewed `dangerouslySetInnerHTML` exception (§8.8)
+being fed only server-generated, non-user-controlled markup, are the current XSS defences; a CSP
+would be defence in depth.
 
-### 8.10 No password reset
+### 9.10 No password reset
 
 The "Forgot password?" link is inert.
 
-### 8.11 Cross-provider email deduplication is unverified
+### 9.11 Cross-provider email deduplication is unverified
 
 Signing up with a password and then with Google at one address may produce two identities
 depending on Supabase's linking configuration. Not tested; moot until issue #2.
 
-### 8.12 The RLS integration tests are not reproducible from the repo alone
+### 9.12 The RLS integration tests are not reproducible from the repo alone
 
 They depend on users registered by hand through the app's own `/register` form against the
 hosted project, which couples the suite to the register flow — a signup regression breaks the
 RLS tests too. Fix: a local `supabase start` stack seeded from a migration.
 
-### 8.13 Partner chrome is unresolved
+### 9.13 Partner chrome is unresolved
 
 A partner opening the event page currently lands inside the DJ's navigation. A presentation
 defect rather than a data one — the boundary itself holds — but it must be closed before the
 couple's own entry point ships.
 
+### 9.14 Anonymous sign-ins are the better design, and were not taken
+
+Supabase supports anonymous sign-ins: `signInAnonymously()` mints a real user with a real
+`auth.uid()` that RLS keys on normally, and this project's `config.toml` already carries
+`enable_anonymous_sign_ins = false` — a one-line change. It would replace six hand-written
+`security definer` functions with ordinary RLS policies, and its built-in 30-per-hour-per-IP limit
+would bound the session-minting gap §8.5 admits is unbounded.
+
+**It was not taken, and the reason is specific rather than schedule.** An anonymous user assumes the
+`authenticated` role, so enabling it re-scopes a role every policy in this project depends on —
+Supabase's own documentation says to review every policy first. And one concrete consequence was
+found before deciding: `on_auth_user_created` fires on *any* `auth.users` insert, so **every guest
+would get a `profiles` row**. A 150-guest wedding creates 150 phantom DJ profiles. That is fixable
+with a trigger guard, but it is the first consequence anyone happened to look for, and the question
+is how many more there are in a table this slice never touched.
+
+Re-auditing roughly twenty policies and adding a trigger guard, the day before submission, with no
+review budget left, was the wrong trade against a boundary that has been built, reviewed and tested.
+**With more time this is the first thing I would change**, and the audit is the work, not the flag.
+
+### 9.15 Pre-existing functions and Postgres's default `EXECUTE TO PUBLIC`
+
+`purge_partner_connection` and `rls_auto_enable` are both executable by `anon` — verified directly
+against the live database's `pg_proc.proacl`, which is `null` for both, meaning neither has ever
+had its privileges touched since creation and both still carry Postgres's default grant of
+`EXECUTE` to `PUBLIC`. Almost certainly by omission rather than decision, since the guest functions
+(§8.2) revoke this same default deliberately.
+
+**Both are inert in effect, by verified mechanism rather than assumption.**
+`purge_partner_connection` returns `trigger` and `rls_auto_enable` returns `event_trigger`;
+PostgREST exposes neither, and calling either outside its trigger context errors. Nothing is
+exposed. But "safe because of what it returns" is a weaker posture than "not granted", and the
+revoke-before-grant pattern applied to the guest functions should be applied to these two as well.
+
+**A third function, `is_event_partner`, was checked on the same pass and is NOT in this state.**
+An earlier draft of this section named it alongside the two above; live `proacl` shows
+`{postgres=X, authenticated=X}` — no `anon` entry — so its default grant has already been revoked
+and it is not callable by `anon` today. Recorded as a correction rather than silently dropped: the
+draft's claim did not match the database, and the database is what this document is graded on.
+
 ---
 
-## 9. What I would do next, in order
+## 10. What I would do next, in order
 
-1. **Ship Google OAuth** (§8.1). It is the only item that closes a stated rule violation.
-2. **Rate-limit the auth actions and the search proxy** (§8.4). Cheap, and it is the
+1. **Audit every RLS policy and enable anonymous sign-ins** (§9.14), replacing six hand-written
+   `security definer` functions with ordinary RLS and closing the unbounded-session-minting gap
+   (§8.5) with Supabase's own per-IP limit. The largest single improvement available, and the
+   reason it isn't done yet is a real audit cost, not a preference for the current design.
+2. **Ship Google OAuth** (§9.1). It is the only item that closes a stated rule violation.
+3. **Rate-limit the auth actions and the search proxy** (§9.4). Cheap, and it is the
    difference between "signup is a speed bump" and "signup is a control".
-3. **Custom SMTP** (§8.8), which also unlocks password reset (§8.10) and fixes the
+4. **Revoke the default `PUBLIC` execute grant on `purge_partner_connection` and
+   `rls_auto_enable`** (§9.15). Both are inert today, but "not granted" is a stronger posture
+   than "safe because of what it returns", and this is a two-line fix.
+5. **Custom SMTP** (§9.8), which also unlocks password reset (§9.10) and fixes the
    single-signup confirmation flow.
-4. **A local Supabase stack for the test suite** (§8.12), so the security guarantees are
+6. **A local Supabase stack for the test suite** (§9.12), so the security guarantees are
    reproducible by a grader rather than only by me.
-5. **A CSP header** (§8.9).
+7. **A CSP header** (§9.9).
 
-The first four are each a day or less. None is blocked by anything but time.
+Items 2–4 and 6–7 are each a day or less, and item 4 is minutes. Item 1 is the one real
+audit-sized undertaking on this list.
