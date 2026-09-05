@@ -41,15 +41,3 @@ export async function getGuestSessionId(token: string): Promise<string | null> {
   const cookieStore = await cookies();
   return cookieStore.get(cookieName(token))?.value ?? null;
 }
-
-/**
- * Called on `no_such_session` (design §8.4) -- a stale or cleared cookie, or
- * an id belonging to a session from a different, already-cleared event.
- */
-export async function clearGuestSessionCookie(token: string): Promise<void> {
-  const cookieStore = await cookies();
-  cookieStore.delete({
-    name: cookieName(token),
-    path: '/join',
-  });
-}

@@ -8,17 +8,15 @@ import { describe, expect, it, vi, beforeEach } from 'vitest';
  * mocked `cookies()` API rather than trusting a manual read.
  */
 
-const { cookieSet, cookieGet, cookieDelete } = vi.hoisted(() => ({
+const { cookieSet, cookieGet } = vi.hoisted(() => ({
   cookieSet: vi.fn(),
   cookieGet: vi.fn(),
-  cookieDelete: vi.fn(),
 }));
 
 vi.mock('next/headers', () => ({
   cookies: vi.fn(async () => ({
     set: cookieSet,
     get: cookieGet,
-    delete: cookieDelete,
   })),
 }));
 
@@ -84,17 +82,5 @@ describe('getGuestSessionId', () => {
     const { getGuestSessionId } = await import('./session');
 
     expect(await getGuestSessionId(TOKEN)).toBeNull();
-  });
-});
-
-describe('clearGuestSessionCookie', () => {
-  it('deletes spinit_guest_<token> at path /join', async () => {
-    const { clearGuestSessionCookie } = await import('./session');
-
-    await clearGuestSessionCookie(TOKEN);
-
-    expect(cookieDelete).toHaveBeenCalledWith(
-      expect.objectContaining({ name: `spinit_guest_${TOKEN}`, path: '/join' }),
-    );
   });
 });
