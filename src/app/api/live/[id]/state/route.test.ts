@@ -1,7 +1,8 @@
 import { it, expect, vi, beforeEach, describe } from 'vitest';
 import type { LiveState } from '@/lib/live/liveDal';
-import type { ActivityItem } from '@/lib/live/liveTypes';
-import type { ResolvedTrack } from '@/lib/spotify/tracks';
+import type { ActivityItem, QueueSuggestion } from '@/lib/live/liveTypes';
+import { UNRESOLVABLE_TRACK_TITLE } from '@/lib/live/liveTypes';
+import type { ResolvedTrack, ResolveTracksResult } from '@/lib/spotify/tracks';
 
 // Every collaborator the route has, mocked at the module boundary. Declared
 // with vi.hoisted so the vi.mock factories below can close over them, same
@@ -12,7 +13,12 @@ const { requireUser, createClient, readLiveState, readActivity, resolveTracks, f
     createClient: vi.fn(),
     readLiveState: vi.fn(),
     readActivity: vi.fn(async (): Promise<ActivityItem[]> => []),
-    resolveTracks: vi.fn(async (_ids: string[], _opts?: { max?: number; concurrency?: number }): Promise<ResolvedTrack[]> => []),
+    resolveTracks: vi.fn(
+      async (_ids: string[], _opts?: { max?: number; concurrency?: number }): Promise<ResolveTracksResult> => ({
+        resolved: [],
+        notFound: [],
+      }),
+    ),
     from: vi.fn(),
     eventsSelect: vi.fn(),
     eventsEq: vi.fn(),
@@ -59,7 +65,7 @@ function params(id: string) {
 beforeEach(() => {
   vi.clearAllMocks();
   requireUser.mockResolvedValue({ id: 'u-dj-1' });
-  resolveTracks.mockResolvedValue([]);
+  resolveTracks.mockResolvedValue({ resolved: [], notFound: [] });
   readLiveState.mockResolvedValue(baseLiveState());
   readActivity.mockResolvedValue([]);
 
@@ -139,9 +145,12 @@ describe('GET /api/live/[id]/state', () => {
         ],
       }),
     );
-    resolveTracks.mockResolvedValue([
-      { id: 't-2', title: 'Unresolved Song', artist: 'Unresolved Artist', artists: [{ id: 'a-2', name: 'Unresolved Artist' }] },
-    ]);
+    resolveTracks.mockResolvedValue({
+      resolved: [
+        { id: 't-2', title: 'Unresolved Song', artist: 'Unresolved Artist', artists: [{ id: 'a-2', name: 'Unresolved Artist' }] },
+      ],
+      notFound: [],
+    });
 
     const res = await GET(req(), params(EVENT_ID));
     expect(res.status).toBe(200);
@@ -249,9 +258,12 @@ describe('GET /api/live/[id]/state', () => {
         ],
       }),
     );
-    resolveTracks.mockResolvedValue([
-      { id: 't-2', title: 'Unresolved Song', artist: 'Unresolved Artist', artists: [{ id: 'a-2', name: 'Unresolved Artist' }] },
-    ]);
+    resolveTracks.mockResolvedValue({
+      resolved: [
+        { id: 't-2', title: 'Unresolved Song', artist: 'Unresolved Artist', artists: [{ id: 'a-2', name: 'Unresolved Artist' }] },
+      ],
+      notFound: [],
+    });
 
     const res = await GET(req(), params(EVENT_ID));
     const body = await res.json();
@@ -284,5 +296,128 @@ describe('GET /api/live/[id]/state', () => {
     const res = await GET(req(), params(EVENT_ID));
     const body = await res.json();
     expect(body.unresolvedArtistIds).toEqual(['a-unresolved']);
+  });
+
+  describe('F1: a track id Spotify 404s must not occupy a resolution slot forever', () => {
+    // Guest-suggested spotify_track_id shapes don't matter to this test --
+    // only their identity does, so short readable literals stand in for the
+    // real ^[A-Za-z0-9]{22}$ ids.
+    const REAL_1 = 't-real-1';
+    const NOT_FOUND = 't-not-found';
+    const REAL_2 = 't-real-2';
+
+    // A tiny in-memory stand-in for spotify_tracks/spotify_track_artists,
+    // written to by the route's own upsert calls and read back by
+    // readLiveState's mock -- this is what lets the test observe the SAME
+    // starvation the real database would produce across repeated polls,
+    // without a live database.
+    let trackStore: Map<string, { title: string; artist: string }>;
+    let artistStore: Map<string, string[]>;
+
+    function suggestionsNow(): QueueSuggestion[] {
+      return [REAL_1, NOT_FOUND, REAL_2].map((trackId, i) => {
+        const resolved = trackStore.get(trackId);
+        return {
+          id: `s-${trackId}`,
+          spotifyTrackId: trackId,
+          title: `Guest title ${i}`,
+          artist: `Guest artist ${i}`,
+          resolvedTitle: resolved?.title ?? null,
+          resolvedArtist: resolved?.artist ?? null,
+          artistIds: artistStore.get(trackId) ?? [],
+          requesters: 1,
+          createdAt: `2026-01-01T00:0${i}:00.000Z`,
+          suggestedByName: 'Guest',
+        };
+      });
+    }
+
+    beforeEach(() => {
+      trackStore = new Map();
+      artistStore = new Map();
+
+      const trackUpsert = vi.fn(async (row: { spotify_track_id: string; title: string; artist: string }) => {
+        trackStore.set(row.spotify_track_id, { title: row.title, artist: row.artist });
+        return { data: null, error: null };
+      });
+      const artistUpsert = vi.fn(
+        async (rows: { spotify_track_id: string; spotify_artist_id: string }[]) => {
+          for (const row of rows) {
+            const list = artistStore.get(row.spotify_track_id) ?? [];
+            list.push(row.spotify_artist_id);
+            artistStore.set(row.spotify_track_id, list);
+          }
+          return { data: null, error: null };
+        },
+      );
+
+      from.mockImplementation((table: string) => {
+        if (table === 'events') return eventsTable({ id: EVENT_ID, dj_id: 'u-dj-1', status: 'live' });
+        if (table === 'spotify_tracks') return { upsert: trackUpsert };
+        if (table === 'spotify_track_artists') return { upsert: artistUpsert };
+        throw new Error(`unexpected table ${table}`);
+      });
+
+      readLiveState.mockImplementation(async () => baseLiveState({ suggestions: suggestionsNow() }));
+
+      // A fixture stand-in for the real resolveTracks: `max` is hard-coded
+      // to 1 here (the fix-spec's "max lowered to 1"), applied oldest-first
+      // over whatever ids the route still considers unresolved -- exactly
+      // real resolveTracks's own slicing, just without a live Spotify call.
+      resolveTracks.mockImplementation(async (ids: string[]): Promise<ResolveTracksResult> => {
+        const targets = ids.slice(0, 1);
+        const resolved: ResolvedTrack[] = [];
+        const notFound: string[] = [];
+        for (const trackId of targets) {
+          if (trackId === NOT_FOUND) {
+            notFound.push(trackId);
+          } else {
+            resolved.push({
+              id: trackId,
+              title: `Resolved ${trackId}`,
+              artist: 'Some Artist',
+              artists: [{ id: `artist-${trackId}`, name: 'Some Artist' }],
+            });
+          }
+        }
+        return { resolved, notFound };
+      });
+    });
+
+    it('resolves both real tracks within a bounded number of polls, and marks the 404 unresolvable rather than leaving it silently pending', async () => {
+      // Poll 1: real1 sits first in suggestion order, so it is the one
+      // attempt this poll's max-of-1 budget allows.
+      await GET(req(), params(EVENT_ID));
+      expect(artistStore.has(REAL_1)).toBe(true);
+
+      // Poll 2: real1 has left `unresolvedTrackIds` (its spotify_tracks row
+      // now exists), so the 404 id is next in line and consumes this poll's
+      // one attempt -- and, under the fix, is marked unresolvable rather
+      // than silently dropped.
+      const res2 = await GET(req(), params(EVENT_ID));
+      const body2 = await res2.json();
+      expect(trackStore.get(NOT_FOUND)?.title).toBe(UNRESOLVABLE_TRACK_TITLE);
+      const notFoundRow = body2.queue.find(
+        (r: { suggestion: { spotifyTrackId: string } }) => r.suggestion.spotifyTrackId === NOT_FOUND,
+      );
+      expect(notFoundRow.reasons.some((r: { kind: string }) => r.kind === 'unresolvable')).toBe(true);
+
+      // Poll 3: the 404 id has left `unresolvedTrackIds` for good (it has a
+      // spotify_tracks row now, sentinel or not), freeing the single slot
+      // for real2 -- the crux of the fix. Before the fix, the 404 id's
+      // artistIds never left `[]`, so it kept re-winning this same slot on
+      // every poll and real2 was NEVER attempted, for ever.
+      const res3 = await GET(req(), params(EVENT_ID));
+      const body3 = await res3.json();
+      expect(artistStore.has(REAL_2)).toBe(true);
+      const real1Row = body3.queue.find(
+        (r: { suggestion: { spotifyTrackId: string } }) => r.suggestion.spotifyTrackId === REAL_1,
+      );
+      const real2Row = body3.queue.find(
+        (r: { suggestion: { spotifyTrackId: string } }) => r.suggestion.spotifyTrackId === REAL_2,
+      );
+      expect(real1Row.suggestion.artistIds.length).toBeGreaterThan(0);
+      expect(real2Row.suggestion.artistIds.length).toBeGreaterThan(0);
+    });
   });
 });

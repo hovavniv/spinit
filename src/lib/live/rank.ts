@@ -1,4 +1,5 @@
 import { PHASE_GENRES, PHASE_SEGMENT } from './phaseSegment';
+import { UNRESOLVABLE_TRACK_TITLE } from './liveTypes';
 import type { QueueSuggestion, RankedSong, RankInput, Reason } from './liveTypes';
 
 /**
@@ -95,7 +96,11 @@ export function rankQueue(input: RankInput): { queue: RankedSong[]; blocked: Ran
       if (shared) {
         const songsAgo = lastThree.length - i;
         if (repeatFound === null || songsAgo < repeatFound.songsAgo) {
-          repeatFound = { artist: suggestion.artist, songsAgo };
+          // M4: the DECISION above is id-based (`playedRow.artistIds`); the
+          // EXPLANATION should be too, wherever a resolved name exists --
+          // the guest's own `artist` text is unverified free text, and this
+          // sentence is what the DJ reads out loud.
+          repeatFound = { artist: suggestion.resolvedArtist ?? suggestion.artist, songsAgo };
         }
       }
     }
@@ -143,6 +148,14 @@ export function rankQueue(input: RankInput): { queue: RankedSong[]; blocked: Ran
       }
       // else: every artist resolved, none matched wants or avoids -- checked,
       // genuinely no signal. No reason, no score change.
+    } else if (suggestion.resolvedTitle === UNRESOLVABLE_TRACK_TITLE) {
+      // F1: this id was looked up and Spotify came back 404 -- it is not a
+      // real track, permanently, not merely "not checked yet". Distinct
+      // from genre-pending below so the DJ never reads "not yet checked" on
+      // a row that in fact can never be checked. Also correctly never
+      // blockable: findBlockReason above already found nothing (artistIds
+      // is empty), which is right -- there is nothing to block.
+      reasons.push({ kind: 'unresolvable' });
     } else {
       // No resolved artists at all -- the track itself hasn't resolved yet.
       reasons.push({ kind: 'genre-pending' });
@@ -183,12 +196,15 @@ function findBlockReason(
   genresByArtistId: Record<string, Record<string, number>>,
 ): Reason | null {
   if (blockedSongIds.has(suggestion.spotifyTrackId)) {
-    return { kind: 'blocked-song', title: suggestion.title };
+    // M4: the decision is id-based (`spotifyTrackId`); prefer the resolved
+    // title for the sentence the DJ reads, since the guest's own `title` is
+    // unverified free text and can name a fabrication.
+    return { kind: 'blocked-song', title: suggestion.resolvedTitle ?? suggestion.title };
   }
 
   for (const artistId of suggestion.artistIds) {
     if (blockedArtistIds.has(artistId)) {
-      return { kind: 'blocked-artist', artist: suggestion.artist };
+      return { kind: 'blocked-artist', artist: suggestion.resolvedArtist ?? suggestion.artist };
     }
   }
 

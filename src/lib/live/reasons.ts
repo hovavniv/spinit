@@ -25,6 +25,8 @@ function clause(reason: Reason): string {
       return `only ${reason.minutesLeft} minutes left in ${reason.phase}`;
     case 'genre-pending':
       return "its genre hasn't been checked yet";
+    case 'unresolvable':
+      return 'this track could not be found on Spotify';
     default: {
       const exhaustive: never = reason;
       throw new Error(`Unhandled reason kind: ${JSON.stringify(exhaustive)}`);

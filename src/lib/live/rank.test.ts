@@ -104,6 +104,31 @@ describe('rankQueue', () => {
     expect(blockedRow?.blocked).toEqual({ kind: 'blocked-song', title: 'Some Song' });
   });
 
+  // M4: the DECISION is id-based (spotifyTrackId); the EXPLANATION must
+  // prefer the resolved title over the guest's own unverified text when a
+  // resolved one exists -- the guest's title can name a fabrication, and
+  // this sentence is what the DJ reads out loud.
+  it('blocked-song reason prefers resolvedTitle over the guest-supplied title', () => {
+    const suggestion = makeSuggestion({
+      id: 's1',
+      spotifyTrackId: 'track-blocked',
+      title: 'Guest Fabricated Title',
+      resolvedTitle: 'Real Song Title',
+    });
+    const input = makeInput({
+      suggestions: [suggestion],
+      phase: 'open-floor',
+      blocklist: [
+        makeBlocklist({ entry_type: 'song', spotify_id: 'track-blocked', segment: 'party' }),
+      ],
+    });
+
+    const result = rankQueue(input);
+
+    const blockedRow = result.blocked.find((r) => r.suggestion.id === 's1');
+    expect(blockedRow?.blocked).toEqual({ kind: 'blocked-song', title: 'Real Song Title' });
+  });
+
   it('blocks a song whose FEATURED artist is on the blocklist', () => {
     const suggestion = makeSuggestion({
       id: 's1',
@@ -125,6 +150,27 @@ describe('rankQueue', () => {
     const result = rankQueue(input);
 
     expect(result.queue.map((r) => r.suggestion.id)).not.toContain('s1');
+    const blockedRow = result.blocked.find((r) => r.suggestion.id === 's1');
+    expect(blockedRow?.blocked).toEqual({ kind: 'blocked-artist', artist: 'Robin Thicke' });
+  });
+
+  it('blocked-artist reason prefers resolvedArtist over the guest-supplied artist', () => {
+    const suggestion = makeSuggestion({
+      id: 's1',
+      artist: 'Guest Fabricated Artist',
+      resolvedArtist: 'Robin Thicke',
+      artistIds: ['artist-main', 'artist-featured'],
+    });
+    const input = makeInput({
+      suggestions: [suggestion],
+      phase: 'open-floor',
+      blocklist: [
+        makeBlocklist({ entry_type: 'artist', spotify_id: 'artist-featured', segment: 'party' }),
+      ],
+    });
+
+    const result = rankQueue(input);
+
     const blockedRow = result.blocked.find((r) => r.suggestion.id === 's1');
     expect(blockedRow?.blocked).toEqual({ kind: 'blocked-artist', artist: 'Robin Thicke' });
   });
@@ -260,6 +306,31 @@ describe('rankQueue', () => {
     });
   });
 
+  it('artist-repeat reason prefers resolvedArtist over the guest-supplied artist', () => {
+    const penalized = makeSuggestion({
+      id: 'penalized',
+      spotifyTrackId: 'track-penalized',
+      artist: 'Guest Fabricated Artist',
+      resolvedArtist: 'Real Artist',
+      artistIds: ['artist-repeat'],
+      requesters: 5,
+      createdAt: '2026-09-05T10:00:00.000Z',
+    });
+    const input = makeInput({
+      suggestions: [penalized],
+      played: [makePlayed({ position: 1, spotifyTrackId: 'p1', artistIds: ['artist-repeat'] })],
+    });
+
+    const result = rankQueue(input);
+
+    const row = result.queue.find((r) => r.suggestion.id === 'penalized');
+    expect(row?.reasons).toContainEqual({
+      kind: 'artist-repeat',
+      artist: 'Real Artist',
+      songsAgo: 1,
+    });
+  });
+
   it('boosts a must-play when the phase is nearly over', () => {
     const mustPlaySong = makeSuggestion({
       id: 'must',
@@ -390,6 +461,23 @@ describe('rankQueue', () => {
     const result = rankQueue(input);
 
     const row = result.queue.find((r) => r.suggestion.id === 's1');
+    expect(row?.reasons).not.toContainEqual({ kind: 'genre-pending' });
+  });
+
+  // F1: a track this route has already asked Spotify about, and Spotify
+  // said 404 -- distinct from genre-pending, which means "never asked".
+  it('emits unresolvable, not genre-pending, for a track marked unresolvable', () => {
+    const suggestion = makeSuggestion({
+      id: 's1',
+      artistIds: [],
+      resolvedTitle: 'Unavailable track',
+    });
+    const input = makeInput({ suggestions: [suggestion] });
+
+    const result = rankQueue(input);
+
+    const row = result.queue.find((r) => r.suggestion.id === 's1');
+    expect(row?.reasons).toContainEqual({ kind: 'unresolvable' });
     expect(row?.reasons).not.toContainEqual({ kind: 'genre-pending' });
   });
 

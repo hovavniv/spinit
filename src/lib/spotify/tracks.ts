@@ -67,6 +67,18 @@ export interface ResolveTracksOptions {
   concurrency?: number;
 }
 
+export interface ResolveTracksResult {
+  resolved: ResolvedTrack[];
+  /**
+   * Ids Spotify answered with a 404 -- not a transient failure, an ANSWER:
+   * the id is not a real track. The caller (the poll route, F1) must record
+   * this permanently so the id stops being re-attempted forever; a transient
+   * failure (429/5xx, swallowed below same as before) is left off both
+   * arrays entirely and simply retried on the next poll.
+   */
+  notFound: string[];
+}
+
 /**
  * What the DJ's poll calls (design §8.1, Task 15) -- bounded the same way
  * §6.2b already bounds artist enrichment, and for the identical reason: an
@@ -77,17 +89,26 @@ export interface ResolveTracksOptions {
  * round trip -- during which every song is still ranked on its requester
  * count and still playable, never dropped and never silently unblocked.
  *
- * A single track's failure (a transient 429, a 5xx, a 404) is swallowed and
- * that track is simply left unresolved for this cycle rather than failing
- * the whole batch -- one bad id must not stop every OTHER pending track
- * from resolving.
+ * A transient failure (a 429, a 5xx) is swallowed and that track is simply
+ * left off both `resolved` and `notFound` for this cycle rather than failing
+ * the whole batch -- one bad id must not stop every OTHER pending track from
+ * resolving, and a transient failure resolves on its own on a later poll.
+ *
+ * A 404 is different in kind, not degree (F1): it is Spotify's answer that
+ * the id is not a real track, never going to change on retry. It is
+ * reported back via `notFound` so the caller can record it permanently --
+ * swallowing it the same way as a transient failure was the bug: it never
+ * left the caller's "still needs resolving" set, so it (and anything queued
+ * behind it once the caller only resolves a bounded number per poll)
+ * retried forever and never let up a resolution slot.
  */
 export async function resolveTracks(
   ids: string[],
   { max = 10, concurrency = 5 }: ResolveTracksOptions = {},
-): Promise<ResolvedTrack[]> {
+): Promise<ResolveTracksResult> {
   const targets = ids.slice(0, max);
-  const results: (ResolvedTrack | null)[] = new Array(targets.length).fill(null);
+  type Outcome = { kind: 'resolved'; track: ResolvedTrack } | { kind: 'not-found' } | { kind: 'transient-error' };
+  const outcomes: (Outcome | null)[] = new Array(targets.length).fill(null);
 
   let next = 0;
   async function worker() {
@@ -96,9 +117,10 @@ export async function resolveTracks(
       next += 1;
       if (i >= targets.length) return;
       try {
-        results[i] = await getTrack(targets[i]);
+        const track = await getTrack(targets[i]);
+        outcomes[i] = track ? { kind: 'resolved', track } : { kind: 'not-found' };
       } catch {
-        results[i] = null;
+        outcomes[i] = { kind: 'transient-error' };
       }
     }
   }
@@ -106,5 +128,13 @@ export async function resolveTracks(
   const workerCount = Math.min(concurrency, targets.length);
   await Promise.all(Array.from({ length: workerCount }, () => worker()));
 
-  return results.filter((r): r is ResolvedTrack => r !== null);
+  const resolved: ResolvedTrack[] = [];
+  const notFound: string[] = [];
+  outcomes.forEach((outcome, i) => {
+    if (outcome === null || outcome.kind === 'transient-error') return;
+    if (outcome.kind === 'resolved') resolved.push(outcome.track);
+    else notFound.push(targets[i]);
+  });
+
+  return { resolved, notFound };
 }

@@ -4,6 +4,7 @@ import { requireUser } from '@/lib/auth/dal';
 import { createClient } from '@/lib/supabase/server';
 import { isUuid } from '@/lib/validation';
 import { readActivity, readLiveState } from '@/lib/live/liveDal';
+import { UNRESOLVABLE_TRACK_TITLE, UNRESOLVABLE_TRACK_ARTIST } from '@/lib/live/liveTypes';
 import { resolveTracks } from '@/lib/spotify/tracks';
 import { rankQueue } from '@/lib/live/rank';
 import { minutesLeftInPhase as computeMinutesLeftInPhase } from '@/lib/live/phaseClock';
@@ -40,32 +41,49 @@ export async function GET(
   // own header comment for why this is a clearly separated concern.
   const activity = await readActivity(id);
 
-  // Some pending suggestions may never have resolved against Spotify at all
-  // (artistIds: []). Resolve up to 10 of them, write the results into
-  // spotify_tracks/spotify_track_artists so future polls see them as
-  // resolved, and patch THIS poll's suggestions in place so the DJ does not
-  // wait a whole extra cycle to see a track that resolved just now.
+  // Some pending suggestions may never have been LOOKED UP against Spotify
+  // at all yet -- gated on `resolvedTitle`, not `artistIds` (F1): a track
+  // this route already marked unresolvable (below) also has `artistIds: []`
+  // forever, and re-including it here on every poll is exactly the bug --
+  // it would consume a resolution slot ahead of a genuinely-unchecked
+  // suggestion, for ever. `resolvedTitle` is only non-null once a
+  // `spotify_tracks` row exists, real or sentinel, so it alone tells apart
+  // "not yet asked" from "asked, and here's the answer".
   const unresolvedTrackIds = state.suggestions
-    .filter((s) => s.artistIds.length === 0)
+    .filter((s) => s.resolvedTitle === null)
     .map((s) => s.spotifyTrackId);
 
   if (unresolvedTrackIds.length > 0) {
-    const resolved = await resolveTracks(unresolvedTrackIds, { max: 10, concurrency: 5 });
+    const { resolved, notFound } = await resolveTracks(unresolvedTrackIds, { max: 10, concurrency: 5 });
 
     const artistIdsByTrackId = new Map<string, string[]>();
     const displayByTrackId = new Map<string, { title: string; artist: string }>();
     for (const track of resolved) {
+      const trackUpsert = await supabase.from('spotify_tracks').upsert({
+        spotify_track_id: track.id,
+        title: track.title,
+        artist: track.artist,
+      });
+      // F5: this write was previously unchecked. A failure here must not
+      // read as success -- log it, and leave this track OUT of both patch
+      // maps below so THIS poll's response still shows it unresolved,
+      // matching the database (its row never landed, so `resolvedTitle`
+      // stays null and it's simply retried on the next poll) rather than
+      // showing "resolved" while the write silently failed.
+      if (trackUpsert.error) {
+        console.error('state poll: spotify_tracks upsert failed', {
+          eventId: id,
+          trackId: track.id,
+          error: trackUpsert.error,
+        });
+        continue;
+      }
+
       artistIdsByTrackId.set(
         track.id,
         track.artists.map((a) => a.id),
       );
       displayByTrackId.set(track.id, { title: track.title, artist: track.artist });
-
-      await supabase.from('spotify_tracks').upsert({
-        spotify_track_id: track.id,
-        title: track.title,
-        artist: track.artist,
-      });
 
       // Upsert keyed on (spotify_track_id, ordinal) rather than
       // delete-then-insert: one query, no window where a concurrent reader
@@ -77,26 +95,58 @@ export async function GET(
         artist_name: a.name,
       }));
       if (artistRows.length > 0) {
-        await supabase
+        const artistUpsert = await supabase
           .from('spotify_track_artists')
           .upsert(artistRows, { onConflict: 'spotify_track_id,ordinal' });
+        if (artistUpsert.error) {
+          console.error('state poll: spotify_track_artists upsert failed', {
+            eventId: id,
+            trackId: track.id,
+            error: artistUpsert.error,
+          });
+        }
       }
+    }
+
+    // F1: a 404 is an answer, not a failure -- write a sentinel
+    // `spotify_tracks` row (never the guest's own text) so this id leaves
+    // `unresolvedTrackIds` for good instead of consuming a resolution slot
+    // on every poll for ever. No `spotify_track_artists` rows: it is not a
+    // real track, so it must keep `artistIds: []` -- still correctly
+    // un-blockable, and `rank.ts` renders it as `unresolvable` rather than
+    // `genre-pending` so the DJ can tell "never checked" apart from
+    // "checked, and it isn't real".
+    for (const trackId of notFound) {
+      const trackUpsert = await supabase.from('spotify_tracks').upsert({
+        spotify_track_id: trackId,
+        title: UNRESOLVABLE_TRACK_TITLE,
+        artist: UNRESOLVABLE_TRACK_ARTIST,
+      });
+      if (trackUpsert.error) {
+        console.error('state poll: spotify_tracks upsert failed (unresolvable)', {
+          eventId: id,
+          trackId,
+          error: trackUpsert.error,
+        });
+        continue;
+      }
+      displayByTrackId.set(trackId, { title: UNRESOLVABLE_TRACK_TITLE, artist: UNRESOLVABLE_TRACK_ARTIST });
     }
 
     // In-place patch (cheaper than re-calling readLiveState): the resolved
     // array's own fields already have everything needed, including the
     // resolved display title/artist -- so a track resolved mid-poll shows
-    // its real name immediately too, not just its artist ids.
-    if (artistIdsByTrackId.size > 0) {
+    // its real name immediately too, not just its artist ids. A `notFound`
+    // id is patched the same way, with `artistIds` left at `[]`.
+    if (displayByTrackId.size > 0) {
       state.suggestions = state.suggestions.map((s) => {
-        const artistIds = artistIdsByTrackId.get(s.spotifyTrackId);
-        if (!artistIds) return s;
         const display = displayByTrackId.get(s.spotifyTrackId);
+        if (!display) return s;
         return {
           ...s,
-          artistIds,
-          resolvedTitle: display?.title ?? s.resolvedTitle,
-          resolvedArtist: display?.artist ?? s.resolvedArtist,
+          artistIds: artistIdsByTrackId.get(s.spotifyTrackId) ?? s.artistIds,
+          resolvedTitle: display.title,
+          resolvedArtist: display.artist,
         };
       });
     }

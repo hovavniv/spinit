@@ -1,6 +1,24 @@
 import type { EventPhase } from '@/lib/dashboard/types';
 import type { BlocklistRow, MustPlayRow } from '@/lib/events/detailTypes';
 
+/**
+ * The sentinel `spotify_tracks.title` the poll route (F1) writes for a track
+ * id that came back a genuine 404 from Spotify -- not a real track, and
+ * never going to become one on retry. `rank.ts` checks for exactly this
+ * value to tell "resolved, and it's not a real track" apart from "not yet
+ * looked up" (both leave `artistIds: []`, the only field ranking itself
+ * matches on). Never the guest's own `artist`/`title` text (design §3.3).
+ */
+export const UNRESOLVABLE_TRACK_TITLE = 'Unavailable track';
+
+/**
+ * The sentinel `spotify_tracks.artist` written alongside `UNRESOLVABLE_TRACK_TITLE`.
+ * Cannot be `''` -- `artist_len` requires `char_length(artist) between 1 and 200`,
+ * so an empty string fails the upsert and the row (and the fix) never lands.
+ * Display-only, like the title, and never matched on.
+ */
+export const UNRESOLVABLE_TRACK_ARTIST = '—';
+
 /** One pending suggestion, with everything rankQueue needs already resolved. */
 export interface QueueSuggestion {
   id: string;
@@ -40,7 +58,8 @@ export type Reason =
   | { kind: 'blocked-genre'; genre: string }
   | { kind: 'phase-fit'; phase: EventPhase; fits: boolean }
   | { kind: 'phase-ending'; phase: EventPhase; minutesLeft: number }
-  | { kind: 'genre-pending' };
+  | { kind: 'genre-pending' }
+  | { kind: 'unresolvable' };
 
 export interface RankedSong {
   suggestion: QueueSuggestion;

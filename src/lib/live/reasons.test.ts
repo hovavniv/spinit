@@ -39,4 +39,11 @@ describe('renderReasons', () => {
   it('returns an empty string for no reasons rather than a stray full stop', () => {
     expect(renderReasons([])).toBe('');
   });
+
+  // F1: the DJ reads this on a track that will never resolve -- distinct
+  // wording from genre-pending's "hasn't been checked yet", since it HAS.
+  it('renders unresolvable as a track that could not be found', () => {
+    expect(renderReasons([{ kind: 'unresolvable' }]))
+      .toBe('this track could not be found on Spotify.');
+  });
 });

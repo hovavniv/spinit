@@ -89,8 +89,9 @@ describe('resolveTracks', () => {
 
     const result = await resolveTracks(['trackaaaaaaaaaaaaaaaaa', 'trackccccccccccccccccc']);
 
-    expect(result).toHaveLength(1);
-    expect(result[0].id).toBe('trackaaaaaaaaaaaaaaaaa');
+    expect(result.resolved).toHaveLength(1);
+    expect(result.resolved[0].id).toBe('trackaaaaaaaaaaaaaaaaa');
+    expect(result.notFound).toEqual(['trackccccccccccccccccc']);
   });
 
   it('never attempts more than `max` ids', async () => {
