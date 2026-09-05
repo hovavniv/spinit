@@ -4,7 +4,19 @@ import { describe, expect, it, vi, beforeEach } from 'vitest';
 const { rpc, cookieGet, cookieDelete, redirectMock } = vi.hoisted(() => ({
   rpc: vi.fn(),
   cookieGet: vi.fn(),
-  cookieDelete: vi.fn(),
+  // F2: the real `next/headers` throws when `.delete` is called during a
+  // Server Component's render (only a Server Function or Route Handler may
+  // mutate cookies) -- a mock whose `delete` cannot throw cannot prove this
+  // page survives that. Reproduces Next's own `ReadonlyRequestCookiesError`
+  // message and error code, not a generic Error, so this test fails for the
+  // right reason if the page ever calls `.delete` during render again.
+  cookieDelete: vi.fn(() => {
+    const err = new Error(
+      'Cookies can only be modified in a Server Action or Route Handler. Read more: https://nextjs.org/docs/app/api-reference/functions/cookies#options',
+    );
+    Object.assign(err, { __NEXT_ERROR_CODE: 'E1180' });
+    throw err;
+  }),
   redirectMock: vi.fn((url: string) => {
     throw Object.assign(new Error('NEXT_REDIRECT'), { digest: `NEXT_REDIRECT;push;${url};307;` });
   }),
@@ -60,12 +72,17 @@ describe('/join/[token]/songs', () => {
     expect(redirectMock).toHaveBeenCalledWith(`/join/${VALID_TOKEN}`);
   });
 
-  it('clears the cookie and redirects on no_such_session', async () => {
+  it('redirects on no_such_session WITHOUT calling cookies().delete() during render', async () => {
     cookieGet.mockReturnValue({ value: SESSION_ID });
     rpc.mockResolvedValue({ data: null, error: { message: 'no_such_session' } });
 
+    // Before F2: the page called clearGuestSessionCookie(token), which
+    // calls cookies().delete() -- forbidden during a Server Component's
+    // render in Next 16 and, with this mock now reproducing that throw,
+    // would surface as an uncaught ReadonlyRequestCookiesError rather than
+    // the NEXT_REDIRECT digest this assertion looks for.
     await expect(SongsPage(pageProps(VALID_TOKEN) as never)).rejects.toThrow(/NEXT_REDIRECT/);
-    expect(cookieDelete).toHaveBeenCalled();
+    expect(cookieDelete).not.toHaveBeenCalled();
     expect(redirectMock).toHaveBeenCalledWith(`/join/${VALID_TOKEN}`);
   });
 
