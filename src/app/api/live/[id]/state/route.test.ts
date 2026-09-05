@@ -360,10 +360,14 @@ describe('GET /api/live/[id]/state', () => {
 
       readLiveState.mockImplementation(async () => baseLiveState({ suggestions: suggestionsNow() }));
 
-      // A fixture stand-in for the real resolveTracks: `max` is hard-coded
-      // to 1 here (the fix-spec's "max lowered to 1"), applied oldest-first
-      // over whatever ids the route still considers unresolved -- exactly
-      // real resolveTracks's own slicing, just without a live Spotify call.
+      // A fixture stand-in for the real resolveTracks. The route itself
+      // still calls resolveTracks with `{ max: 10 }` -- that was never
+      // changed. This mock's `max` of 1 is a simulation choice made only in
+      // this test's own fixture, so it can force a bounded budget across
+      // repeated polls without waiting for ten real suggestions; it applies
+      // oldest-first over whatever ids the route still considers unresolved,
+      // the same slicing real resolveTracks does internally, just without a
+      // live Spotify call.
       resolveTracks.mockImplementation(async (ids: string[]): Promise<ResolveTracksResult> => {
         const targets = ids.slice(0, 1);
         const resolved: ResolvedTrack[] = [];
@@ -418,6 +422,178 @@ describe('GET /api/live/[id]/state', () => {
       );
       expect(real1Row.suggestion.artistIds.length).toBeGreaterThan(0);
       expect(real2Row.suggestion.artistIds.length).toBeGreaterThan(0);
+    });
+  });
+
+  describe('G1: a failed spotify_track_artists upsert must not permanently disable retries', () => {
+    // A single track: its spotify_tracks row lands successfully, but its
+    // spotify_track_artists upsert fails on the FIRST poll and succeeds on
+    // the SECOND. Under the pre-fix `resolvedTitle === null` predicate, once
+    // the spotify_tracks row lands `resolvedTitle` is non-null for ever, so
+    // the track never re-enters `unresolvedTrackIds` and `artistIds` stays
+    // `[]` permanently -- this test pins that it is retried instead.
+    const TRACK_ID = 't-artist-upsert-flaky';
+
+    let trackStore: Map<string, { title: string; artist: string }>;
+    let artistStore: Map<string, string[]>;
+    let artistUpsertCallCount: number;
+
+    function suggestionNow(): QueueSuggestion {
+      const resolved = trackStore.get(TRACK_ID);
+      return {
+        id: `s-${TRACK_ID}`,
+        spotifyTrackId: TRACK_ID,
+        title: 'Guest title',
+        artist: 'Guest artist',
+        resolvedTitle: resolved?.title ?? null,
+        resolvedArtist: resolved?.artist ?? null,
+        artistIds: artistStore.get(TRACK_ID) ?? [],
+        requesters: 1,
+        createdAt: '2026-01-01T00:00:00.000Z',
+        suggestedByName: 'Guest',
+      };
+    }
+
+    beforeEach(() => {
+      trackStore = new Map();
+      artistStore = new Map();
+      artistUpsertCallCount = 0;
+
+      const trackUpsert = vi.fn(async (row: { spotify_track_id: string; title: string; artist: string }) => {
+        trackStore.set(row.spotify_track_id, { title: row.title, artist: row.artist });
+        return { data: null, error: null };
+      });
+      // Fails on its first invocation (poll 1), succeeds on every subsequent
+      // one (poll 2+) -- simulating a transient write failure.
+      const artistUpsert = vi.fn(
+        async (rows: { spotify_track_id: string; spotify_artist_id: string }[]) => {
+          artistUpsertCallCount += 1;
+          if (artistUpsertCallCount === 1) {
+            return { data: null, error: { message: 'simulated transient failure' } };
+          }
+          for (const row of rows) {
+            const list = artistStore.get(row.spotify_track_id) ?? [];
+            list.push(row.spotify_artist_id);
+            artistStore.set(row.spotify_track_id, list);
+          }
+          return { data: null, error: null };
+        },
+      );
+
+      from.mockImplementation((table: string) => {
+        if (table === 'events') return eventsTable({ id: EVENT_ID, dj_id: 'u-dj-1', status: 'live' });
+        if (table === 'spotify_tracks') return { upsert: trackUpsert };
+        if (table === 'spotify_track_artists') return { upsert: artistUpsert };
+        throw new Error(`unexpected table ${table}`);
+      });
+
+      readLiveState.mockImplementation(async () => baseLiveState({ suggestions: [suggestionNow()] }));
+
+      resolveTracks.mockImplementation(async (ids: string[]): Promise<ResolveTracksResult> => ({
+        resolved: ids.map((trackId) => ({
+          id: trackId,
+          title: `Resolved ${trackId}`,
+          artist: 'Some Artist',
+          artists: [{ id: `artist-${trackId}`, name: 'Some Artist' }],
+        })),
+        notFound: [],
+      }));
+    });
+
+    it('retries the artist upsert next poll after a failure, and artistIds populates once it succeeds', async () => {
+      const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+      // Poll 1: spotify_tracks upsert succeeds, spotify_track_artists upsert
+      // fails. The failed write must not be reported as resolved this poll.
+      const res1 = await GET(req(), params(EVENT_ID));
+      const body1 = await res1.json();
+      expect(artistStore.has(TRACK_ID)).toBe(false);
+      expect(trackStore.has(TRACK_ID)).toBe(true);
+      const row1 = body1.queue.find(
+        (r: { suggestion: { spotifyTrackId: string } }) => r.suggestion.spotifyTrackId === TRACK_ID,
+      );
+      expect(row1.suggestion.artistIds).toEqual([]);
+      expect(consoleErrorSpy).toHaveBeenCalledWith(
+        'state poll: spotify_track_artists upsert failed',
+        expect.objectContaining({ trackId: TRACK_ID }),
+      );
+
+      // Poll 2: the track now has a spotify_tracks row but no artist rows --
+      // under the fix's predicate this is still "unresolved" and is retried.
+      // This time the artist upsert succeeds.
+      const res2 = await GET(req(), params(EVENT_ID));
+      const body2 = await res2.json();
+      expect(artistStore.has(TRACK_ID)).toBe(true);
+      const row2 = body2.queue.find(
+        (r: { suggestion: { spotifyTrackId: string } }) => r.suggestion.spotifyTrackId === TRACK_ID,
+      );
+      expect(row2.suggestion.artistIds.length).toBeGreaterThan(0);
+
+      consoleErrorSpy.mockRestore();
+    });
+  });
+
+  // G5: F5's spotify_tracks upsert error check was previously unexercised --
+  // every existing fixture in this file returns `{ error: null }`, so
+  // deleting the `if (trackUpsert.error) { continue }` branch would leave
+  // the whole suite green. This is the close sibling the fix-spec allows
+  // for, covering the OTHER upsert (the parent row, not the artist rows).
+  describe('G5: a failed spotify_tracks upsert must not be reported as resolved', () => {
+    const TRACK_ID = 't-track-upsert-flaky';
+
+    it('leaves the track unresolved in this poll\'s response and logs the error, rather than reporting success', async () => {
+      const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+      const trackUpsert = vi.fn(async () => ({ data: null, error: { message: 'simulated write failure' } }));
+      const artistUpsert = vi.fn(async () => ({ data: null, error: null }));
+
+      from.mockImplementation((table: string) => {
+        if (table === 'events') return eventsTable({ id: EVENT_ID, dj_id: 'u-dj-1', status: 'live' });
+        if (table === 'spotify_tracks') return { upsert: trackUpsert };
+        if (table === 'spotify_track_artists') return { upsert: artistUpsert };
+        throw new Error(`unexpected table ${table}`);
+      });
+
+      readLiveState.mockResolvedValue(
+        baseLiveState({
+          suggestions: [
+            {
+              id: `s-${TRACK_ID}`,
+              spotifyTrackId: TRACK_ID,
+              title: 'Guest title',
+              artist: 'Guest artist',
+              resolvedTitle: null,
+              resolvedArtist: null,
+              artistIds: [],
+              requesters: 1,
+              createdAt: '2026-01-01T00:00:00.000Z',
+              suggestedByName: 'Guest',
+            },
+          ],
+        }),
+      );
+      resolveTracks.mockResolvedValue({
+        resolved: [
+          { id: TRACK_ID, title: 'Resolved Title', artist: 'Resolved Artist', artists: [{ id: 'a-x', name: 'Resolved Artist' }] },
+        ],
+        notFound: [],
+      });
+
+      const res = await GET(req(), params(EVENT_ID));
+      const body = await res.json();
+
+      expect(artistUpsert).not.toHaveBeenCalled();
+      expect(consoleErrorSpy).toHaveBeenCalledWith(
+        'state poll: spotify_tracks upsert failed',
+        expect.objectContaining({ trackId: TRACK_ID }),
+      );
+      const row = body.queue.find(
+        (r: { suggestion: { spotifyTrackId: string } }) => r.suggestion.spotifyTrackId === TRACK_ID,
+      );
+      expect(row.suggestion.resolvedTitle).toBeNull();
+      expect(row.suggestion.artistIds).toEqual([]);
+
+      consoleErrorSpy.mockRestore();
     });
   });
 });

@@ -41,16 +41,24 @@ export async function GET(
   // own header comment for why this is a clearly separated concern.
   const activity = await readActivity(id);
 
-  // Some pending suggestions may never have been LOOKED UP against Spotify
-  // at all yet -- gated on `resolvedTitle`, not `artistIds` (F1): a track
-  // this route already marked unresolvable (below) also has `artistIds: []`
-  // forever, and re-including it here on every poll is exactly the bug --
-  // it would consume a resolution slot ahead of a genuinely-unchecked
-  // suggestion, for ever. `resolvedTitle` is only non-null once a
-  // `spotify_tracks` row exists, real or sentinel, so it alone tells apart
-  // "not yet asked" from "asked, and here's the answer".
+  // A suggestion is unresolved if it has never been looked up at all
+  // (`resolvedTitle === null`, F1's case), OR if it has a `spotify_tracks`
+  // row but no artist rows yet (G1's case: the artist upsert failed on a
+  // previous poll). The sentinel is excluded by name from the second
+  // clause -- a genuinely resolved track always has at least one artist
+  // row, so a real song that happens to be titled exactly
+  // `UNRESOLVABLE_TRACK_TITLE` still takes the first clause once, resolves
+  // with real artist rows, and never matches the second clause again. Without
+  // this second clause, a track whose parent row landed but whose artist
+  // upsert failed would have `resolvedTitle` set for ever and would never be
+  // retried -- its `artistIds` would stay `[]` permanently, silently
+  // disabling every do-not-play artist/genre block for it.
   const unresolvedTrackIds = state.suggestions
-    .filter((s) => s.resolvedTitle === null)
+    .filter(
+      (s) =>
+        s.resolvedTitle === null ||
+        (s.artistIds.length === 0 && s.resolvedTitle !== UNRESOLVABLE_TRACK_TITLE),
+    )
     .map((s) => s.spotifyTrackId);
 
   if (unresolvedTrackIds.length > 0) {
@@ -104,6 +112,14 @@ export async function GET(
             trackId: track.id,
             error: artistUpsert.error,
           });
+          // Do not leave this track in the patch maps below: its
+          // spotify_tracks row landed but the artist rows did not, so
+          // reporting resolved/artistIds here would claim ids the database
+          // does not have. It's already in the maps by this point (set
+          // above), so it must be explicitly removed rather than skipped.
+          artistIdsByTrackId.delete(track.id);
+          displayByTrackId.delete(track.id);
+          continue;
         }
       }
     }
