@@ -537,8 +537,26 @@ reason; accepting a caller-supplied artist in the function reopened the same doo
   `anon` cannot write.
 
 What a hostile caller gains is therefore a row that *looks* wrong in the DJ's queue, and nothing
-else. They cannot affect a ranking, evade the do-not-play list, or influence what the couple's
-recap records. **The fabrication's consequences were removed rather than the input policed.**
+that affects ranking or the do-not-play list: those match on ids resolved server-side, never on the
+caller's text. **The fabrication's consequences were removed rather than the input policed** — for
+ranking and blocking. The recap guarantee is narrower, and an earlier draft of this section stated
+it as absolute. That was imprecise and is corrected here rather than left standing.
+
+**Corrected: a hostile caller CAN influence what the couple's recap records, for one specific,
+bounded case.** `dj_play_suggestion` writes `coalesce(v_resolved_title, v_suggestion_title)` (and
+the same for `artist`) — so for a suggestion whose track never resolved against Spotify, the
+guest's own unverified text is what lands in the couple's permanent keepsake, up to 200 characters
+(`song_suggestions`' own length check). Before a fix to the DJ's poll (below), this window was
+effectively unbounded for a crafted, nonexistent-but-shape-valid track id: such an id 404s against
+Spotify forever, was silently dropped by the resolver, and was retried on every poll for ever
+without ever getting a `spotify_tracks` row. That is fixed: a 404 is now recorded with a sentinel
+row rather than retried indefinitely, so a `spotify_tracks` row (real or a sentinel marking the id
+unresolvable) always eventually exists, and the unresolved window narrows
+to: a track that is played by the DJ before any poll has resolved it, or a track that is a genuine
+404 on Spotify's catalogue played anyway. Both are narrow in practice — the DJ approves every song
+before it plays, and a queue row that never resolves is visibly flagged (`unresolvable`) rather
+than looking like an ordinary pending song — but neither is impossible, and the guarantee below is
+stated at the size it actually has, not the one an earlier draft claimed.
 
 ### 8.4 Abuse limits that are enforced, and by what
 
