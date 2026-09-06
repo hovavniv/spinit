@@ -1,0 +1,41 @@
+-- NOT APPLIED. The .txt suffix keeps this out of `supabase db push`.
+-- Rename it to 20260907000000_two_phases.sql to run it.
+--
+-- Renames the event_phase enum labels to match what they now mean in the app.
+-- The app was collapsed from four phases to two on 2026-09-06; the two stored
+-- values 'dinner' and 'open-floor' became the reception and party phases, but
+-- kept their old labels because renaming needs the two-step below and there was
+-- an event live at the time.
+--
+-- WHY TWO STEPS: Postgres will not let a value added by ALTER TYPE ... ADD VALUE
+-- be used in the same transaction that adds it. Supabase runs each migration in
+-- a transaction, so the ADD and the UPDATE cannot share one file. Run part 1,
+-- let it commit, then run part 2.
+--
+-- Live data at the time of writing (2026-09-06): 256 rows on 'dinner', 1 on
+-- 'open-floor', 6 null, and ZERO on 'cocktails' or 'last-dance'. Re-check that
+-- before running -- the UPDATE below assumes nothing needs rescuing from the
+-- two labels that are being retired.
+
+-- ---------- part 1: add the new labels (own migration, own transaction) ------
+alter type public.event_phase add value if not exists 'reception';
+alter type public.event_phase add value if not exists 'party';
+
+-- ---------- part 2: move the rows (a SEPARATE migration file) ---------------
+-- update public.events set phase = 'reception' where phase in ('cocktails', 'dinner');
+-- update public.events set phase = 'party'     where phase in ('open-floor', 'last-dance');
+--
+-- Postgres cannot drop a value from an enum. Retiring 'cocktails', 'dinner',
+-- 'open-floor' and 'last-dance' means creating a fresh type and swapping the
+-- column over -- worth doing only if the stale labels start causing confusion:
+--
+--   alter table public.events alter column phase drop default;
+--   create type public.event_phase_new as enum ('reception', 'party');
+--   alter table public.events
+--     alter column phase type public.event_phase_new
+--     using phase::text::public.event_phase_new;
+--   drop type public.event_phase;
+--   alter type public.event_phase_new rename to public.event_phase;
+--
+-- Check for other dependents (the phase_required_when_live constraint, any
+-- function or view referencing the type) before attempting that.
