@@ -331,6 +331,7 @@ async function main() {
 
   await seedEvents(supabase, djId, EVENTS);
   await seedGuestData(djId);
+  await seedDemoQueue(djId);
 
   console.log(`seed-demo: done. ${EVENTS.length} demo events.`);
 
@@ -657,6 +658,153 @@ async function seedGuestData(djId) {
  * every run. Seeding a second fixture event that is ALREADY live removes the
  * flip entirely.
  */
+/**
+ * A dozen real, pending requests for the live demo event's DJ queue.
+ *
+ * WHY THIS EXISTS. `seedGuestData` above seeds three suggestions, and a manual
+ * walk has since played all of them -- so the live screen's request queue
+ * renders empty, which demonstrates nothing. What used to fill that queue was
+ * 432 rows of integration-test litter, every one of which showed as
+ * "Unavailable track — —" because the ids were random 22-character strings
+ * that 404 on Spotify. This replaces that accidental filler with a deliberate
+ * fixture.
+ *
+ * EVERY ID BELOW WAS RESOLVED BY A REAL `GET /v1/search` CALL against this
+ * app's own client credentials on 2026-09-06, not written from memory.
+ * `spotify_track_id`'s shape constraint accepts an invented 22-character
+ * string exactly as happily as a real one, and the failure mode is invisible
+ * until the live screen polls Spotify and writes the unresolvable sentinel --
+ * which is precisely the bug this fixture exists to stop recurring.
+ *
+ * The set is CHOSEN, not arbitrary. It exercises three branches of the
+ * ranking engine that a flat list of unrelated songs would leave dark:
+ *
+ *   - 'How You Remind Me' is by Nickelback, whose artist id
+ *     (6deZN1bslXzeGvOLaLMOIF) is exactly the one on Sara & Daniel's seeded
+ *     blocklist. It is deliberately given a high backer count, so the DJ
+ *     screen has to show a heavily-requested song that is nevertheless
+ *     blocked, with the reason -- the single clearest demonstration that this
+ *     is a decision engine and not a queue.
+ *   - 'Levitating' and "Don't Start Now" share one artist id
+ *     (6M2wZ9GZgrQXHCFfjv46we, Dua Lipa), so the artist-repeat term has
+ *     something real to fire on once one of them is played.
+ *   - The backer counts are deliberately uneven (2 to 7), so the requesters
+ *     term actually orders the list instead of tying everything at 1.
+ */
+const DEMO_GUEST_NAMES = ['Dana', 'Yonatan', 'Maya', 'Omer', 'Shira', 'Tal', 'Noa', 'Gil'];
+
+/**
+ * `by` indexes DEMO_GUEST_NAMES. At most three per guest: guest_suggest
+ * enforces a cap of 3 per SESSION and raises `suggestion_limit` on the
+ * fourth, so a fixture that ignored the cap would fail against the real RPC.
+ * `backers` are the OTHER guests who vote for it afterwards; the suggester is
+ * already counted as one requester by guest_suggest itself.
+ */
+const DEMO_QUEUE = [
+  { by: 0, trackId: '32OlwWuMpZ6b0aN2RZOeMS', title: 'Uptown Funk (feat. Bruno Mars)', artist: 'Mark Ronson', backers: [1, 2, 3, 4, 5, 6] },
+  { by: 0, trackId: '0GjEhVFGZW8afUYGChu3Rr', title: 'Dancing Queen', artist: 'ABBA', backers: [4, 6] },
+  { by: 0, trackId: '0VjIjW4GlUZAMYd2vXMi3b', title: 'Blinding Lights', artist: 'The Weeknd', backers: [2, 3, 5, 6] },
+  { by: 1, trackId: '1NHWG8zxSEypSRF3UufrnO', title: "Don't Stop Me Now", artist: 'Queen', backers: [0, 3, 5] },
+  { by: 1, trackId: '003vvx7Niy0yvhvHt4a68B', title: 'Mr. Brightside', artist: 'The Killers', backers: [0, 4] },
+  { by: 1, trackId: '5rb9QrpfcKFHM1EUbSIurX', title: 'Yeah! (feat. Lil Jon & Ludacris)', artist: 'USHER', backers: [5] },
+  { by: 2, trackId: '2tUBqZG2AbRi7Q0BIrVrEj', title: 'I Wanna Dance with Somebody (Who Loves Me)', artist: 'Whitney Houston', backers: [0, 1, 4, 7] },
+  { by: 2, trackId: '5nujrmhLynf4yMoMtj8AQF', title: 'Levitating (feat. DaBaby)', artist: 'Dua Lipa', backers: [3, 7] },
+  { by: 2, trackId: '3PfIrDoz19wz7qK7tYeu62', title: "Don't Start Now", artist: 'Dua Lipa', backers: [7] },
+  { by: 3, trackId: '62AuGbAkt8Ox2IrFFb8GKV', title: 'Sweet Caroline', artist: 'Neil Diamond', backers: [1, 2, 5, 6, 7] },
+  { by: 3, trackId: '2PpruBYCo4H7WOBJ7Q2EwM', title: 'Hey Ya!', artist: 'Outkast', backers: [0] },
+  { by: 4, trackId: '0gmbgwZ8iqyMPmXefof8Yf', title: 'How You Remind Me', artist: 'Nickelback', backers: [2, 7] },
+];
+
+/**
+ * Seeds DEMO_QUEUE onto the live demo event, through the real anon RPCs.
+ *
+ * Idempotent on the FIRST demo track rather than on "does this event have any
+ * guest sessions at all" (the guard `seedGuestData` uses): that event already
+ * has sessions from the earlier seed and from manual walks, so an
+ * any-sessions guard would skip this block for ever and it would never run
+ * once. guest_suggest's own dedupe would turn a re-run's suggestions into
+ * votes rather than duplicates, but guest_join has no natural upsert key and
+ * would mint eight fresh guests on every run -- hence a guard at all.
+ */
+async function seedDemoQueue(djId) {
+  const eventId = derivedId(djId, 'sara-daniel');
+  const joinToken = deriveToken(djId, 'sara-daniel');
+
+  const supabase = createClient(SUPABASE_URL, ANON_KEY, { auth: { persistSession: false } });
+  const signIn = await supabase.auth.signInWithPassword({ email: EMAIL, password: PASSWORD });
+  if (signIn.error) {
+    console.error(`seed-demo: could not sign in to check the demo queue: ${signIn.error.message}`);
+    process.exit(1);
+  }
+  const { data: existing, error: existingError } = await supabase
+    .from('song_suggestions')
+    .select('id')
+    .eq('event_id', eventId)
+    .eq('spotify_track_id', DEMO_QUEUE[0].trackId)
+    .limit(1);
+  if (existingError) {
+    console.error(`seed-demo: failed to check for an existing demo queue: ${existingError.message}`);
+    process.exit(1);
+  }
+  if (existing && existing.length > 0) {
+    console.log('seed-demo: sara-daniel already has the demo queue, skipping (idempotent)');
+    return;
+  }
+
+  const guest = createClient(SUPABASE_URL, ANON_KEY, { auth: { persistSession: false } });
+
+  const sessionIds = [];
+  for (const name of DEMO_GUEST_NAMES) {
+    const { data: sessionId, error } = await guest.rpc('guest_join', {
+      p_token: joinToken,
+      p_display_name: name,
+    });
+    if (error) {
+      console.error(`seed-demo: guest_join failed for ${name}: ${error.message}`);
+      process.exit(1);
+    }
+    sessionIds.push(sessionId);
+  }
+
+  let votes = 0;
+  for (const { by, trackId, title, artist, backers } of DEMO_QUEUE) {
+    const { data, error } = await guest.rpc('guest_suggest', {
+      p_session_id: sessionIds[by],
+      p_track_id: trackId,
+      p_title: title,
+      p_artist: artist,
+    });
+    if (error) {
+      console.error(`seed-demo: guest_suggest failed for ${title}: ${error.message}`);
+      process.exit(1);
+    }
+    // Asserted, not assumed: a `was_existing` here would mean the guard above
+    // let a partially-seeded run through, and the backer counts below would
+    // then be silently wrong rather than absent.
+    if (data[0].was_existing) {
+      console.error(`seed-demo: ${title} was already suggested -- the demo queue is partially seeded, refusing to continue`);
+      process.exit(1);
+    }
+    const suggestionId = data[0].suggestion_id;
+
+    for (const backer of backers) {
+      const { error: voteError } = await guest.rpc('guest_vote', {
+        p_session_id: sessionIds[backer],
+        p_suggestion_id: suggestionId,
+      });
+      if (voteError) {
+        console.error(`seed-demo: guest_vote failed for ${title} by ${DEMO_GUEST_NAMES[backer]}: ${voteError.message}`);
+        process.exit(1);
+      }
+      votes += 1;
+    }
+  }
+
+  console.log(
+    `seed-demo: seeded ${DEMO_QUEUE.length} pending requests from ${DEMO_GUEST_NAMES.length} guests, plus ${votes} backing votes`,
+  );
+}
+
 const FIXTURE_EVENTS = [
   {
     slug: 'integration-primary',
