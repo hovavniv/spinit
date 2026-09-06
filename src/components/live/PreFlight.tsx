@@ -5,10 +5,8 @@ import { useRouter } from 'next/navigation';
 
 import type { EventPhase } from '@/lib/dashboard/types';
 import type { LiveActionResult } from '@/lib/live/liveActions';
+import { START_PHASE } from '@/lib/live/phaseSegment';
 import styles from './PreFlight.module.css';
-
-/** Every event starts in Cocktails; the DJ changes phase on the live screen. */
-const START_PHASE: EventPhase = 'cocktails';
 
 /**
  * Shown for an `upcoming` event on `/events/[id]/live` (design §5.2). Takes

@@ -131,7 +131,7 @@ describe('/events/[id]/live', () => {
   });
 
   it('renders the live view instead of the pre-flight for a live event', async () => {
-    maybeSingle.mockResolvedValue({ data: event({ status: 'live', phase: 'cocktails' }) });
+    maybeSingle.mockResolvedValue({ data: event({ status: 'live', phase: 'dinner' }) });
 
     await renderPage(EVENT_ID);
 
@@ -139,7 +139,7 @@ describe('/events/[id]/live', () => {
   });
 
   it('with a live event but no join_token, shows the missing-link note (not a QR for a broken URL) and logs the anomaly', async () => {
-    maybeSingle.mockResolvedValue({ data: event({ status: 'live', phase: 'cocktails', join_token: null }) });
+    maybeSingle.mockResolvedValue({ data: event({ status: 'live', phase: 'dinner', join_token: null }) });
     const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
 
     await renderPage(EVENT_ID);

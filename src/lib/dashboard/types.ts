@@ -13,8 +13,17 @@ export type DjProfile = { name: string; company: string };
  * The enumerated concept the decision engine crosses (CLAUDE.md: "the current
  * event phase" is one of the ranking inputs) — typed as a union, not `string`,
  * because that is exactly the field where losing the enum would hurt most.
+ *
+ * Narrowed 2026-09-06 (docs/specs/2026-09-06-two-phases-spec.md) from the
+ * original four DJ-facing phases to the two that actually change engine
+ * behaviour. The stored enum values are UNCHANGED -- 'dinner' now means
+ * "Reception" and 'open-floor' now means "Party"; a real rename needs two
+ * migrations and is parked at
+ * supabase/migrations/_pending/20260907000000_two_phases.sql.txt. See
+ * `PHASE_SEGMENT` in src/lib/live/phaseSegment.ts for what these labels
+ * actually mean.
  */
-export type EventPhase = 'cocktails' | 'dinner' | 'open-floor' | 'last-dance';
+export type EventPhase = 'dinner' | 'open-floor';
 
 export type LiveEvent = {
   id: string;
@@ -74,10 +83,14 @@ export type DashboardData = {
   past: PastEvent[];
 };
 
-/** Display text for EventPhase; 'open-floor' → 'Open floor' reproduces the artboard. */
+/**
+ * Display text for EventPhase. These are the labels shown to the DJ and must
+ * match the headings the couple sees on the event detail screen ('Reception',
+ * 'Party') -- the enum values themselves ('dinner', 'open-floor') are a
+ * historical naming compromise (see the EventPhase comment above) that no
+ * user ever sees.
+ */
 export const PHASE_LABELS: Record<EventPhase, string> = {
-  cocktails: 'Cocktails',
-  dinner: 'Dinner',
-  'open-floor': 'Open floor',
-  'last-dance': 'Last dance',
+  dinner: 'Reception',
+  'open-floor': 'Party',
 };

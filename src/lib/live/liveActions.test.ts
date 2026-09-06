@@ -51,13 +51,13 @@ describe('startEvent', () => {
     const { builder, calls } = tableDouble({ data: [{ id: EVENT_ID }], error: null });
     from.mockReturnValue(builder);
 
-    const result = await startEvent(EVENT_ID, 'cocktails');
+    const result = await startEvent(EVENT_ID, 'dinner');
 
     expect(result).toEqual({ ok: true });
     expect(from).toHaveBeenCalledWith('events');
     expect(calls.update).toMatchObject({
       status: 'live',
-      phase: 'cocktails',
+      phase: 'dinner',
     });
     expect(calls.update).toHaveProperty('start_time');
     expect(calls.update).toHaveProperty('phase_started_at');
@@ -74,7 +74,7 @@ describe('startEvent', () => {
     const { builder } = tableDouble({ data: [], error: null });
     from.mockReturnValue(builder);
 
-    const result = await startEvent(EVENT_ID, 'cocktails');
+    const result = await startEvent(EVENT_ID, 'dinner');
 
     expect(result).toEqual({ ok: false, reason: 'wrong-state' });
   });
@@ -86,7 +86,7 @@ describe('startEvent', () => {
     const { builder, calls } = tableDouble({ data: [{ id: EVENT_ID }], error: null });
     from.mockReturnValue(builder);
 
-    await startEvent(EVENT_ID, 'cocktails');
+    await startEvent(EVENT_ID, 'dinner');
 
     expect(calls.update?.start_time).toBe('20:00');
   });

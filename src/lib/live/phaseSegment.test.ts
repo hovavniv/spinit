@@ -1,14 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import { GENRES } from '@/lib/genres/vocabulary';
-import { PHASE_GENRES, PHASE_SEGMENT } from './phaseSegment';
+import { PHASE_GENRES, PHASE_SEGMENT, START_PHASE } from './phaseSegment';
 
 describe('PHASE_SEGMENT', () => {
   it('maps every phase to a segment the queue can contain', () => {
     expect(PHASE_SEGMENT).toEqual({
-      cocktails: 'reception',
       dinner: 'reception',
       'open-floor': 'party',
-      'last-dance': 'party',
     });
   });
 
@@ -16,6 +14,15 @@ describe('PHASE_SEGMENT', () => {
   // maps to them (S6.2-i).
   it('never maps a phase to the ceremony segment', () => {
     expect(Object.values(PHASE_SEGMENT)).not.toContain('ceremony');
+  });
+
+  // Asserting `START_PHASE` equals a literal would survive the enum rename
+  // already parked in supabase/migrations/_pending/, and would pass even if
+  // the segment it resolves to silently inverted. What matters is that a
+  // starting event honours the couple's RECEPTION rules, not which string is
+  // stored to get there.
+  it('resolves the starting phase to the reception segment', () => {
+    expect(PHASE_SEGMENT[START_PHASE]).toBe('reception');
   });
 });
 

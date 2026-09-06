@@ -31,19 +31,20 @@ describe('StartEventSection', () => {
   });
 
   // The phase picker used to live here as well as on the live screen. It was
-  // removed: an event always begins in Cocktails, and asking the DJ to commit
-  // to a phase before the first guest arrives duplicated a control that is one
-  // click away the moment the event goes live. This pins the phase the action
-  // is actually called with, so a future edit cannot quietly start events in
+  // removed: an event always begins in the reception phase (stored as
+  // 'dinner' -- see phaseSegment.ts), and asking the DJ to commit to a phase
+  // before the first guest arrives duplicated a control that is one click
+  // away the moment the event goes live. This pins the phase the action is
+  // actually called with, so a future edit cannot quietly start events in
   // some other phase.
-  it('starts the event in Cocktails and navigates to the live screen on success', async () => {
+  it('starts the event in the reception phase and navigates to the live screen on success', async () => {
     const user = userEvent.setup();
     const startEventAction = vi.fn(async (): Promise<LiveActionResult> => ({ ok: true }));
     render(<StartEventSection eventId={EVENT_ID} canStart={true} startEventAction={startEventAction} />);
 
     await user.click(screen.getByRole('button', { name: 'Start event' }));
 
-    expect(startEventAction).toHaveBeenCalledWith(EVENT_ID, 'cocktails');
+    expect(startEventAction).toHaveBeenCalledWith(EVENT_ID, 'dinner');
     expect(push).toHaveBeenCalledWith(`/events/${EVENT_ID}/live`);
   });
 

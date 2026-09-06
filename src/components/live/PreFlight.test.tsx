@@ -42,22 +42,23 @@ describe('PreFlight', () => {
     expect(screen.getByText(/the guest QR code appears once you start/i)).toBeInTheDocument();
   });
 
-  // No phase picker here any more -- an event always starts in Cocktails and
-  // the DJ changes phase on the live screen, where they can see the room.
+  // No phase picker here any more -- an event always starts in the reception
+  // phase and the DJ changes phase on the live screen, where they can see the
+  // room.
   it('offers no phase control', () => {
     renderPreFlight(vi.fn());
 
     expect(screen.queryByRole('radiogroup', { name: 'Event phase' })).not.toBeInTheDocument();
   });
 
-  it('starts the event in Cocktails', async () => {
+  it('starts the event in the reception phase', async () => {
     const user = userEvent.setup();
     const startEvent = vi.fn(async (): Promise<LiveActionResult> => ({ ok: true }));
     renderPreFlight(startEvent);
 
     await user.click(screen.getByRole('button', { name: 'Start event' }));
 
-    expect(startEvent).toHaveBeenCalledWith(EVENT_ID, 'cocktails');
+    expect(startEvent).toHaveBeenCalledWith(EVENT_ID, 'dinner');
   });
 
   it('shows an error rather than crashing when the event is in the wrong state', async () => {

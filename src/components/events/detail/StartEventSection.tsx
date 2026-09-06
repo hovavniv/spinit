@@ -5,16 +5,8 @@ import { useRouter } from 'next/navigation';
 
 import type { EventPhase } from '@/lib/dashboard/types';
 import type { LiveActionResult } from '@/lib/live/liveActions';
+import { START_PHASE } from '@/lib/live/phaseSegment';
 import styles from './StartEventSection.module.css';
-
-/**
- * Every event starts in Cocktails. The phase picker used to sit here as well
- * as on the live screen, which asked the DJ to commit to a phase before the
- * first guest has arrived and duplicated a control that is one click away the
- * moment the event is live. Phase still drives the ranking engine -- it is
- * chosen there, during the event, where the DJ can see the room.
- */
-const START_PHASE: EventPhase = 'cocktails';
 
 interface StartEventSectionProps {
   eventId: string;

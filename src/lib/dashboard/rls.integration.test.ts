@@ -146,7 +146,7 @@ describe.skipIf(!hasSupabaseConfig || !hasTestUsers)(
     test("DJ B cannot change the phase of A's event", async () => {
       const { data, error } = await clientB
         .from('events')
-        .update({ phase: 'last-dance' })
+        .update({ phase: 'open-floor' })
         .eq('id', eventAId)
         .select('id');
 

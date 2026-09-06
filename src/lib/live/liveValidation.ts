@@ -8,7 +8,10 @@ import { TOKEN_PATTERN } from './token';
  * this week -- this avoids a merge conflict entirely rather than risking one.
  */
 
-const phaseField = z.enum(['cocktails', 'dinner', 'open-floor', 'last-dance']);
+// Collapsed 2026-09-06 to the two EventPhase values that still exist --
+// 'dinner' means "Reception" and 'open-floor' means "Party" (see
+// src/lib/dashboard/types.ts's EventPhase comment).
+const phaseField = z.enum(['dinner', 'open-floor']);
 
 export const startEventSchema = z.object({
   eventId: z.uuid(),

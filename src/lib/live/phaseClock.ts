@@ -6,11 +6,19 @@ import type { EventPhase } from '@/lib/dashboard/types';
  * one ranking term. Recorded here so the next agent does not treat these as
  * arbitrary and quietly change them (S5.4).
  */
+/**
+ * Collapsed 2026-09-06 from four phases to two; each entry is the sum of the
+ * two former phases sharing its segment (docs/specs/2026-09-06-two-phases-spec.md).
+ * Behaviour change worth flagging: term 7 (phase-ending must-play) boosts an
+ * unplayed must-play when fewer than 15 minutes remain in the phase.
+ * Previously 'last-dance' was only 20 minutes long, so that boost fired for
+ * three quarters of it. Now it fires only in the final 15 minutes of a
+ * 140-minute 'open-floor' phase -- a real change in when the engine gets
+ * urgent about unplayed must-plays, not merely a relabelling.
+ */
 export const PHASE_MINUTES: Record<EventPhase, number> = {
-  cocktails: 60,
-  dinner: 75,
-  'open-floor': 120,
-  'last-dance': 20,
+  dinner: 135, // cocktails 60 + dinner 75
+  'open-floor': 140, // open floor 120 + last dance 20
 };
 
 /**
