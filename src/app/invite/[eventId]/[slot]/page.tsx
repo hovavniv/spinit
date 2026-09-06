@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
+import Link from 'next/link';
 
 import { createClient } from '@/lib/supabase/server';
 import { claimInvite } from '@/lib/events/newEventActions';
@@ -78,6 +79,22 @@ export default async function InvitePage({ params }: PageProps<'/invite/[eventId
         ) : (
           <InviteSignedOut eventId={eventId} slot={slot} />
         )}
+
+        {/*
+          Always visible, not only on a failed claim (2026-09-06). A partner
+          whose invited email never matches (claim_partner_slot refuses for
+          ever), or whose event was deleted/unlinked, has no event_partners
+          row and no owned events -- postLoginPath/redirects send them back
+          here on every future sign-in, and this standalone page has no app
+          nav to escape with. Worded for someone who may be in the wrong
+          place, not for the couple this page is meant for.
+        */}
+        <p className={styles.note}>
+          Not expecting this?{' '}
+          <Link className={styles.link} href="/dashboard">
+            Go to your dashboard.
+          </Link>
+        </p>
       </div>
     </main>
   );

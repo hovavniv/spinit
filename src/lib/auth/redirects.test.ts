@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { postLoginPath, safeRedirect } from './redirects';
+import { invitePathFromMetadata, postLoginPath, safeRedirect } from './redirects';
 
 describe('safeRedirect', () => {
   it('accepts /dashboard', () => {
@@ -75,5 +75,61 @@ describe('postLoginPath', () => {
 
   it('sends a user who is neither to the dashboard, which explains itself', () => {
     expect(postLoginPath({ ownsEvents: false, isPartner: false })).toBe('/dashboard');
+  });
+});
+
+/**
+ * The reader for the invite path a partner's own account remembers
+ * (2026-09-06). Its inputs are two kinds of untrusted: the metadata object
+ * comes off a Supabase User and may be any shape at all, and its `invite_path`
+ * is user-writable via `auth.updateUser`.
+ */
+describe('invitePathFromMetadata', () => {
+  it('returns a valid invite path', () => {
+    expect(invitePathFromMetadata({ invite_path: `/invite/${UUID}/2` })).toBe(`/invite/${UUID}/2`);
+  });
+
+  it('returns null, not /dashboard, when there is nothing usable', () => {
+    // The distinction matters: a caller that treated '/dashboard' as a real
+    // destination would jump the queue ahead of postLoginPath and send a
+    // partner who HAS claimed to the dashboard instead of /my-event.
+    expect(invitePathFromMetadata({ invite_path: '' })).toBeNull();
+    expect(invitePathFromMetadata({ full_name: 'A Partner' })).toBeNull();
+    expect(invitePathFromMetadata({})).toBeNull();
+  });
+
+  it('returns null for a metadata object that is missing or not an object', () => {
+    expect(invitePathFromMetadata(undefined)).toBeNull();
+    expect(invitePathFromMetadata(null)).toBeNull();
+    expect(invitePathFromMetadata('nope')).toBeNull();
+    expect(invitePathFromMetadata(42)).toBeNull();
+  });
+
+  it('returns null for a non-string invite_path', () => {
+    expect(invitePathFromMetadata({ invite_path: { toString: () => `/invite/${UUID}/1` } })).toBeNull();
+    expect(invitePathFromMetadata({ invite_path: [`/invite/${UUID}/1`] })).toBeNull();
+    expect(invitePathFromMetadata({ invite_path: 7 })).toBeNull();
+  });
+
+  it('rejects every value safeRedirect rejects, since updateUser can set any of them', () => {
+    for (const raw of [
+      '//evil.com',
+      'https://evil.com',
+      '/dashboard',
+      `/invite/${UUID}/3`,
+      `/invite/${UUID}/1?x=1`,
+      '/invite/not-a-uuid/1',
+      `/invite/${UUID}/1/../../admin`,
+    ]) {
+      expect(invitePathFromMetadata({ invite_path: raw })).toBeNull();
+    }
+  });
+
+  it('every returned value resolves to this site\'s own origin', () => {
+    // Same assertion safeRedirect's own suite makes, repeated here because
+    // this function is a second entry point into the same URL construction.
+    const path = invitePathFromMetadata({ invite_path: `/invite/${UUID}/1` });
+    expect(path).not.toBeNull();
+    expect(new URL(path!, SITE).origin).toBe(SITE);
   });
 });

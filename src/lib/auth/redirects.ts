@@ -45,6 +45,41 @@ export function safeRedirect(raw: string | null): string {
 }
 
 /**
+ * The pending invitation a partner's own account remembers, or null.
+ *
+ * WHY THIS EXISTS ALONGSIDE THE COOKIE (2026-09-06). `spinit_invite` expires
+ * after 30 minutes, and opening a confirmation email later than that is
+ * ordinary. `postLoginPath` cannot cover for the gap: it infers "is a partner"
+ * from an `event_partners` row carrying their user_id, and only
+ * `claim_partner_slot` writes that row -- AFTER confirmation, on a button
+ * press. A partner is therefore never detectable as one at the moment they
+ * confirm, so every partner whose cookie had expired landed on the DJ
+ * dashboard. `signUpWithPassword` now also stores the path on the user's own
+ * metadata, which travels with the account rather than the browser, and this
+ * reads it back. (Confirming on a different DEVICE is a separate matter: it
+ * fails earlier still, at the PKCE exchange, and is rescued only at the next
+ * password login.)
+ *
+ * `user_metadata` is user-writable via `auth.updateUser`, so the value is
+ * attacker-controlled and goes through `safeRedirect` like every other
+ * untrusted path in this file. Forging it wins a redirect to a page that is
+ * already public to read; the claim behind it still matches the caller's own
+ * confirmed email inside `claim_partner_slot`.
+ *
+ * Returns null rather than '/dashboard' for "nothing usable", so a caller
+ * cannot accidentally treat the fallback as a real destination.
+ */
+export function invitePathFromMetadata(metadata: unknown): string | null {
+  const raw =
+    typeof metadata === 'object' && metadata !== null
+      ? (metadata as Record<string, unknown>).invite_path
+      : undefined;
+  if (typeof raw !== 'string') return null;
+  const path = safeRedirect(raw);
+  return path === '/dashboard' ? null : path;
+}
+
+/**
  * Where a user lands right after signing in (plan task 14 step 4). Pure and
  * free of I/O on purpose — the caller resolves `ownsEvents`/`isPartner` from
  * the database and this function only decides between the two destinations,

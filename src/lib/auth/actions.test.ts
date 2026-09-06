@@ -280,6 +280,50 @@ describe('signUpWithPassword — invalid invitePath sets no cookie', () => {
   });
 });
 
+// The device-independent half of the invite handoff (2026-09-06). The cookie
+// above only reaches a partner who confirms in the same browser; these pin the
+// copy that travels on the account instead.
+describe('signUpWithPassword — invite path on user metadata', () => {
+  const VALID = '/invite/11111111-1111-4111-8111-111111111111/1';
+
+  it('sends the validated invite path in options.data so it survives a different device', async () => {
+    await signUpWithPassword({ ok: true }, partnerFormData({ invitePath: VALID }));
+
+    expect(signUp).toHaveBeenCalledTimes(1);
+    expect(signUp.mock.calls[0][0].options.data.invite_path).toBe(VALID);
+  });
+
+  it('sends an empty invite path for a DJ signup, even when an invite path was supplied', async () => {
+    await signUpWithPassword({ ok: true }, registerFormData({ invitePath: VALID }));
+
+    expect(signUp.mock.calls[0][0].options.data.invite_path).toBe('');
+    expect(cookieSet).not.toHaveBeenCalled();
+  });
+
+  it('stores nothing for a tampered invite path, rather than the /dashboard fallback string', async () => {
+    // safeRedirect returns '/dashboard' for anything invalid, and storing that
+    // literal would make every partner's metadata claim a destination it does
+    // not have. The reader treats '' and '/dashboard' alike, but only '' says
+    // "no invitation" honestly.
+    await signUpWithPassword({ ok: true }, partnerFormData({ invitePath: '//evil.com' }));
+
+    const stored = signUp.mock.calls[0][0].options.data.invite_path;
+    expect(stored).toBe('');
+    expect(stored).not.toContain('evil.com');
+  });
+
+  it('still sends the three profile keys handle_new_user actually reads', async () => {
+    // The new key rides in the same blob as these; a regression that replaced
+    // options.data rather than extending it would break signup outright.
+    await signUpWithPassword({ ok: true }, registerFormData());
+
+    const data = signUp.mock.calls[0][0].options.data;
+    expect(data.full_name).toBe('Jordan Ellis');
+    expect(typeof data.business_name).toBe('string');
+    expect(typeof data.phone).toBe('string');
+  });
+});
+
 describe('signUpWithPassword — emailRedirectTo origin', () => {
   it('builds emailRedirectTo from SITE_URL even with hostile Host headers present', async () => {
     const fd = registerFormData();
@@ -356,6 +400,72 @@ describe('signInWithPassword', () => {
     const fd = loginFormData({ invitePath: '/invite/11111111-1111-4111-8111-111111111111/3' });
 
     await expect(signInAction({ ok: true }, fd)).rejects.toThrow('REDIRECT:/dashboard');
+  });
+
+  // 2026-09-06. A partner who confirmed on a different device was sent to
+  // /dashboard once; without this they would be sent there on every later
+  // login too, because nothing marks them a partner until they claim, and they
+  // cannot claim from a page they never reach.
+  describe('remembered invite on user metadata', () => {
+    const REMEMBERED = '/invite/11111111-1111-4111-8111-111111111111/2';
+
+    function signedInWith(metadata: Record<string, unknown>) {
+      signInWithPassword.mockResolvedValue({
+        data: { user: { id: 'session-user-id', user_metadata: metadata } },
+        error: null,
+      });
+    }
+
+    it('routes a partner who has not claimed yet to their remembered invite', async () => {
+      eventsLimit.mockResolvedValue({ data: [], error: null });
+      partnersLimit.mockResolvedValue({ data: [], error: null });
+      signedInWith({ invite_path: REMEMBERED });
+
+      await expect(signInAction({ ok: true }, loginFormData())).rejects.toThrow(
+        `REDIRECT:${REMEMBERED}`,
+      );
+    });
+
+    it('prefers the submitted invitePath field over the remembered one', async () => {
+      const submitted = '/invite/11111111-1111-4111-8111-111111111111/1';
+      eventsLimit.mockResolvedValue({ data: [], error: null });
+      partnersLimit.mockResolvedValue({ data: [], error: null });
+      signedInWith({ invite_path: REMEMBERED });
+
+      await expect(
+        signInAction({ ok: true }, loginFormData({ invitePath: submitted })),
+      ).rejects.toThrow(`REDIRECT:${submitted}`);
+    });
+
+    it('sends an already-claimed partner to /my-event, not back to a claim page', async () => {
+      eventsLimit.mockResolvedValue({ data: [], error: null });
+      partnersLimit.mockResolvedValue({ data: [{ id: 'link-1' }], error: null });
+      signedInWith({ invite_path: REMEMBERED });
+
+      await expect(signInAction({ ok: true }, loginFormData())).rejects.toThrow(
+        'REDIRECT:/my-event',
+      );
+    });
+
+    it('sends a DJ to /dashboard even with an invite path on their metadata', async () => {
+      eventsLimit.mockResolvedValue({ data: [{ id: 'owned-1' }], error: null });
+      partnersLimit.mockResolvedValue({ data: [], error: null });
+      signedInWith({ invite_path: REMEMBERED });
+
+      await expect(signInAction({ ok: true }, loginFormData())).rejects.toThrow(
+        'REDIRECT:/dashboard',
+      );
+    });
+
+    it('refuses a forged metadata value, which auth.updateUser can set to anything', async () => {
+      eventsLimit.mockResolvedValue({ data: [], error: null });
+      partnersLimit.mockResolvedValue({ data: [], error: null });
+      signedInWith({ invite_path: 'https://evil.com/steal' });
+
+      await expect(signInAction({ ok: true }, loginFormData())).rejects.toThrow(
+        'REDIRECT:/dashboard',
+      );
+    });
   });
 });
 

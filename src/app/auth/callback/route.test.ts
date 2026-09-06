@@ -134,6 +134,33 @@ describe('auth/callback — failure branch', () => {
     const url = new URL(location!);
     expect(url.pathname).toBe('/login');
     expect(location).not.toContain('invalid grant');
+    // Sibling to the same-browser test below: an unrelated exchange error
+    // code must NOT get the same-browser reason -- otherwise that branch
+    // would be permanently-on regardless of which code arrived.
+    expect(url.searchParams.get('error')).toBe('confirmation_failed');
+  });
+
+  it('gives a cross-device confirmation the same-browser reason, not the generic one', async () => {
+    // A different device cannot supply the PKCE code verifier cookie
+    // (design background: @supabase/ssr hardcodes flowType: "pkce"), so
+    // exchangeCodeForSession returns this specific error code instead of
+    // succeeding. The generic REASON_CONFIRMATION_FAILED tells this user to
+    // "try signing up again", which fails (already registered) and burns
+    // mailer quota -- REASON_SAME_BROWSER is the correct copy.
+    exchangeCodeForSession.mockResolvedValueOnce({
+      data: {},
+      error: { message: 'code verifier missing', code: 'pkce_code_verifier_not_found' },
+    });
+    const request = new NextRequest('http://localhost:3000/auth/callback?code=used-elsewhere');
+
+    const response = await GET(request);
+
+    const location = response.headers.get('location');
+    const url = new URL(location!);
+    expect(url.pathname).toBe('/login');
+    expect(url.searchParams.get('error')).toBe('confirmation_failed_same_browser');
+    expect(location).not.toContain('code verifier missing');
+    expect(location).not.toContain('pkce_code_verifier_not_found');
   });
 
   it('redirects to /login when code is absent and no error params are present', async () => {
@@ -185,7 +212,13 @@ describe('auth/callback — invite cookie (plan task 14 / design §4.7-§4.8)', 
   });
 
   it('falls back to postLoginPath, not the literal /dashboard, when no cookie is present', async () => {
-    // A partner: no owned events, one event_partners row.
+    // An ALREADY-CLAIMED partner: no owned events, one event_partners row.
+    // Note what this fixture is NOT: a partner cannot look like this at the
+    // moment they confirm their email, because the event_partners row is
+    // written by claim_partner_slot, which runs afterwards on a button press.
+    // This case is a re-confirmation or a later visit; the newly-confirmed
+    // partner is covered by the user-metadata block below, and this fixture
+    // passing was why that hole shipped unnoticed.
     eventsLimit.mockResolvedValue({ data: [], error: null });
     partnersLimit.mockResolvedValue({ data: [{ id: 'link-1' }], error: null });
     const request = new NextRequest('http://localhost:3000/auth/callback?code=abc');
@@ -227,5 +260,107 @@ describe('auth/callback — invite cookie (plan task 14 / design §4.7-§4.8)', 
     expect(new URL(location!).pathname).toBe('/login');
     expect(cookieGet).not.toHaveBeenCalled();
     expect(cookieDelete).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * The device-independent half of the invite handoff (2026-09-06).
+ *
+ * The bug these pin: a partner registers on a laptop, opens the confirmation
+ * email on their phone, so no spinit_invite cookie is sent -- and the
+ * event_partners fallback cannot identify them either, because the row that
+ * would is only written by the claim they have not made yet. Every such
+ * partner landed on the DJ dashboard.
+ *
+ * `getUser` is what supplies user_metadata here, matching route.ts reading it
+ * off the same call it already makes for the id.
+ */
+describe('auth/callback — remembered invite on user metadata', () => {
+  const invitePath = '/invite/3fa85f64-5717-4562-b3fc-2c963f66afa6/2';
+
+  function signedInWith(metadata: Record<string, unknown>) {
+    getUser.mockResolvedValue({
+      data: { user: { id: 'user-1', user_metadata: metadata } },
+      error: null,
+    });
+  }
+
+  it('routes a newly-confirmed partner to their invite when no cookie survived', async () => {
+    // Exactly the production state at confirmation time: not a DJ, and no
+    // event_partners row yet because the claim happens after this redirect.
+    eventsLimit.mockResolvedValue({ data: [], error: null });
+    partnersLimit.mockResolvedValue({ data: [], error: null });
+    signedInWith({ invite_path: invitePath });
+    const request = new NextRequest('http://localhost:3000/auth/callback?code=abc');
+
+    const response = await GET(request);
+
+    const location = response.headers.get('location');
+    expect(location).toBeTruthy();
+    expect(new URL(location!).pathname).toBe(invitePath);
+  });
+
+  it('still prefers the cookie when both are present', async () => {
+    const cookiePath = '/invite/3fa85f64-5717-4562-b3fc-2c963f66afa6/1';
+    cookieGet.mockImplementation((name: string) =>
+      name === 'spinit_invite' ? { value: cookiePath } : undefined,
+    );
+    signedInWith({ invite_path: invitePath });
+    const request = new NextRequest('http://localhost:3000/auth/callback?code=abc');
+
+    const response = await GET(request);
+
+    expect(new URL(response.headers.get('location')!).pathname).toBe(cookiePath);
+  });
+
+  it('sends an already-claimed partner to /my-event, not back to a claim page', async () => {
+    // The metadata outlives the claim, so without the ordering in route.ts
+    // this partner would be bounced to a claim that claim_partner_slot now
+    // refuses, for ever.
+    eventsLimit.mockResolvedValue({ data: [], error: null });
+    partnersLimit.mockResolvedValue({ data: [{ id: 'link-1' }], error: null });
+    signedInWith({ invite_path: invitePath });
+    const request = new NextRequest('http://localhost:3000/auth/callback?code=abc');
+
+    const response = await GET(request);
+
+    expect(new URL(response.headers.get('location')!).pathname).toBe('/my-event');
+  });
+
+  it('sends a DJ to /dashboard even if metadata carries an invite path', async () => {
+    eventsLimit.mockResolvedValue({ data: [{ id: 'event-1' }], error: null });
+    partnersLimit.mockResolvedValue({ data: [], error: null });
+    signedInWith({ invite_path: invitePath });
+    const request = new NextRequest('http://localhost:3000/auth/callback?code=abc');
+
+    const response = await GET(request);
+
+    expect(new URL(response.headers.get('location')!).pathname).toBe('/dashboard');
+  });
+
+  it('refuses a forged metadata value, which auth.updateUser can set to anything', async () => {
+    signedInWith({ invite_path: 'https://evil.com/steal' });
+    const request = new NextRequest('http://localhost:3000/auth/callback?code=abc');
+
+    const response = await GET(request);
+
+    const location = response.headers.get('location');
+    expect(location).not.toContain('evil.com');
+    expect(new URL(location!).pathname).toBe('/dashboard');
+  });
+
+  it('falls through to /dashboard when metadata carries no invite path', async () => {
+    // NOTE: this test would stay green even if invitePathFromMetadata
+    // returned '/dashboard' instead of null for this input, because the
+    // asserted pathname is /dashboard either way -- it does not itself pin
+    // the null distinction. That distinction is pinned directly in
+    // src/lib/auth/redirects.test.ts ('returns null, not /dashboard, when
+    // there is nothing usable', line ~92-96).
+    signedInWith({ full_name: 'A Partner', invite_path: '' });
+    const request = new NextRequest('http://localhost:3000/auth/callback?code=abc');
+
+    const response = await GET(request);
+
+    expect(new URL(response.headers.get('location')!).pathname).toBe('/dashboard');
   });
 });

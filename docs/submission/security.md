@@ -808,6 +808,65 @@ An earlier draft of this section named it alongside the two above; live `proacl`
 and it is not callable by `anon` today. Recorded as a correction rather than silently dropped: the
 draft's claim did not match the database, and the database is what this document is graded on.
 
+### 9.16 The invite handoff routes off user metadata, which the user can write
+
+A partner's route back to their invitation after email confirmation travels two ways, and neither
+is authoritative.
+
+The first is the `spinit_invite` cookie, set at signup, which expires after 30 minutes
+(`maxAge: 1800`). The PKCE code-verifier cookie `@supabase/ssr` sets at the same moment does not
+expire until the browser session ends. A same-browser partner who opens their confirmation email
+more than 30 minutes after registering — an ordinary delay, not an edge case — therefore reaches
+`/auth/callback` with an exchange that succeeds but no invite cookie. The fallback behind the
+cookie could not cover for this and still cannot on its own: `/auth/callback` infers "is a partner"
+from an `event_partners` row carrying their `user_id`, and only `claim_partner_slot` writes that
+row — *after* confirmation, on a button press. A partner is therefore never detectable as one at
+the moment they confirm, so before this fix every such partner landed on the DJ dashboard, which
+then asks them for a business name they will never have. Found on a walk-through 2026-09-06 and
+fixed by also storing the path on the user's own Supabase metadata (`raw_user_meta_data.invite_path`),
+which travels with the account rather than the browser. **This is the bug that was actually
+reported and fixed.**
+
+**Confirming on a different device is a separate failure, and this fix does not reach it.**
+`@supabase/ssr`'s `createServerClient` hardcodes `flowType: "pkce"` (not overridable via options),
+and the PKCE code verifier lives only in a cookie on the device that registered. Opening the
+confirmation link on a different device makes `exchangeCodeForSession` itself return
+`AuthPKCECodeVerifierMissingError` (code `pkce_code_verifier_not_found`) before the route ever
+reaches the metadata fallback — the exchange fails first, so there is no user session to read
+metadata off. The route now at least gives this user accurate copy instead of "try signing up
+again" (which fails, since the address is already registered, and burns the 2/hour mailer quota) —
+see the `SAME_BROWSER_ERROR_CODES` handling in `/auth/callback`. The account is nonetheless
+confirmed by this point (GoTrue's `/verify` endpoint confirms before redirecting), so their next
+password-login attempt is rescued by the same metadata fallback inside `signInWithPassword`.
+**This last claim is unverified** — it has not been tested against a live confirmation email —
+and is recorded as such rather than asserted.
+
+**The residual risk is that `user_metadata` is user-writable via `auth.updateUser`.** A signed-in
+user can set `invite_path` to any string. Both readers pass it through the same `safeRedirect`
+guard as every other untrusted path (§4), which pins it to `/invite/{uuid}/{1|2}` and resolves it
+against `SITE_URL`, so it cannot reach another origin. What forging it buys is a redirect to a page
+that is already public to read, deliberately (§8.7) — and the claim behind that page still matches
+the caller's own confirmed email inside `claim_partner_slot`. So this is a routing hint, not an
+authorization input, and the same reasoning already applied to the hidden `mode` and `invitePath`
+form fields covers it.
+
+**The better design was not taken, and the reason was schedule, not doubt.** The invitation is a
+fact in the database: `event_partners.invite_email` already holds the address the DJ invited. A
+`security definer` function returning the unclaimed row whose `lower(invite_email)` matches
+`lower(auth.email())` would route off that fact instead of off a hint the account carried, would
+need no metadata at all, and would additionally rescue a partner whose account was created without
+ever touching the invite link. It needs a migration, and it was declined on the submission date
+rather than pushed to the live project hours before grading. It is the honest first item under
+§9's heading for this area.
+
+**A partner whose invitation can never be claimed is otherwise trapped on the invite page.** If the
+DJ typed the invited email slightly wrong, or the partner's `event_partners` row was deleted or
+unlinked, `claim_partner_slot` refuses forever, `user_id` stays null, and `postLoginPath`'s
+`!ownsEvents && !isPartner` check sends this account back to `/invite/{eventId}/{slot}` on every
+future sign-in — a standalone page with no app navigation. Mitigated by an always-visible link on
+that page back to `/dashboard`, present regardless of claim outcome (not only after a failed
+attempt), worded for someone who may be in the wrong place.
+
 ---
 
 ## 10. What I would do next, in order
@@ -822,11 +881,14 @@ draft's claim did not match the database, and the database is what this document
 4. **Revoke the default `PUBLIC` execute grant on `purge_partner_connection` and
    `rls_auto_enable`** (§9.15). Both are inert today, but "not granted" is a stronger posture
    than "safe because of what it returns", and this is a two-line fix.
-5. **Custom SMTP** (§9.8), which also unlocks password reset (§9.10) and fixes the
+5. **Route the invite handoff off `event_partners.invite_email` rather than user metadata**
+   (§9.16), replacing a user-writable routing hint with a database fact. Contained — one
+   `security definer` function and two call sites.
+6. **Custom SMTP** (§9.8), which also unlocks password reset (§9.10) and fixes the
    single-signup confirmation flow.
-6. **A local Supabase stack for the test suite** (§9.12), so the security guarantees are
+7. **A local Supabase stack for the test suite** (§9.12), so the security guarantees are
    reproducible by a grader rather than only by me.
-7. **A CSP header** (§9.9).
+8. **A CSP header** (§9.9).
 
 Items 2–4 and 6–7 are each a day or less, and item 4 is minutes. Item 1 is the one real
 audit-sized undertaking on this list.
