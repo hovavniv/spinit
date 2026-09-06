@@ -19,17 +19,7 @@
   margin: 0 0 24px;
 }
 
-.label {
-  display: block;
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--text-subtle);
-  margin-bottom: 8px;
-}
 
-.phaseRow {
-  margin-bottom: 24px;
-}
 
 .startButton {
   width: 100%;

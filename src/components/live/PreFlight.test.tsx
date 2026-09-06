@@ -27,13 +27,12 @@ function renderPreFlight(startEvent: (eventId: string, phase: string) => Promise
 }
 
 describe('PreFlight', () => {
-  it('renders couple names, venue, date, the phase picker, and the Start button', () => {
+  it('renders couple names, venue, date, and the Start button', () => {
     renderPreFlight(vi.fn());
 
     expect(screen.getByText('Dana & Yossi')).toBeInTheDocument();
     expect(screen.getByText(/The Old Winery/)).toBeInTheDocument();
     expect(screen.getByText(/Sep 5, 2026/)).toBeInTheDocument();
-    expect(screen.getByRole('radiogroup', { name: 'Event phase' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Start event' })).toBeInTheDocument();
   });
 
@@ -43,13 +42,15 @@ describe('PreFlight', () => {
     expect(screen.getByText(/the guest QR code appears once you start/i)).toBeInTheDocument();
   });
 
-  it('defaults the phase picker to Cocktails', () => {
+  // No phase picker here any more -- an event always starts in Cocktails and
+  // the DJ changes phase on the live screen, where they can see the room.
+  it('offers no phase control', () => {
     renderPreFlight(vi.fn());
 
-    expect(screen.getByRole('radio', { name: 'Cocktails' })).toHaveAttribute('aria-checked', 'true');
+    expect(screen.queryByRole('radiogroup', { name: 'Event phase' })).not.toBeInTheDocument();
   });
 
-  it('starts the event with the default phase when Start is pressed without changing it', async () => {
+  it('starts the event in Cocktails', async () => {
     const user = userEvent.setup();
     const startEvent = vi.fn(async (): Promise<LiveActionResult> => ({ ok: true }));
     renderPreFlight(startEvent);
@@ -57,17 +58,6 @@ describe('PreFlight', () => {
     await user.click(screen.getByRole('button', { name: 'Start event' }));
 
     expect(startEvent).toHaveBeenCalledWith(EVENT_ID, 'cocktails');
-  });
-
-  it('starts the event with whichever phase was picked', async () => {
-    const user = userEvent.setup();
-    const startEvent = vi.fn(async (): Promise<LiveActionResult> => ({ ok: true }));
-    renderPreFlight(startEvent);
-
-    await user.click(screen.getByRole('radio', { name: 'Dinner' }));
-    await user.click(screen.getByRole('button', { name: 'Start event' }));
-
-    expect(startEvent).toHaveBeenCalledWith(EVENT_ID, 'dinner');
   });
 
   it('shows an error rather than crashing when the event is in the wrong state', async () => {
