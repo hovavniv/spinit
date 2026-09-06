@@ -307,7 +307,7 @@ describe('LiveScreen live-poll integration (Task 17: the played staleness fix)',
         event_must_play: [
           {
             id: 'mp-1',
-            segment: 'party',
+            segment: 'reception',
             title: 'September',
             artist: 'Earth, Wind & Fire',
             moment: null,

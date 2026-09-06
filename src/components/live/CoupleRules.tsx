@@ -1,5 +1,7 @@
+import type { EventPhase } from '@/lib/dashboard/types';
 import type { BlocklistRow, MustPlayRow } from '@/lib/events/detailTypes';
 import type { PlayedTrack } from '@/lib/live/liveTypes';
+import { PHASE_SEGMENT } from '@/lib/live/phaseSegment';
 import styles from './CoupleRules.module.css';
 
 /**
@@ -8,31 +10,56 @@ import styles from './CoupleRules.module.css';
  * client-side-only state -- that is what makes a must-play stay marked played
  * durably across a page refresh (design §7.1, load-bearing per Task 16's
  * brief).
+ *
+ * `mustPlay` and `blocklist` are scoped to `phase`'s segment here, the same
+ * way rank.ts scopes them for the engine (2026-09-06 bugfix): a `party`
+ * blocklist row must not read as active during Reception just because the
+ * engine already knows to ignore it. Ceremony must-plays never match either
+ * segment and correctly disappear from this panel -- CeremonyCues already
+ * renders them.
  */
 export function CoupleRules({
   mustPlay,
   blocklist,
   played,
-  mustPlayProgress,
+  // Not read directly: the poll route's `mustPlayProgress` is a whole-evening
+  // count across every segment (design §6.2-i), not scoped to `phase`. See
+  // `scopedProgress` below, which derives the DISPLAYED figure from the same
+  // scoped list the cards render, so the panel never shows a card row next
+  // to a progress figure that disagrees with it. Kept in the prop list (and
+  // still passed by every caller) so this component's contract does not
+  // silently diverge from LiveHeader's, which DOES want the whole-evening
+  // figure.
+  mustPlayProgress: _mustPlayProgress,
+  phase,
 }: {
   mustPlay: MustPlayRow[];
   blocklist: BlocklistRow[];
   played: PlayedTrack[];
   mustPlayProgress: { played: number; total: number };
+  phase: EventPhase;
 }) {
+  const segment = PHASE_SEGMENT[phase];
+  const scopedMustPlay = mustPlay.filter((row) => row.segment === segment);
+  const scopedBlocklist = blocklist.filter((row) => row.segment === segment);
+
   const playedTrackIds = new Set(
     played.map((p) => p.spotifyTrackId).filter((id): id is string => id !== null),
   );
   const isPlayed = (row: MustPlayRow) =>
     row.spotify_track_id !== null && playedTrackIds.has(row.spotify_track_id);
 
-  const unplayedMustPlays = mustPlay.filter((row) => !isPlayed(row));
-  const playedMustPlays = mustPlay.filter(isPlayed);
+  const unplayedMustPlays = scopedMustPlay.filter((row) => !isPlayed(row));
+  const playedMustPlays = scopedMustPlay.filter(isPlayed);
 
+  const scopedProgress = {
+    played: playedMustPlays.length,
+    total: scopedMustPlay.length,
+  };
   const pct =
-    mustPlayProgress.total === 0
+    scopedProgress.total === 0
       ? 0
-      : Math.round((mustPlayProgress.played / mustPlayProgress.total) * 100);
+      : Math.round((scopedProgress.played / scopedProgress.total) * 100);
 
   return (
     <section className={styles.section} aria-label="Couple's rules">
@@ -45,7 +72,7 @@ export function CoupleRules({
           <div className={styles.progressRow}>
             <span>Must-plays covered</span>
             <span className={styles.progressFigure}>
-              {mustPlayProgress.played}/{mustPlayProgress.total}
+              {scopedProgress.played}/{scopedProgress.total}
             </span>
           </div>
           <div className={styles.progressBar}>
@@ -105,11 +132,11 @@ export function CoupleRules({
           <div className={styles.cardHeadingRow}>
             <span className={`${styles.dot} ${styles.dotBlocked}`} />
             <h3 className={styles.cardHeading}>Do not play</h3>
-            <span className={styles.count}>{blocklist.length}</span>
+            <span className={styles.count}>{scopedBlocklist.length}</span>
           </div>
           <div className={styles.cardBody}>
-            {blocklist.length === 0 && <p className={styles.empty}>Nothing here yet.</p>}
-            {blocklist.map((row) => (
+            {scopedBlocklist.length === 0 && <p className={styles.empty}>Nothing here yet.</p>}
+            {scopedBlocklist.map((row) => (
               <div key={row.id} className={`${styles.row} ${styles.rowBlocked}`}>
                 <span className={`${styles.mark} ${styles.markBlocked}`} aria-hidden="true">
                   ✕
