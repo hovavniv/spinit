@@ -337,19 +337,26 @@ describe('LiveScreen live-poll integration (Task 17: the played staleness fix)',
     await renderLiveScreen();
 
     // Before any poll: the must-play is unplayed, so it appears in "Must
-    // play", not "Played".
-    const mustPlayColumn = screen.getByText('Must play').closest('div')!;
+    // play", not "Played". Each card heading sits in its own row div, one
+    // level inside the card that also holds the row list -- go up to the
+    // card. Query by the <h3> role, since a played row also carries a
+    // "Played" note beside it once the must-play has a match.
+    const mustPlayColumn = screen.getByRole('heading', { name: 'Must play' }).closest('div')!
+      .parentElement!;
     expect(mustPlayColumn.textContent).toContain('September');
-    const playedColumn = screen.getByText('Played').closest('div')!;
+    const playedColumn = screen.getByRole('heading', { name: 'Played' }).closest('div')!
+      .parentElement!;
     expect(playedColumn.textContent).not.toContain('September');
 
     await vi.advanceTimersByTimeAsync(8_000);
 
     await waitFor(() => {
-      const nowPlayedColumn = screen.getByText('Played').closest('div')!;
+      const nowPlayedColumn = screen.getByRole('heading', { name: 'Played' }).closest('div')!
+        .parentElement!;
       expect(nowPlayedColumn.textContent).toContain('September');
     });
-    const nowMustPlayColumn = screen.getByText('Must play').closest('div')!;
+    const nowMustPlayColumn = screen.getByRole('heading', { name: 'Must play' }).closest('div')!
+      .parentElement!;
     expect(nowMustPlayColumn.textContent).not.toContain('September');
   });
 });
