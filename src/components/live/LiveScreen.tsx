@@ -153,7 +153,6 @@ export function LiveScreen({
         mustPlay={mustPlay}
         blocklist={blocklist}
         played={polled.played}
-        mustPlayProgress={polled.mustPlayProgress}
         phase={currentPhase}
       />
       <RequestQueue

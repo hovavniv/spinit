@@ -1,4 +1,4 @@
-import type { EventPhase } from '@/lib/dashboard/types';
+import { PHASE_LABELS, type EventPhase } from '@/lib/dashboard/types';
 import type { BlocklistRow, MustPlayRow } from '@/lib/events/detailTypes';
 import type { PlayedTrack } from '@/lib/live/liveTypes';
 import { PHASE_SEGMENT } from '@/lib/live/phaseSegment';
@@ -30,13 +30,11 @@ export function CoupleRules({
   // still passed by every caller) so this component's contract does not
   // silently diverge from LiveHeader's, which DOES want the whole-evening
   // figure.
-  mustPlayProgress: _mustPlayProgress,
   phase,
 }: {
   mustPlay: MustPlayRow[];
   blocklist: BlocklistRow[];
   played: PlayedTrack[];
-  mustPlayProgress: { played: number; total: number };
   phase: EventPhase;
 }) {
   const segment = PHASE_SEGMENT[phase];
@@ -70,7 +68,7 @@ export function CoupleRules({
         </div>
         <div className={styles.progress}>
           <div className={styles.progressRow}>
-            <span>Must-plays covered</span>
+            <span>{PHASE_LABELS[phase]} must-plays covered</span>
             <span className={styles.progressFigure}>
               {scopedProgress.played}/{scopedProgress.total}
             </span>

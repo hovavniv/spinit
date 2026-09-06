@@ -22,7 +22,6 @@ describe('CoupleRules', () => {
         mustPlay={[]}
         blocklist={[partyBlockRow()]}
         played={[]}
-        mustPlayProgress={{ played: 0, total: 0 }}
         phase="dinner"
       />,
     );
@@ -36,7 +35,6 @@ describe('CoupleRules', () => {
         mustPlay={[]}
         blocklist={[partyBlockRow()]}
         played={[]}
-        mustPlayProgress={{ played: 0, total: 0 }}
         phase="open-floor"
       />,
     );
