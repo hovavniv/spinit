@@ -105,6 +105,16 @@
   color: white;
 }
 
+/* The account block: name chip with sign-out beneath it. One flex child so the
+   rail's space-between pins the pair to the bottom together. */
+.userBlock {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
 .chip {
   position: relative;
   z-index: 1;
@@ -192,5 +202,17 @@
      and the avatar circle itself. */
   .chipText {
     display: none;
+  }
+
+  /* Side by side in the strip: stacking them would make the bar twice as tall
+     for no gain once .chipText is hidden. */
+  .userBlock {
+    flex-direction: row;
+    align-items: center;
+    gap: 4px;
+  }
+
+  .signOut {
+    width: auto;
   }
 }

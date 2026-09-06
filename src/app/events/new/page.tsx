@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 
 import { requireUser, getProfile } from '@/lib/auth/dal';
+import { signOut } from '@/lib/auth/actions';
 import { saveEventDraft } from '@/lib/events/newEventActions';
 import { AppShell } from '@/components/shell/AppShell';
 import { DashboardSidebar } from '@/components/dashboard/DashboardSidebar';
@@ -29,7 +30,7 @@ export default async function NewEventPage() {
   };
 
   return (
-    <AppShell sidebar={<DashboardSidebar dj={dj} current="none" />}>
+    <AppShell sidebar={<DashboardSidebar dj={dj} current="none" signOutAction={signOut} />}>
       <NewEventShell current={1} title="New event">
         <EventDetailsStep event={null} saveAction={saveEventDraft} />
       </NewEventShell>

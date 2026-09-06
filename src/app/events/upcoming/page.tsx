@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 
 import { requireUser, getProfile } from '@/lib/auth/dal';
+import { signOut } from '@/lib/auth/actions';
 import { listActiveEvents } from '@/lib/dashboard/dal';
 import { toUpcomingEvents } from '@/lib/dashboard/fromDb';
 import { currentLocalNow } from '@/lib/dashboard/now';
@@ -41,7 +42,7 @@ export default async function UpcomingEventsPage() {
   };
 
   return (
-    <AppShell sidebar={<DashboardSidebar dj={dj} current="upcoming" />}>
+    <AppShell sidebar={<DashboardSidebar dj={dj} current="upcoming" signOutAction={signOut} />}>
       <div className={styles.header}>
         <h1 className={styles.title}>Upcoming events</h1>
         <Link href="/events/new" className={styles.newEvent}>

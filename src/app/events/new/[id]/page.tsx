@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 
 import { requireUser, getProfile } from '@/lib/auth/dal';
+import { signOut } from '@/lib/auth/actions';
 import { getEventForWizard } from '@/lib/events/newEventDal';
 import { saveEventDraft } from '@/lib/events/newEventActions';
 import { AppShell } from '@/components/shell/AppShell';
@@ -39,7 +40,7 @@ export default async function EditDraftPage({ params }: PageProps<'/events/new/[
   };
 
   return (
-    <AppShell sidebar={<DashboardSidebar dj={dj} current="none" />}>
+    <AppShell sidebar={<DashboardSidebar dj={dj} current="none" signOutAction={signOut} />}>
       <NewEventShell current={1} title={event.couple_names}>
         <EventDetailsStep event={event} saveAction={saveEventDraft} />
       </NewEventShell>

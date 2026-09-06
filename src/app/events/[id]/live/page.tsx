@@ -3,6 +3,7 @@ import type { ReactNode } from 'react';
 import { notFound } from 'next/navigation';
 
 import { requireUser, getProfile } from '@/lib/auth/dal';
+import { signOut } from '@/lib/auth/actions';
 import { createClient } from '@/lib/supabase/server';
 import { isUuid } from '@/lib/validation';
 import { formatCardDate } from '@/lib/dashboard/format';
@@ -150,7 +151,7 @@ export default async function LiveEventPage({ params }: PageProps<'/events/[id]/
   }
 
   return (
-    <AppShell sidebar={<DashboardSidebar dj={dj} current="none" />}>
+    <AppShell sidebar={<DashboardSidebar dj={dj} current="none" signOutAction={signOut} />}>
       {event.status === 'upcoming' ? (
         <PreFlight
           eventId={event.id}
