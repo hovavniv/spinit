@@ -47,11 +47,27 @@ const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
 
 const A_EMAIL = process.env.TEST_USER_A_EMAIL;
 const A_PASSWORD = process.env.TEST_USER_A_PASSWORD;
+const B_EMAIL = process.env.TEST_USER_B_EMAIL;
+const B_PASSWORD = process.env.TEST_USER_B_PASSWORD;
 const C_EMAIL = process.env.TEST_USER_C_EMAIL;
 const C_PASSWORD = process.env.TEST_USER_C_PASSWORD;
 
+/**
+ * The two events this file owns, seeded under TEST_USER_B by
+ * `scripts/seed-demo.mjs` (see FIXTURE_EVENTS there for the full reasoning).
+ *
+ * Every guest session and suggestion this file writes is permanent -- nothing
+ * in the schema can delete them -- so they must not land on an event a grader
+ * will ever look at. They used to land on the demo events Sara & Daniel and
+ * Priya & Alex, and on 2026-09-06 the DJ live screen showed 432 placeholder
+ * requests as a result.
+ */
+const FIXTURE_EVENT = 'Integration A & Integration B';
+const FOREIGN_FIXTURE_EVENT = 'Foreign A & Foreign B';
+
 const hasSupabaseConfig = Boolean(SUPABASE_URL);
 const hasTestUsers = Boolean(A_EMAIL && A_PASSWORD);
+const hasFixtureUser = Boolean(B_EMAIL && B_PASSWORD);
 const hasPartnerUser = Boolean(C_EMAIL && C_PASSWORD);
 
 if (hasSupabaseConfig && !hasTestUsers) {
@@ -82,36 +98,69 @@ const randomTrackId = (): string => crypto.randomUUID().replace(/-/g, '').slice(
 // grant), so it never actually gets written and a fixed value is fine.
 const TRACK_GRANT_PROBE = 'xqqIKkeuIsWK2ISYAsC2s0';
 
-describe.skipIf(!hasSupabaseConfig || !hasTestUsers)(
+if (hasSupabaseConfig && hasTestUsers && !hasFixtureUser) {
+  describe('guest boundary integration (auth-gated)', () => {
+    test('TEST_USER_B_* must be set: this file writes only to user B\'s fixture events', () => {
+      throw new Error(
+        'TEST_USER_B_EMAIL/TEST_USER_B_PASSWORD are not set. This suite writes permanent, ' +
+          'undeletable guest_sessions and song_suggestions rows, so it runs ONLY against the ' +
+          "fixture events owned by user B. Set them and run `npm run seed:demo`; do not repoint " +
+          'this file at a demo event to make it run.',
+      );
+    });
+  });
+}
+
+describe.skipIf(!hasSupabaseConfig || !hasTestUsers || !hasFixtureUser)(
   'guest boundary integration (auth-gated)',
   { timeout: 60000 },
   () => {
-    let clientA: SupabaseClient; // the DJ -- owns Sara & Daniel, Claire & Ben, Noa & Eitan
+    // User B, the DJ who owns BOTH fixture events. Never user A: A is the
+    // demo account, and every row this suite writes is undeletable.
+    let clientB: SupabaseClient;
     let anon: SupabaseClient; // plain unauthenticated client. No signIn call, ever.
-    let saraDanielId: string;
-    let saraDanielToken: string;
+    let fixtureEventId: string;
+    let fixtureEventToken: string;
+    // The SECOND fixture event, used only by the wrong_event test below.
+    let foreignEventToken: string;
 
     beforeAll(async () => {
-      clientA = createClient(SUPABASE_URL!, SUPABASE_ANON_KEY!, { auth: { persistSession: false } });
+      clientB = createClient(SUPABASE_URL!, SUPABASE_ANON_KEY!, { auth: { persistSession: false } });
       anon = createClient(SUPABASE_URL!, SUPABASE_ANON_KEY!, { auth: { persistSession: false } });
 
-      const a = await clientA.auth.signInWithPassword({ email: A_EMAIL!, password: A_PASSWORD! });
+      const a = await clientB.auth.signInWithPassword({ email: B_EMAIL!, password: B_PASSWORD! });
       if (a.error || !a.data.user) throw new Error(`sign in A failed: ${a.error?.message}`);
 
-      const { data, error } = await clientA
-        .from('events')
-        .select('id, join_token')
-        .eq('couple_names', 'Sara & Daniel')
-        .limit(1);
-      if (error) throw new Error(`could not read A's events: ${error.message}`);
-      if (!data || data.length === 0) {
-        throw new Error("No 'Sara & Daniel' event for user A. Run `npm run seed:demo` first.");
-      }
-      saraDanielId = data[0].id;
-      saraDanielToken = data[0].join_token as string;
-      if (!saraDanielToken) {
-        throw new Error("'Sara & Daniel' has no join_token. Run `npm run seed:demo` first.");
-      }
+      const load = async (coupleNames: string) => {
+        const { data, error } = await clientB
+          .from('events')
+          .select('id, join_token, status')
+          .eq('couple_names', coupleNames)
+          .limit(1);
+        if (error) throw new Error(`could not read B's events: ${error.message}`);
+        if (!data || data.length === 0) {
+          throw new Error(`No '${coupleNames}' fixture event for user B. Run \`npm run seed:demo\` first.`);
+        }
+        if (!data[0].join_token) {
+          throw new Error(`'${coupleNames}' has no join_token. Run \`npm run seed:demo\` first.`);
+        }
+        // Both fixtures are seeded 'live' precisely so no test has to flip a
+        // shared row to get there. A previous run that died mid-`finally`
+        // would leave one 'upcoming'; say so plainly rather than failing
+        // later with a confusing event_not_live from an unrelated test.
+        if (data[0].status !== 'live') {
+          throw new Error(
+            `'${coupleNames}' is '${data[0].status}', not 'live' -- a previous run left it flipped. ` +
+              'Re-run `npm run seed:demo` to restore it.',
+          );
+        }
+        return { id: data[0].id as string, token: data[0].join_token as string };
+      };
+
+      const primary = await load(FIXTURE_EVENT);
+      fixtureEventId = primary.id;
+      fixtureEventToken = primary.token;
+      foreignEventToken = (await load(FOREIGN_FIXTURE_EVENT)).token;
     });
 
     /* -------------------------------------------------------------------
@@ -138,18 +187,18 @@ describe.skipIf(!hasSupabaseConfig || !hasTestUsers)(
 
       test('insert is refused on all five tables', async () => {
         const attempts: Array<{ table: (typeof tables)[number]; row: Record<string, unknown> }> = [
-          { table: 'guest_sessions', row: { event_id: saraDanielId, display_name: 'grant probe' } },
+          { table: 'guest_sessions', row: { event_id: fixtureEventId, display_name: 'grant probe' } },
           {
             table: 'song_suggestions',
             row: {
-              event_id: saraDanielId,
+              event_id: fixtureEventId,
               spotify_track_id: TRACK_GRANT_PROBE,
               title: 'x',
               artist: 'y',
-              suggested_by: saraDanielId,
+              suggested_by: fixtureEventId,
             },
           },
-          { table: 'suggestion_votes', row: { suggestion_id: saraDanielId, guest_id: saraDanielId } },
+          { table: 'suggestion_votes', row: { suggestion_id: fixtureEventId, guest_id: fixtureEventId } },
           { table: 'spotify_tracks', row: { spotify_track_id: TRACK_GRANT_PROBE, title: 'x', artist: 'y' } },
           {
             table: 'spotify_track_artists',
@@ -212,13 +261,13 @@ describe.skipIf(!hasSupabaseConfig || !hasTestUsers)(
 
       test('dj_play_suggestion and dj_play_pick are NOT callable by anon', async () => {
         const play1 = await anon.rpc('dj_play_suggestion', {
-          p_event_id: saraDanielId,
+          p_event_id: fixtureEventId,
           p_suggestion_id: '00000000-0000-4000-8000-000000000000',
         });
         expect(play1.error?.code).toBe('42501');
 
         const play2 = await anon.rpc('dj_play_pick', {
-          p_event_id: saraDanielId,
+          p_event_id: fixtureEventId,
           p_title: 'x',
           p_artist: 'y',
           p_track_id: TRACK_GRANT_PROBE,
@@ -228,56 +277,57 @@ describe.skipIf(!hasSupabaseConfig || !hasTestUsers)(
     });
 
     /* -------------------------------------------------------------------
-       3. Guest RPC behaviour, via fresh Sara & Daniel-scoped sessions. The
-       three seeded guest sessions/suggestions are left untouched -- these
-       tests all mint their own fresh sessions so they never inherit polluted
-       counts.
+       3. Guest RPC behaviour, via fresh sessions on the PRIMARY fixture
+       event. Every test mints its own session, so none inherits a count
+       polluted by an earlier run.
 
-       Litter note: this describe block's "suggestion cap" and "used_count"
-       tests each add fresh song_suggestions rows to Sara & Daniel's pending
-       queue, and neither guest_sessions nor song_suggestions carries a
-       delete grant for anon or the DJ -- so re-running this file grows that
-       queue by a few rows every run. The cap is per SESSION (fresh every
-       run) so nothing here breaks; it is simply not this task's job to
-       reclaim the space, matching the same category of note the plan's own
-       event_partners reset pattern already carries elsewhere in this repo.
+       Litter note, and the reason this file no longer touches a demo event:
+       the "suggestion cap", "used_count" and "wrong_event" tests each add
+       song_suggestions rows, and neither guest_sessions nor song_suggestions
+       carries a delete grant for anon or the DJ -- so re-running this file
+       grows the fixture events' queues by a few rows every run, permanently.
+       The cap is per SESSION (fresh every run), so nothing here breaks. What
+       DID break is that these rows used to land on the demo events: each
+       random track id 404s against Spotify, the live poll route writes the
+       'Unavailable track' sentinel for it (by design), and by 2026-09-06 the
+       DJ live screen showed 432 placeholder requests. The rows are still
+       undeletable; they are now merely invisible to the demo account.
        ------------------------------------------------------------------- */
 
-    describe('guest RPC behaviour (fresh Sara & Daniel sessions)', () => {
+    describe('guest RPC behaviour (fresh fixture-event sessions)', () => {
       test('guest_join on the live event returns a session id', async () => {
         const { data, error } = await anon.rpc('guest_join', {
-          p_token: saraDanielToken,
+          p_token: fixtureEventToken,
           p_display_name: 'Integration Guest',
         });
         expect(error).toBeNull();
         expect(typeof data).toBe('string');
       });
 
-      // DEVIATION FROM THE BRIEF, flagged here and in the final report: the
-      // brief names 'Priya & Alex' (status upcoming) as the fixture to reuse
-      // for this case, "using ITS join token". Verified live: Priya & Alex's
-      // join_token is NULL. Only an event that has actually gone live ever
-      // gets a token written (startEvent / the seed script's liveColumns are
-      // applied only when status === 'live') -- no seeded non-live event
-      // carries one. Calling guest_join with a null token never reaches the
-      // status check at all: `where e.join_token = p_token` with p_token
-      // null is never true in SQL, so the function raises no_such_event, not
-      // event_not_live (reproduced live before writing this test). Using
-      // Priya & Alex as written would therefore test the WRONG guard.
+      // Why this flips the fixture event rather than reusing an event that
+      // is ALREADY non-live: only an event that has actually gone live ever
+      // gets a join_token written (startEvent, and the seed script's
+      // liveColumns, apply it solely when status === 'live'), so every
+      // non-live event's token is NULL. guest_join with a null token never
+      // reaches the status check at all -- `where e.join_token = p_token`
+      // with p_token null is never true in SQL, so the function raises
+      // no_such_event, not event_not_live (reproduced live before this test
+      // was written). An already-non-live event would test the WRONG guard.
       //
-      // Instead: flip Sara & Daniel's own status to 'upcoming' as the DJ (the
+      // So: flip the fixture event's own status to 'upcoming' as its DJ (the
       // "dj updates own events" policy plus an unscoped UPDATE grant permit
-      // this), call guest_join with Sara & Daniel's REAL token so the token
-      // lookup succeeds and the status check is what actually fires, then
-      // restore to 'live' in a `finally` before any later test in this file
-      // runs -- vitest runs one file's tests strictly sequentially, so no
-      // other test observes the event in its 'upcoming' state.
+      // this), call guest_join with its REAL token so the lookup succeeds and
+      // the status check is what actually fires, then restore to 'live' in a
+      // `finally` -- vitest runs one file's tests strictly sequentially, so no
+      // other test observes the intermediate state. This is a fixture event
+      // owned by user B, never a demo event, so a `finally` that somehow
+      // failed would strand nothing a grader can see.
       test('guest_join on a non-live event is rejected with event_not_live', async () => {
-        const flip = await clientA.from('events').update({ status: 'upcoming' }).eq('id', saraDanielId);
+        const flip = await clientB.from('events').update({ status: 'upcoming' }).eq('id', fixtureEventId);
         expect(flip.error).toBeNull();
         try {
           const { data, error } = await anon.rpc('guest_join', {
-            p_token: saraDanielToken,
+            p_token: fixtureEventToken,
             p_display_name: 'Should Not Join',
           });
           expect(data).toBeNull();
@@ -289,14 +339,14 @@ describe.skipIf(!hasSupabaseConfig || !hasTestUsers)(
           // from "silently matched nothing", which would leave this SHARED,
           // LIVE fixture event stuck as 'upcoming' for every later test in
           // this file and every other use of it (manual walks, demos).
-          const restore = await clientA
+          const restore = await clientB
             .from('events')
             .update({ status: 'live' })
-            .eq('id', saraDanielId)
+            .eq('id', fixtureEventId)
             .select('id');
           if (restore.error || restore.data?.length !== 1) {
             throw new Error(
-              `could not restore Sara & Daniel to live: ${restore.error?.message ?? `matched ${restore.data?.length ?? 0} rows`}`,
+              `could not restore ${FIXTURE_EVENT} to live: ${restore.error?.message ?? `matched ${restore.data?.length ?? 0} rows`}`,
             );
           }
         }
@@ -316,7 +366,7 @@ describe.skipIf(!hasSupabaseConfig || !hasTestUsers)(
       // this repo's own recorded lesson about exactly this failure mode.
       test('guest_join with an all-space name is rejected with bad_display_name', async () => {
         const { data, error } = await anon.rpc('guest_join', {
-          p_token: saraDanielToken,
+          p_token: fixtureEventToken,
           p_display_name: '   ',
         });
         expect(data).toBeNull();
@@ -325,7 +375,7 @@ describe.skipIf(!hasSupabaseConfig || !hasTestUsers)(
 
       test('guest_join with a 41-character name is rejected with bad_display_name', async () => {
         const { data, error } = await anon.rpc('guest_join', {
-          p_token: saraDanielToken,
+          p_token: fixtureEventToken,
           p_display_name: 'A'.repeat(41),
         });
         expect(data).toBeNull();
@@ -333,7 +383,7 @@ describe.skipIf(!hasSupabaseConfig || !hasTestUsers)(
       });
 
       test('a session can suggest up to 3 tracks; the 4th raises suggestion_limit', async () => {
-        const join = await anon.rpc('guest_join', { p_token: saraDanielToken, p_display_name: 'Capped Guest' });
+        const join = await anon.rpc('guest_join', { p_token: fixtureEventToken, p_display_name: 'Capped Guest' });
         expect(join.error).toBeNull();
         const sessionId = join.data as string;
 
@@ -359,7 +409,7 @@ describe.skipIf(!hasSupabaseConfig || !hasTestUsers)(
 
       test('suggesting an existing track votes instead of consuming a cap slot', async () => {
         const firstJoin = await anon.rpc('guest_join', {
-          p_token: saraDanielToken,
+          p_token: fixtureEventToken,
           p_display_name: 'Dedupe Guest A',
         });
         expect(firstJoin.error).toBeNull();
@@ -376,7 +426,7 @@ describe.skipIf(!hasSupabaseConfig || !hasTestUsers)(
         const suggestionId = original.data![0].suggestion_id;
 
         const secondJoin = await anon.rpc('guest_join', {
-          p_token: saraDanielToken,
+          p_token: fixtureEventToken,
           p_display_name: 'Dedupe Guest B',
         });
         expect(secondJoin.error).toBeNull();
@@ -400,12 +450,12 @@ describe.skipIf(!hasSupabaseConfig || !hasTestUsers)(
       });
 
       test('voting twice from the same session leaves one vote row, not two', async () => {
-        const voterJoin = await anon.rpc('guest_join', { p_token: saraDanielToken, p_display_name: 'Voter Guest' });
+        const voterJoin = await anon.rpc('guest_join', { p_token: fixtureEventToken, p_display_name: 'Voter Guest' });
         expect(voterJoin.error).toBeNull();
         const voterSession = voterJoin.data as string;
 
         const targetJoin = await anon.rpc('guest_join', {
-          p_token: saraDanielToken,
+          p_token: fixtureEventToken,
           p_display_name: 'Suggest Guest',
         });
         expect(targetJoin.error).toBeNull();
@@ -446,91 +496,48 @@ describe.skipIf(!hasSupabaseConfig || !hasTestUsers)(
         expect(row!.votes).toBe(votesAfterFirst);
       });
 
-      // No seeded fixture gives a suggestion on a DIFFERENT event than Sara &
-      // Daniel's own -- song_suggestions rows only ever come from guest_suggest,
-      // which requires the SESSION's own event to be live. So this test
-      // manufactures one: it flips 'Priya & Alex' (status upcoming, zero
-      // played_songs, chosen so it can't collide with anything the
-      // played_songs-widening block below touches) to live with a throwaway
-      // join_token, joins a session there, gets a real suggestion id, then
-      // restores Priya & Alex to its original state before voting on that
-      // suggestion from a Sara & Daniel session. Litter note: the guest_sessions
-      // and song_suggestions rows this creates on Priya & Alex cannot be
-      // cleaned up (neither table carries a delete grant for the DJ) -- they
-      // sit inertly against an 'upcoming' event no guest-facing or DJ screen
-      // currently reads suggestions from.
-      test("voting on a suggestion of a DIFFERENT event is rejected with wrong_event", async () => {
-        const { data: priyaAlex, error: priyaError } = await clientA
-          .from('events')
-          .select('id, status, join_token, phase')
-          .eq('couple_names', 'Priya & Alex')
-          .limit(1);
-        if (priyaError || !priyaAlex || priyaAlex.length === 0) {
-          throw new Error("No 'Priya & Alex' event for user A. Run `npm run seed:demo` first.");
-        }
-        const foreignEventId = priyaAlex[0].id as string;
-        const originalStatus = priyaAlex[0].status as string;
-        const originalToken = priyaAlex[0].join_token as string | null;
-        const originalPhase = priyaAlex[0].phase as string | null;
-        const throwawayToken = 'aWrongEventProbeToknAA';
+      // A suggestion on a DIFFERENT event than the voting session's own.
+      //
+      // song_suggestions rows only ever come from guest_suggest, which
+      // requires the session's event to be LIVE -- so this case needs a
+      // second live event, not just a second event. It used to manufacture
+      // one by flipping the demo event 'Priya & Alex' to live with a
+      // throwaway join_token and restoring it in a `finally`: a mutation of
+      // a demo-visible row that had to be got exactly right on every run,
+      // and which left permanent, undeletable litter on that event either
+      // way. The seed now provides a second fixture event already live, so
+      // there is nothing to flip and nothing to restore.
+      test('voting on a suggestion of a DIFFERENT event is rejected with wrong_event', async () => {
+        const foreignJoin = await anon.rpc('guest_join', {
+          p_token: foreignEventToken,
+          p_display_name: 'Foreign Event Guest',
+        });
+        expect(foreignJoin.error).toBeNull();
 
-        // phase_required_when_live (20260830000000_event_phase.sql) requires
-        // a non-null phase whenever status = 'live' -- discovered live when
-        // this update first failed with 23514 on that constraint. Priya &
-        // Alex has no phase of its own (it's upcoming), so this flip sets one.
-        const flip = await clientA
-          .from('events')
-          .update({ status: 'live', join_token: throwawayToken, phase: 'open-floor' })
-          .eq('id', foreignEventId);
-        expect(flip.error).toBeNull();
+        const foreignSuggest = await anon.rpc('guest_suggest', {
+          p_session_id: foreignJoin.data as string,
+          p_track_id: randomTrackId(),
+          p_title: 'Song',
+          p_artist: 'Artist',
+        });
+        expect(foreignSuggest.error).toBeNull();
+        const foreignSuggestionId = foreignSuggest.data![0].suggestion_id;
 
-        let foreignSuggestionId: string;
-        try {
-          const foreignJoin = await anon.rpc('guest_join', {
-            p_token: throwawayToken,
-            p_display_name: 'Foreign Event Guest',
-          });
-          expect(foreignJoin.error).toBeNull();
-          const foreignSession = foreignJoin.data as string;
-
-          const foreignSuggest = await anon.rpc('guest_suggest', {
-            p_session_id: foreignSession,
-            p_track_id: randomTrackId(),
-            p_title: 'Song',
-            p_artist: 'Artist',
-          });
-          expect(foreignSuggest.error).toBeNull();
-          foreignSuggestionId = foreignSuggest.data![0].suggestion_id;
-        } finally {
-          // See the guest_join non-live restore's comment: `.select()` plus a
-          // length check, because a zero-rows-matched UPDATE returns
-          // `error: null` and would otherwise leave this shared, live event
-          // stuck 'live' with a throwaway token indefinitely.
-          const restore = await clientA
-            .from('events')
-            .update({ status: originalStatus, join_token: originalToken, phase: originalPhase })
-            .eq('id', foreignEventId)
-            .select('id');
-          if (restore.error || restore.data?.length !== 1) {
-            throw new Error(
-              `could not restore Priya & Alex: ${restore.error?.message ?? `matched ${restore.data?.length ?? 0} rows`}`,
-            );
-          }
-        }
-
-        const ownJoin = await anon.rpc('guest_join', { p_token: saraDanielToken, p_display_name: 'Wrong Event Voter' });
+        const ownJoin = await anon.rpc('guest_join', {
+          p_token: fixtureEventToken,
+          p_display_name: 'Wrong Event Voter',
+        });
         expect(ownJoin.error).toBeNull();
-        const ownSession = ownJoin.data as string;
 
         const vote = await anon.rpc('guest_vote', {
-          p_session_id: ownSession,
+          p_session_id: ownJoin.data as string,
           p_suggestion_id: foreignSuggestionId,
         });
         expect(vote.error?.message).toBe('wrong_event');
       });
 
       test('guest_queue used_count includes played/skipped suggestions, not only pending ones', async () => {
-        const join = await anon.rpc('guest_join', { p_token: saraDanielToken, p_display_name: 'Used Count Guest' });
+        const join = await anon.rpc('guest_join', { p_token: fixtureEventToken, p_display_name: 'Used Count Guest' });
         expect(join.error).toBeNull();
         const sessionId = join.data as string;
 
@@ -555,7 +562,7 @@ describe.skipIf(!hasSupabaseConfig || !hasTestUsers)(
         // RLS-authenticated update through song_suggestions' own "dj updates
         // suggestions of own events" policy is legitimate here and simpler
         // than orchestrating a full dj_play_suggestion call.
-        const skip = await clientA
+        const skip = await clientB
           .from('song_suggestions')
           .update({ status: 'skipped' })
           .eq('id', suggestionIds[0]);
@@ -573,7 +580,7 @@ describe.skipIf(!hasSupabaseConfig || !hasTestUsers)(
       test(
         'guest_search_allow returns true for 60 calls and false on the 61st',
         async () => {
-          const join = await anon.rpc('guest_join', { p_token: saraDanielToken, p_display_name: 'Search Guest' });
+          const join = await anon.rpc('guest_join', { p_token: fixtureEventToken, p_display_name: 'Search Guest' });
           expect(join.error).toBeNull();
           const sessionId = join.data as string;
 
@@ -596,13 +603,13 @@ describe.skipIf(!hasSupabaseConfig || !hasTestUsers)(
       // ever observes the intermediate state.
       test('guest_search_allow on a session whose event is no longer live is rejected with event_not_live', async () => {
         const join = await anon.rpc('guest_join', {
-          p_token: saraDanielToken,
+          p_token: fixtureEventToken,
           p_display_name: 'Search Guest (soon not-live)',
         });
         expect(join.error).toBeNull();
         const sessionId = join.data as string;
 
-        const flip = await clientA.from('events').update({ status: 'upcoming' }).eq('id', saraDanielId);
+        const flip = await clientB.from('events').update({ status: 'upcoming' }).eq('id', fixtureEventId);
         expect(flip.error).toBeNull();
         try {
           const { data, error } = await anon.rpc('guest_search_allow', { p_session_id: sessionId });
@@ -610,14 +617,14 @@ describe.skipIf(!hasSupabaseConfig || !hasTestUsers)(
           expect(error?.message).toBe('event_not_live');
         } finally {
           // See the guest_join non-live restore's comment.
-          const restore = await clientA
+          const restore = await clientB
             .from('events')
             .update({ status: 'live' })
-            .eq('id', saraDanielId)
+            .eq('id', fixtureEventId)
             .select('id');
           if (restore.error || restore.data?.length !== 1) {
             throw new Error(
-              `could not restore Sara & Daniel to live: ${restore.error?.message ?? `matched ${restore.data?.length ?? 0} rows`}`,
+              `could not restore ${FIXTURE_EVENT} to live: ${restore.error?.message ?? `matched ${restore.data?.length ?? 0} rows`}`,
             );
           }
         }

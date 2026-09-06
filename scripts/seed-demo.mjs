@@ -67,6 +67,11 @@ const {
 const EMAIL = process.env.SEED_DJ_EMAIL ?? process.env.TEST_USER_A_EMAIL;
 const PASSWORD = process.env.SEED_DJ_PASSWORD ?? process.env.TEST_USER_A_PASSWORD;
 
+// The account that owns the integration-test fixture events (FIXTURE_EVENTS
+// below). Deliberately NOT the demo DJ: see that constant's comment.
+const FIXTURE_EMAIL = process.env.TEST_USER_B_EMAIL;
+const FIXTURE_PASSWORD = process.env.TEST_USER_B_PASSWORD;
+
 for (const [name, value] of [
   ['NEXT_PUBLIC_SUPABASE_URL', SUPABASE_URL],
   ['NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY', ANON_KEY],
@@ -324,7 +329,25 @@ async function main() {
   const djId = signIn.data.user.id;
   console.log(`seed-demo: signed in as ${EMAIL}`);
 
-  for (const event of EVENTS) {
+  await seedEvents(supabase, djId, EVENTS);
+  await seedGuestData(djId);
+
+  console.log(`seed-demo: done. ${EVENTS.length} demo events.`);
+
+  await seedTestFixtures();
+}
+
+/**
+ * Upserts one group of events for one signed-in DJ.
+ *
+ * Extracted from `main` so the same body can seed both the DEMO events (user
+ * A, the account a grader signs in as) and the INTEGRATION FIXTURE events
+ * (user B, invisible to the demo) without duplicating three hundred lines of
+ * upsert logic. `derivedId` already keys every row on the DJ's own id, so two
+ * DJs seeding through this function never collide.
+ */
+async function seedEvents(supabase, djId, events) {
+  for (const event of events) {
     const eventId = derivedId(djId, event.slug);
 
     const liveColumns =
@@ -484,10 +507,6 @@ async function main() {
       `seed-demo: ${event.couple_names} (${event.status}) — ${event.songs.length} songs — ${eventId}`,
     );
   }
-
-  await seedGuestData(djId);
-
-  console.log(`seed-demo: done. ${EVENTS.length} events.`);
 }
 
 /**
@@ -600,6 +619,111 @@ async function seedGuestData(djId) {
   }
 
   console.log('seed-demo: seeded 3 guests, 2 distinct suggestions (one with 2 requesters via dedupe), 1 extra vote');
+}
+
+/**
+ * The two events `src/lib/live/guest.integration.test.ts` owns.
+ *
+ * WHY THEY EXIST. That suite writes a guest session and up to three
+ * `song_suggestions` rows per test, on every run, with placeholder text
+ * ('Song' / 'Artist') and a freshly generated 22-character track id. Nothing
+ * ever removes them: `authenticated` holds only SELECT and UPDATE on
+ * `song_suggestions`, so the DJ genuinely cannot delete what the suite wrote.
+ * The rows therefore accumulate for ever, one batch per `npm run gate`.
+ *
+ * Until 2026-09-06 they accumulated on the DEMO events -- Sara & Daniel and
+ * Priya & Alex. The suite's own comment argued that was harmless because the
+ * litter "sits inertly against an 'upcoming' event no guest-facing or DJ
+ * screen currently reads suggestions from". That premise stopped being true
+ * the moment Priya & Alex was started live: the DJ live screen read all 47
+ * rows, each id 404'd against Spotify, and the poll route wrote the
+ * `Unavailable track` / `—` sentinel for every one (by design -- see
+ * `src/lib/live/liveTypes.ts`). The demo screen filled with 432 placeholder
+ * requests. The bug was never in the sentinel; it was a test with no teardown
+ * whose safety depended on an assumption about the rest of the app that
+ * nothing re-checked when the app changed.
+ *
+ * WHY USER B. These events belong to TEST_USER_B, not to the seed's own DJ.
+ * A grader signs in as user A, so nothing here can reach any screen they see
+ * -- the litter is still un-deletable, but it is now un-demoable, which is
+ * the property that actually matters. Keeping them under user A would have
+ * put two obviously-fake events on the demo dashboard instead.
+ *
+ * WHY TWO, AND WHY BOTH ALREADY LIVE. The suite's `wrong_event` case needs a
+ * suggestion belonging to a DIFFERENT event than the session voting on it.
+ * It used to manufacture that by flipping the demo event Priya & Alex to
+ * 'live' with a throwaway join token and restoring it in a `finally` -- a
+ * mutation of a shared, demo-visible row that had to be got exactly right
+ * every run. Seeding a second fixture event that is ALREADY live removes the
+ * flip entirely.
+ */
+const FIXTURE_EVENTS = [
+  {
+    slug: 'integration-primary',
+    couple_names: 'Integration A & Integration B',
+    venue: 'Integration Fixture (not a demo event)',
+    event_date: inDays(0),
+    status: 'live',
+    phase: 'open-floor',
+    // A fixed offset like the demo live event's, so `minutesLeftInPhase` has
+    // something real to compute against if anything ever reads it.
+    phaseStartedAt: new Date(Date.now() - 25 * 60_000).toISOString(),
+    songs: [],
+    mustPlay: [],
+    blocklist: [],
+    notes: null,
+  },
+  {
+    slug: 'integration-foreign',
+    couple_names: 'Foreign A & Foreign B',
+    venue: 'Integration Fixture (not a demo event)',
+    event_date: inDays(0),
+    status: 'live',
+    phase: 'open-floor',
+    phaseStartedAt: new Date(Date.now() - 25 * 60_000).toISOString(),
+    songs: [],
+    mustPlay: [],
+    blocklist: [],
+    notes: null,
+  },
+];
+
+/**
+ * Seeds FIXTURE_EVENTS under TEST_USER_B.
+ *
+ * Skipped with a loud line, not a hard failure, when TEST_USER_B_* is unset:
+ * a grader running `npm run seed:demo` to look at the app needs neither the
+ * fixtures nor a second account, and must not be stopped by their absence.
+ * Anyone running the integration suite already has TEST_USER_B_* set --
+ * `src/lib/events/rls.integration.test.ts` has required it since long before
+ * this function existed.
+ */
+async function seedTestFixtures() {
+  if (!FIXTURE_EMAIL || !FIXTURE_PASSWORD) {
+    console.log(
+      'seed-demo: TEST_USER_B_EMAIL/TEST_USER_B_PASSWORD not set — skipping the integration fixture events. ' +
+        'src/lib/live/guest.integration.test.ts will fail at beforeAll without them.',
+    );
+    return;
+  }
+
+  // persistSession: false, per the two-clients gotcha in CLAUDE.md. Node has
+  // no localStorage so this script would not actually hit it, but the rule is
+  // cheaper to keep than to reason about each time.
+  const supabase = createClient(SUPABASE_URL, ANON_KEY, { auth: { persistSession: false } });
+  const signIn = await supabase.auth.signInWithPassword({
+    email: FIXTURE_EMAIL,
+    password: FIXTURE_PASSWORD,
+  });
+  if (signIn.error || !signIn.data.user) {
+    console.error(`seed-demo: could not sign in as ${FIXTURE_EMAIL}: ${signIn.error?.message}`);
+    process.exit(1);
+  }
+
+  await seedEvents(supabase, signIn.data.user.id, FIXTURE_EVENTS);
+  console.log(
+    `seed-demo: ${FIXTURE_EVENTS.length} integration fixture events under ${FIXTURE_EMAIL} (never shown in the demo).`,
+  );
 }
 
 main().catch((error) => {
