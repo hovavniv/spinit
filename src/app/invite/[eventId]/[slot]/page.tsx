@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
+import Link from 'next/link';
 
 import { createClient } from '@/lib/supabase/server';
 import { claimInvite } from '@/lib/events/newEventActions';
@@ -89,7 +90,10 @@ export default async function InvitePage({ params }: PageProps<'/invite/[eventId
           place, not for the couple this page is meant for.
         */}
         <p className={styles.note}>
-          Not expecting this? <a className={styles.link} href="/dashboard">Go to your dashboard.</a>
+          Not expecting this?{' '}
+          <Link className={styles.link} href="/dashboard">
+            Go to your dashboard.
+          </Link>
         </p>
       </div>
     </main>
