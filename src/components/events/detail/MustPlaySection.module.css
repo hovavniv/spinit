@@ -32,7 +32,6 @@
 .row {
   display: flex;
   align-items: center;
-  justify-content: space-between;
   gap: 12px;
   padding: 12px 14px;
   border-radius: var(--radius);
@@ -42,6 +41,18 @@
 
 .rowText {
   min-width: 0;
+  margin-right: auto;
+}
+
+/* Square, like the picker dropdown's song artwork. Rendered even when there is
+   no image (as an empty tinted box) so every row's text starts at the same x. */
+.rowArtwork {
+  width: 34px;
+  height: 34px;
+  flex-shrink: 0;
+  background: var(--divider);
+  border-radius: var(--radius);
+  object-fit: cover;
 }
 
 .rowTitle {

@@ -35,7 +35,11 @@ export async function spotifyFetch<T>(
     const res = await fetch(`${BASE}${endpoint}`, {
       ...init,
       headers: { ...init?.headers, Authorization: `Bearer ${token}` },
-      cache: 'no-store',
+      // 'no-store' remains the default: every other Spotify read here is
+      // user-specific or time-sensitive. A caller may override it (artwork.ts
+      // does, with `force-cache` + `next.revalidate`) -- caching is opt-IN per
+      // call, so nothing starts being cached by accident.
+      cache: init?.cache ?? 'no-store',
     });
 
     if (res.ok) return (await res.json()) as T;

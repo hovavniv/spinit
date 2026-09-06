@@ -55,7 +55,7 @@ export function EndEventSection({ eventId, canEnd, endAction }: EndEventSectionP
   }
 
   return (
-    <div className={styles.section}>
+    <div className={`${styles.section} ${styles.sectionConfirming}`}>
       <p className={styles.warning}>
         This closes the event and delivers the recap. It cannot be undone.
       </p>

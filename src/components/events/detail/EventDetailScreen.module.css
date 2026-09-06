@@ -39,3 +39,35 @@
   font-weight: 800;
   margin: 0 0 18px;
 }
+
+/* The event-day block. It gets the same divider, spacing, heading and blurb
+   as every other section in this card -- with a heavier rule, no title and
+   its own spacing scale it read as an alien slab bolted under the footer.
+   Start (primary) sits beside End (quiet); `flex-wrap` lets EndEventSection's
+   confirming state take the full width. */
+.lifecycle {
+  border-top: 1px solid var(--divider);
+  padding-top: 28px;
+  margin-bottom: 28px;
+}
+
+.lifecycleHeading {
+  font-family: var(--font-display), sans-serif;
+  font-size: 16.5px;
+  font-weight: 700;
+  margin: 0 0 4px;
+}
+
+.lifecycleBlurb {
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--text-subtle);
+  margin: 0 0 12px;
+}
+
+.lifecycleActions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+}

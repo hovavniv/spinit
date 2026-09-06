@@ -1,9 +1,23 @@
+/* The picker lives in a flex add-row next to a plain text field and the Add
+   button, so it has to grow like they do -- and its input has to carry the
+   same field styling. With only `width: 100%` it rendered as a raw browser
+   input: no padding, no radius, hairline border, wrong font, and visibly
+   shorter than everything beside it. */
 .wrap {
   position: relative;
+  flex: 1 1 200px;
+  min-width: 0;
 }
 
 .input {
   width: 100%;
+  padding: 11px 13px;
+  border-radius: var(--radius);
+  border: 1.5px solid var(--border-input);
+  font-family: var(--font-body), sans-serif;
+  font-size: 13.5px;
+  background: var(--surface);
+  color: var(--ink-dark);
 }
 
 .dropdown {
@@ -109,11 +123,22 @@
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  padding: 6px 10px;
+  padding: 5px 10px 5px 5px;
   border-radius: 999px;
   background: var(--bg);
   border: 1px solid var(--border);
   font-size: 13px;
+}
+
+/* Smaller than the dropdown's 34px: the chip is one line of 13px text, and a
+   34px picture inside it would set the chip's height instead of the text
+   doing so. `.artworkSong`/`.artworkArtist` supply the shape. */
+.chipArtwork {
+  width: 26px;
+  height: 26px;
+  flex-shrink: 0;
+  background: var(--divider);
+  object-fit: cover;
 }
 
 .chipClear {

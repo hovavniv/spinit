@@ -3,15 +3,29 @@
 import { useActionState } from 'react';
 
 import type { ActionResult } from '@/lib/auth/errors';
-import type { AddableSegment, DetailActionState, MustPlayRow } from '@/lib/events/detailTypes';
+import { artworkKey, type AddableSegment, type DetailActionState, type MustPlayRow } from '@/lib/events/detailTypes';
 import { TrackPicker } from './TrackPicker';
 import styles from './MustPlaySection.module.css';
+
+/**
+ * The row thumbnail. Always renders a box, image or not: a row whose artwork
+ * is missing (a pre-picker row, a 404, a failed call) must line its text up
+ * with the rows around it, and a conditional element would make the list
+ * ragged. Square, matching the picker dropdown's song artwork.
+ */
+function RowArtwork({ url }: { url: string | undefined }) {
+  if (url) return <img src={url} alt="" className={styles.rowArtwork} />;
+  return <div aria-hidden className={styles.rowArtwork} />;
+}
 
 interface MustPlaySectionProps {
   eventId: string;
   segment: AddableSegment;
   blurb: string;
   rows: MustPlayRow[];
+  /** EventDetail.artworkById. A missing entry means "no picture", never an
+   *  error — see that field's comment. */
+  artworkById: Record<string, string>;
   addAction: (prevState: DetailActionState, formData: FormData) => Promise<ActionResult>;
   removeAction: (formData: FormData) => Promise<ActionResult>;
 }
@@ -36,6 +50,7 @@ export function MustPlaySection({
   segment,
   blurb,
   rows,
+  artworkById,
   addAction,
   removeAction,
 }: MustPlaySectionProps) {
@@ -52,6 +67,7 @@ export function MustPlaySection({
         <ul className={styles.rows}>
           {rows.map((row) => (
             <li key={row.id} className={styles.row}>
+              <RowArtwork url={artworkById[artworkKey('track', row.spotify_track_id)]} />
               <div className={styles.rowText}>
                 <div className={styles.rowTitle}>
                   {row.title}

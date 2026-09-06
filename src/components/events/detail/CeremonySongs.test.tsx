@@ -19,14 +19,14 @@ function ceremonyRow(moment: string, title: string, id: string): MustPlayRow {
 
 describe('CeremonySongs', () => {
   test('draws both slots in CEREMONY_SLOTS order', () => {
-    render(<CeremonySongs rows={[]} />);
+    render(<CeremonySongs rows={[]} artworkById={{}} />);
 
     expect(screen.getByText('Walking down the aisle')).toBeInTheDocument();
     expect(screen.getByText('Breaking the glass')).toBeInTheDocument();
   });
 
   test('fills a slot from the row whose moment matches it', () => {
-    render(<CeremonySongs rows={[ceremonyRow('Breaking the glass', 'Hava Nagila', 'row-9')]} />);
+    render(<CeremonySongs rows={[ceremonyRow('Breaking the glass', 'Hava Nagila', 'row-9')]} artworkById={{}} />);
 
     expect(screen.getByText(/Hava Nagila/)).toBeInTheDocument();
     // The unfilled slot has no chip, so its picker still shows the search input.
@@ -37,7 +37,7 @@ describe('CeremonySongs', () => {
     // The write is keyed by row id, never by an upsert conflict target
     // (design §6.4) — so the id has to reach the action through the form.
     const { container } = render(
-      <CeremonySongs rows={[ceremonyRow('Breaking the glass', 'Hava Nagila', 'row-9')]} />,
+      <CeremonySongs rows={[ceremonyRow('Breaking the glass', 'Hava Nagila', 'row-9')]} artworkById={{}} />,
     );
 
     expect(container.querySelector('input[name="ceremony-1-id"]')).toHaveValue('row-9');
@@ -45,7 +45,7 @@ describe('CeremonySongs', () => {
   });
 
   test('associates every control with the details form rather than nesting one', () => {
-    const { container } = render(<CeremonySongs rows={[]} />);
+    const { container } = render(<CeremonySongs rows={[]} artworkById={{}} />);
 
     expect(container.querySelectorAll('form')).toHaveLength(0);
     for (const input of container.querySelectorAll('input')) {
@@ -54,7 +54,7 @@ describe('CeremonySongs', () => {
   });
 
   test('renders one picker per slot and keeps the slot labels', () => {
-    render(<CeremonySongs rows={[]} />);
+    render(<CeremonySongs rows={[]} artworkById={{}} />);
 
     expect(screen.getByText('Walking down the aisle')).toBeInTheDocument();
     expect(screen.getByText('Breaking the glass')).toBeInTheDocument();
@@ -62,7 +62,7 @@ describe('CeremonySongs', () => {
   });
 
   test('the two ceremony pickers write to different field names', () => {
-    const { container } = render(<CeremonySongs rows={[]} />);
+    const { container } = render(<CeremonySongs rows={[]} artworkById={{}} />);
 
     expect(container.querySelector('input[name="ceremony-0-title"]')).not.toBeNull();
     expect(container.querySelector('input[name="ceremony-1-title"]')).not.toBeNull();
@@ -85,7 +85,7 @@ describe('CeremonySongs', () => {
       created_at: '2026-08-30T10:00:00Z',
     };
 
-    render(<CeremonySongs rows={[legacyRow]} />);
+    render(<CeremonySongs rows={[legacyRow]} artworkById={{}} />);
 
     expect(screen.queryByText('Some Old Title')).not.toBeInTheDocument();
     expect(screen.getAllByRole('combobox')).toHaveLength(2);
