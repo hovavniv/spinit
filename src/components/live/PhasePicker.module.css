@@ -1,8 +1,18 @@
+/* No tinted ground behind the options. The Live Event artboard has no phase
+   control at all, so the segmented-control look was invented rather than
+   transcribed, and in a one-accent system it was doing no work: the selected
+   phase is already a filled lime pill and the rest are plain grey text. The
+   ground only ever read as a stray band across the header.
+
+   width: fit-content stays. `inline-flex` sets this element's INNER layout and
+   says nothing about how its own parent sizes it; LiveHeader is a column flex
+   container whose default align-items is stretch, so without this the group is
+   pulled to the full header width. That is invisible now the background is
+   gone, and would come straight back if anyone re-adds one. */
 .group {
   display: inline-flex;
+  width: fit-content;
   gap: 4px;
-  padding: 4px;
-  background: var(--accent-tint);
   border-radius: var(--radius-pill);
 }
 
