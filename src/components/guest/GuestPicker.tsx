@@ -23,6 +23,14 @@ type ErrorKind = 'busy' | 'unavailable' | null;
  * couple's do-not-play genre list cannot be checked against it (Niv's
  * ruling, 2026-09-04).
  *
+ * Results render in the same floating dropdown panel as the DJ-side
+ * `TrackPicker` -- "Searching Spotify" header, album artwork, title over a
+ * "<artist> · Song" subtitle -- so choosing a song looks the same on both
+ * sides of the product. The one shape difference is deliberate: the DJ
+ * picks by clicking the row, the guest presses a Request button, because
+ * the guest's row also has to carry the "Requested ✓" state and the
+ * three-suggestion cap.
+ *
  * `usedCount` MUST come from the DAL's `guest_queue` read (this guest's
  * server-side count), never from `queue.length` or any locally-tracked
  * count of successful requests -- the footer has to be right even after a
@@ -55,6 +63,12 @@ export function GuestPicker({
   const [errorKind, setErrorKind] = useState<ErrorKind>(null);
   const [requestedIds, setRequestedIds] = useState<Set<string>>(new Set());
   const [toast, setToast] = useState<string | null>(null);
+  // TrackPicker's panel closes when the DJ picks a row. This one has no
+  // pick -- a guest may request several songs from one search -- so without
+  // an explicit dismissal the floating panel would sit over "Your requests"
+  // until the field was cleared by hand.
+  const [dismissed, setDismissed] = useState(false);
+  const fieldRef = useRef<HTMLDivElement | null>(null);
   const controllerRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
@@ -103,6 +117,21 @@ export function GuestPicker({
     };
   }, [query, token]);
 
+  useEffect(() => {
+    function handlePointerDown(event: MouseEvent | TouchEvent) {
+      const field = fieldRef.current;
+      if (field && event.target instanceof Node && !field.contains(event.target)) {
+        setDismissed(true);
+      }
+    }
+    document.addEventListener('mousedown', handlePointerDown);
+    document.addEventListener('touchstart', handlePointerDown);
+    return () => {
+      document.removeEventListener('mousedown', handlePointerDown);
+      document.removeEventListener('touchstart', handlePointerDown);
+    };
+  }, []);
+
   async function handleRequest(track: SpotifyTrack) {
     // Marked requested BEFORE the RPC resolves, and the click handler
     // refuses to run again once a track is in this set -- a second click
@@ -132,76 +161,114 @@ export function GuestPicker({
   }
 
   const atCap = usedCount >= SUGGESTION_CAP;
-  const showDropdown = phase !== 'idle';
+  const showDropdown = phase !== 'idle' && !dismissed;
   const visibleResults = results.slice(0, MAX_ROWS);
 
   return (
     <div className={styles.wrap}>
-      <input
-        type="text"
-        role="combobox"
-        aria-expanded={showDropdown}
-        aria-autocomplete="list"
-        className={styles.input}
-        value={query}
-        onChange={(event) => {
-          const value = event.target.value;
-          setQuery(value);
-          if (value.trim().length < MIN_LENGTH) {
-            setPhase('idle');
-            setResults([]);
-            setErrorKind(null);
-          }
+      <div
+        className={styles.field}
+        ref={fieldRef}
+        onKeyDown={(event) => {
+          // Bound on the wrapper, not on the input: the Request buttons are
+          // siblings of the input inside .field, not descendants of it, so a
+          // keydown while focus sits on one never reaches an input-level
+          // handler. Note the limit -- a button a guest has ALREADY requested
+          // is disabled, and focus leaves the subtree when that happens, so
+          // Escape from there reaches document.body and nothing inside .field
+          // can catch it. This helps the enabled-button case only.
+          if (event.key === 'Escape') setDismissed(true);
         }}
-        placeholder="Search a song"
-      />
+      >
+        <input
+          type="text"
+          role="combobox"
+          aria-expanded={showDropdown}
+          aria-autocomplete="list"
+          className={styles.input}
+          value={query}
+          onChange={(event) => {
+            const value = event.target.value;
+            setQuery(value);
+            setDismissed(false);
+            if (value.trim().length < MIN_LENGTH) {
+              setPhase('idle');
+              setResults([]);
+              setErrorKind(null);
+            }
+          }}
+          onFocus={() => setDismissed(false)}
+          placeholder="Search a song"
+        />
 
-      {showDropdown && phase === 'error' && (
-        <p className={styles.hint}>
-          {errorKind === 'busy'
-            ? "You've searched a lot — give it a minute."
-            : 'Search is unavailable right now.'}
-        </p>
-      )}
+        {showDropdown && (
+          <div className={styles.dropdown}>
+            <div className={styles.header}>
+              <span className={styles.headerDot} />
+              <span className={styles.headerText}>Searching Spotify</span>
+            </div>
 
-      {showDropdown && phase === 'results' && (
-        <>
-          {visibleResults.length === 0 ? (
-            <p className={styles.hint}>Nothing matched — try the artist&rsquo;s name instead.</p>
-          ) : (
-            <ul className={styles.results}>
-              {visibleResults.map((track) => {
-                const requested = requestedIds.has(track.id);
-                const accessibleName = `${track.name} by ${track.artistNames[0] ?? ''}`;
-                return (
-                  <li key={track.id} className={styles.row}>
-                    <div className={styles.rowText}>
-                      <p className={styles.rowTitle}>{track.name}</p>
-                      <p className={styles.rowSubtitle}>{track.artistNames[0] ?? ''}</p>
-                    </div>
-                    <button
-                      type="button"
-                      className={`${styles.requestButton} ${requested ? styles.requestButtonDone : ''}`}
-                      aria-pressed={requested}
-                      aria-label={requested ? `Requested ${accessibleName}` : `Request ${accessibleName}`}
-                      disabled={requested || atCap}
-                      onClick={() => handleRequest(track)}
-                    >
-                      {requested ? 'Requested ✓' : 'Request'}
-                    </button>
-                  </li>
-                );
-              })}
-            </ul>
-          )}
-        </>
-      )}
+            {phase === 'error' && (
+              <p className={styles.hint}>
+                {errorKind === 'busy'
+                  ? "You've searched a lot — give it a minute."
+                  : 'Search is unavailable right now.'}
+              </p>
+            )}
+
+            {phase === 'results' &&
+              (visibleResults.length === 0 ? (
+                <p className={styles.hint}>
+                  Nothing matched — try the artist&rsquo;s name instead.
+                </p>
+              ) : (
+                <ul className={styles.results}>
+                  {visibleResults.map((track) => {
+                    const requested = requestedIds.has(track.id);
+                    const artistName = track.artistNames[0] ?? '';
+                    const accessibleName = `${track.name} by ${artistName}`;
+                    return (
+                      <li key={track.id} className={styles.row}>
+                        {/* A track with no artwork keeps the placeholder block so
+                            every row is the same height -- same convention as
+                            TrackPicker. */}
+                        {track.artworkUrl ? (
+                          <img src={track.artworkUrl} alt="" className={styles.artwork} />
+                        ) : (
+                          <div aria-hidden className={styles.artwork} />
+                        )}
+                        <div className={styles.rowText}>
+                          <p className={styles.rowTitle}>{track.name}</p>
+                          <p className={styles.rowSubtitle}>{artistName} · Song</p>
+                        </div>
+                        <button
+                          type="button"
+                          className={`${styles.requestButton} ${requested ? styles.requestButtonDone : ''}`}
+                          aria-pressed={requested}
+                          aria-label={
+                            requested ? `Requested ${accessibleName}` : `Request ${accessibleName}`
+                          }
+                          disabled={requested || atCap}
+                          onClick={() => handleRequest(track)}
+                        >
+                          {requested ? 'Requested ✓' : 'Request'}
+                        </button>
+                      </li>
+                    );
+                  })}
+                </ul>
+              ))}
+          </div>
+        )}
+      </div>
 
       <p className={styles.footer}>
         {usedCount} of your {SUGGESTION_CAP} song suggestions used
       </p>
       {atCap && (
-        <p className={styles.hint}>You&rsquo;ve used all three — you can still back other songs.</p>
+        <p className={styles.capHint}>
+          You&rsquo;ve used all three — you can still back other songs.
+        </p>
       )}
 
       {toast && <Toast message={toast} onDismiss={() => setToast(null)} />}
