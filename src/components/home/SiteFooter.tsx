@@ -1,3 +1,4 @@
+import Link from 'next/link';
 import styles from './SiteFooter.module.css';
 
 /**
@@ -17,6 +18,9 @@ export function SiteFooter() {
         <a href="#recap" className={styles.link}>
           Recap
         </a>
+        <Link href="/login" className={styles.link}>
+          Log in
+        </Link>
       </nav>
       <div className={styles.copyright}>© 2026 Spinit</div>
     </footer>
