@@ -56,6 +56,7 @@ function buildEvent(overrides: Partial<EventDetail> = {}): EventDetail {
     // September 2026.
     status: 'live',
     event_date: '2026-01-01',
+    artworkById: {},
     privateNotes: 'DJ private note',
     sharedNotes: 'Couple shared note',
     // A real partner in the 'invited' state (no connection row yet) so
@@ -425,5 +426,95 @@ describe('EventDetailScreen', () => {
 
   afterEach(() => {
     vi.unstubAllGlobals();
+  });
+});
+
+/* ---------------------------------------------------------------------------
+   Artwork is asserted HERE, on the assembled screen, and not only in the
+   sections' own files. A section handed an `artworkById` fixture directly
+   renders the picture whether or not ANYTHING in production fills that prop
+   -- exactly the dead-feature shape CLAUDE.md records from C2 task 9, where a
+   `genresByArtistId` prop and its fixtures were all well-formed while the DAL
+   never read the table. These tests fail if the screen stops passing the map
+   down; detailDal.test.ts covers the other half (that the DAL fills it).
+   --------------------------------------------------------------------------- */
+describe('EventDetailScreen artwork', () => {
+  const TRACK = 'aaaaaaaaaaaaaaaaaaaaaa';
+  const ARTIST = 'cccccccccccccccccccccc';
+  const CEREMONY_TRACK = 'dddddddddddddddddddddd';
+
+  function eventWithArtwork() {
+    return buildEvent({
+      artworkById: {
+        [`track:${TRACK}`]: 'https://i.example/september.jpg',
+        [`artist:${ARTIST}`]: 'https://i.example/nickelback.jpg',
+        [`track:${CEREMONY_TRACK}`]: 'https://i.example/aisle.jpg',
+      },
+      mustPlay: [
+        ...buildEvent().mustPlay,
+        {
+          id: 'must-ceremony',
+          segment: 'ceremony',
+          title: 'Kiss Me More',
+          artist: 'Doja Cat',
+          moment: 'Walking down the aisle',
+          spotify_track_id: CEREMONY_TRACK,
+          spotify_artist_id: null,
+          created_at: '2026-08-30T10:00:00Z',
+        },
+      ],
+    });
+  }
+
+  function sources(container: HTMLElement) {
+    return Array.from(container.querySelectorAll('img')).map((img) => img.getAttribute('src'));
+  }
+
+  test('draws the must-play row artwork the DAL resolved', () => {
+    const { container } = render(
+      <EventDetailScreen event={eventWithArtwork()} viewer={{ role: 'dj' }} />,
+    );
+
+    expect(sources(container)).toContain('https://i.example/september.jpg');
+  });
+
+  test('draws a blocklisted artist by its ARTIST id, not its track id', () => {
+    const { container } = render(
+      <EventDetailScreen event={eventWithArtwork()} viewer={{ role: 'dj' }} />,
+    );
+
+    expect(sources(container)).toContain('https://i.example/nickelback.jpg');
+  });
+
+  test('draws a saved ceremony pick inside its chip', () => {
+    // The ceremony chip is the one place the picture has to survive a page
+    // reload through TrackPicker's initialPick rather than through a row.
+    const { container } = render(
+      <EventDetailScreen event={eventWithArtwork()} viewer={{ role: 'dj' }} />,
+    );
+
+    expect(sources(container)).toContain('https://i.example/aisle.jpg');
+  });
+
+  test('renders every row without an image when the map is empty', () => {
+    // The failure path has to stay a page, not an exception: no credentials,
+    // a 429, a pre-picker row with no id at all.
+    const { container } = render(
+      <EventDetailScreen event={buildEvent({ artworkById: {} })} viewer={{ role: 'dj' }} />,
+    );
+
+    expect(container.querySelectorAll('img')).toHaveLength(0);
+    expect(screen.getByText('September')).toBeInTheDocument();
+    expect(screen.getByText('Nickelback')).toBeInTheDocument();
+  });
+
+  test('marks every thumbnail decorative so a screen reader reads the title once', () => {
+    const { container } = render(
+      <EventDetailScreen event={eventWithArtwork()} viewer={{ role: 'dj' }} />,
+    );
+
+    const images = Array.from(container.querySelectorAll('img'));
+    expect(images.length).toBeGreaterThan(0);
+    for (const img of images) expect(img.getAttribute('alt')).toBe('');
   });
 });

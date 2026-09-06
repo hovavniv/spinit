@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import { notFound, redirect } from 'next/navigation';
 
 import { requireUser, getProfile } from '@/lib/auth/dal';
+import { signOut } from '@/lib/auth/actions';
 import { getEventForWizard } from '@/lib/events/newEventDal';
 import { siteUrl } from '@/lib/auth/site-url';
 import { AppShell } from '@/components/shell/AppShell';
@@ -44,7 +45,7 @@ export default async function SentPage({ params }: PageProps<'/events/new/[id]/s
   } as const;
 
   return (
-    <AppShell sidebar={<DashboardSidebar dj={dj} current="none" />}>
+    <AppShell sidebar={<DashboardSidebar dj={dj} current="none" signOutAction={signOut} />}>
       <NewEventShell current={3} title={event.couple_names}>
         <InviteSent event={event} links={links} />
       </NewEventShell>

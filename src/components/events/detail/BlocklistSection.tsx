@@ -3,16 +3,50 @@
 import { useActionState, useState } from 'react';
 
 import type { ActionResult } from '@/lib/auth/errors';
-import type { AddableSegment, BlocklistEntryType, BlocklistRow, DetailActionState } from '@/lib/events/detailTypes';
+import {
+  artworkKey,
+  type AddableSegment,
+  type BlocklistEntryType,
+  type BlocklistRow,
+  type DetailActionState,
+} from '@/lib/events/detailTypes';
 import { GenrePicker } from './GenrePicker';
 import { TrackPicker } from './TrackPicker';
 import styles from './BlocklistSection.module.css';
+
+/**
+ * A song row's id is a TRACK id and an artist row's is an ARTIST id -- the
+ * column (`spotify_id`) is shared but the namespace is not, which is why
+ * artworkKey is prefixed by kind. A genre row has no id and no picture.
+ */
+function artworkUrlFor(row: BlocklistRow, artworkById: Record<string, string>): string | undefined {
+  if (row.entry_type === 'song') return artworkById[artworkKey('track', row.spotify_id)];
+  if (row.entry_type === 'artist') return artworkById[artworkKey('artist', row.spotify_id)];
+  return undefined;
+}
+
+/**
+ * Square for a song, round for an artist -- the same convention as the picker
+ * dropdown, so the shape alone says which kind of thing a row blocks. A genre
+ * renders NOTHING, not an empty box: a genre has no artwork in principle, and
+ * a permanently blank square would read as a picture that failed to load.
+ * Song and artist rows do draw the empty box, so their text stays aligned.
+ */
+function RowArtwork({ entryType, url }: { entryType: BlocklistEntryType; url: string | undefined }) {
+  if (entryType === 'genre') return null;
+  const shape = entryType === 'artist' ? styles.rowArtworkArtist : styles.rowArtworkSong;
+  if (url) return <img src={url} alt="" className={`${styles.rowArtwork} ${shape}`} />;
+  return <div aria-hidden className={`${styles.rowArtwork} ${shape}`} />;
+}
 
 interface BlocklistSectionProps {
   eventId: string;
   segment: AddableSegment;
   blurb: string;
   rows: BlocklistRow[];
+  /** EventDetail.artworkById. A missing entry means "no picture", never an
+   *  error — see that field's comment. */
+  artworkById: Record<string, string>;
   addAction: (prevState: DetailActionState, formData: FormData) => Promise<ActionResult>;
   removeAction: (formData: FormData) => Promise<ActionResult>;
 }
@@ -31,6 +65,7 @@ export function BlocklistSection({
   segment,
   blurb,
   rows,
+  artworkById,
   addAction,
   removeAction,
 }: BlocklistSectionProps) {
@@ -49,6 +84,7 @@ export function BlocklistSection({
           {rows.map((row) => (
             <li key={row.id} className={styles.row}>
               <div className={styles.rowText}>
+                <RowArtwork entryType={row.entry_type} url={artworkUrlFor(row, artworkById)} />
                 <span className={styles.pill}>{row.entry_type}</span>
                 <span className={styles.value}>{row.value}</span>
               </div>

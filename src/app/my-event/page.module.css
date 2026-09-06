@@ -1,5 +1,5 @@
 .title {
-  font-family: var(--font-sora), sans-serif;
+  font-family: var(--font-display), sans-serif;
   font-size: 32px;
   font-weight: 800;
   letter-spacing: -0.02em;
@@ -7,7 +7,7 @@
 }
 
 .empty {
-  font-family: var(--font-inter), sans-serif;
+  font-family: var(--font-body), sans-serif;
   font-size: 15px;
   color: var(--text-muted);
 }
@@ -23,12 +23,12 @@
 
 .row {
   border: 1.5px solid var(--border-input);
-  border-radius: 12px;
+  border-radius: var(--radius);
   padding: 16px 18px;
 }
 
 .link {
-  font-family: var(--font-sora), sans-serif;
+  font-family: var(--font-display), sans-serif;
   font-size: 16px;
   font-weight: 700;
   color: var(--ink-dark);

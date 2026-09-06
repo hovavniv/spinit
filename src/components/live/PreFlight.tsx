@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 
 import type { EventPhase } from '@/lib/dashboard/types';
 import type { LiveActionResult } from '@/lib/live/liveActions';
-import { PhasePicker } from './PhasePicker';
+import { START_PHASE } from '@/lib/live/phaseSegment';
 import styles from './PreFlight.module.css';
 
 /**
@@ -33,14 +33,13 @@ export function PreFlight({
   startEvent: (eventId: string, phase: EventPhase) => Promise<LiveActionResult>;
 }) {
   const router = useRouter();
-  const [phase, setPhase] = useState<EventPhase>('cocktails');
   const [starting, setStarting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   async function handleStart() {
     setStarting(true);
     setError(null);
-    const result = await startEvent(eventId, phase);
+    const result = await startEvent(eventId, START_PHASE);
     if (result.ok) {
       router.refresh();
       return;
@@ -57,11 +56,6 @@ export function PreFlight({
       </p>
 
       {error && <p className={styles.error}>{error}</p>}
-
-      <div className={styles.phaseRow}>
-        <span className={styles.label}>Starting phase</span>
-        <PhasePicker value={phase} onChange={setPhase} disabled={starting} />
-      </div>
 
       <button type="button" className={styles.startButton} disabled={starting} onClick={handleStart}>
         {starting ? 'Starting…' : 'Start event'}

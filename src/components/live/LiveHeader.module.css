@@ -22,7 +22,7 @@
   padding: 4px 12px;
   border-radius: var(--radius-pill);
   background: var(--accent);
-  color: white;
+  color: var(--on-accent);
   font-size: 12px;
   font-weight: 700;
   text-transform: uppercase;

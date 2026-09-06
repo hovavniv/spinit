@@ -1,9 +1,23 @@
+/* The picker lives in a flex add-row next to a plain text field and the Add
+   button, so it has to grow like they do -- and its input has to carry the
+   same field styling. With only `width: 100%` it rendered as a raw browser
+   input: no padding, no radius, hairline border, wrong font, and visibly
+   shorter than everything beside it. */
 .wrap {
   position: relative;
+  flex: 1 1 200px;
+  min-width: 0;
 }
 
 .input {
   width: 100%;
+  padding: 11px 13px;
+  border-radius: var(--radius);
+  border: 1.5px solid var(--border-input);
+  font-family: var(--font-body), sans-serif;
+  font-size: 13.5px;
+  background: var(--surface);
+  color: var(--ink-dark);
 }
 
 .dropdown {
@@ -12,9 +26,9 @@
   left: 0;
   right: 0;
   background: white;
-  border: 1px solid oklch(0.9 0.012 60);
-  border-radius: 12px;
-  box-shadow: 0 12px 28px oklch(0.2 0.02 50 / 0.14);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: 0 12px 28px oklch(0.14 0 0 / 0.14);
   z-index: 20;
   overflow: hidden;
 }
@@ -24,13 +38,13 @@
   align-items: center;
   gap: 8px;
   padding: 8px 14px;
-  border-bottom: 1px solid oklch(0.93 0.012 60);
+  border-bottom: 1px solid var(--divider);
 }
 
 .headerText {
   font-size: 11px;
   font-weight: 600;
-  color: oklch(0.5 0.02 50);
+  color: var(--text-subtle);
 }
 
 .results {
@@ -53,13 +67,13 @@
 }
 
 .row:hover {
-  background: oklch(0.97 0.014 75);
+  background: var(--bg);
 }
 
 .hint {
   padding: 9px 14px;
   font-size: 11.5px;
-  color: oklch(0.55 0.02 50);
+  color: var(--text-subtle);
 }
 
 .chip {
@@ -68,8 +82,8 @@
   gap: 8px;
   padding: 6px 10px;
   border-radius: 999px;
-  background: oklch(0.97 0.014 75);
-  border: 1px solid oklch(0.9 0.012 60);
+  background: var(--bg);
+  border: 1px solid var(--border);
   font-size: 13px;
 }
 
@@ -79,5 +93,5 @@
   cursor: pointer;
   font-size: 14px;
   line-height: 1;
-  color: oklch(0.55 0.02 50);
+  color: var(--text-subtle);
 }

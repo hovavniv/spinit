@@ -3,6 +3,7 @@ import { redirect } from 'next/navigation';
 import Link from 'next/link';
 
 import { requireUser, getProfile } from '@/lib/auth/dal';
+import { signOut } from '@/lib/auth/actions';
 import { listPartnerEvents } from '@/lib/events/partnerEventsDal';
 import { AppShell } from '@/components/shell/AppShell';
 import { DashboardSidebar } from '@/components/dashboard/DashboardSidebar';
@@ -47,7 +48,7 @@ export default async function MyEventPage() {
   };
 
   return (
-    <AppShell sidebar={<DashboardSidebar dj={dj} current="none" hideNav />}>
+    <AppShell sidebar={<DashboardSidebar dj={dj} current="none" hideNav signOutAction={signOut} />}>
       <h1 className={styles.title}>Your event</h1>
       {events.length === 0 ? (
         <p className={styles.empty}>

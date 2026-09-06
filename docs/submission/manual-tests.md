@@ -1006,3 +1006,104 @@ slice, which is why the steps above are written to be run by hand rather than sc
 Step 9's visual comparison was included in the run. The two recorded drifts — the inactive
 filter pill at `oklch(0.45 0.02 50)` against the artboard's `0.4`, and the month heading
 uppercased in both JS and CSS — were not raised as problems and remain as shipped.
+
+## Task 26 — the live event and guest flow, manual walk (2026-09-05)
+
+**Dev server: `npm run dev -- -p 3010`.** The walk began on the wrong server — `localhost:3000`
+belongs to a different worktree (`../spinit`), 404s on every `/join` route since that app has no
+such route, and CLAUDE.md documents this exact trap. Confirmed by `lsof`: `:3000` → `spinit`,
+`:3010` → `spinit-live`. Restarted on `:3010` and used its full host and port
+(`http://127.0.0.1:3010/...`) for every step below rather than a bare path, and used `127.0.0.1`
+rather than `localhost` — the two are different origins under this app's `allowedDevOrigins`
+config, and `localhost` fails differently and worse (the page loads and looks normal, but no JS
+hydrates and nothing is clickable, per the gotcha CLAUDE.md records for the Spotify OAuth flow).
+
+**Pre-walk state correction, found and fixed before starting.** `npm run seed:demo`'s guest-data
+step is idempotent on `guest_sessions` existing for the event — and by this point in the evening
+`sara-daniel` carried 264 accumulated guest sessions from repeated integration-suite runs (§
+"pre-push review" entries above), so the re-seed silently did nothing. Combined with the
+residue-skip performed earlier (moving every accumulated `song_suggestions` row to `status =
+'skipped'` via the DJ's own update grant, since neither table has a delete grant for any role),
+the queue was genuinely empty — not just apparently empty from a stale read. Verified directly
+against the live database (`select status, count(*) from song_suggestions where event_id = …
+group by status` → 0 rows in every status but `skipped`) before concluding this, not assumed from
+the seed script's own "done" output. Fixed by seeding three fresh guest sessions through the real
+anon RPCs (`guest_join`/`guest_suggest`/`guest_vote`), with two sessions suggesting the same
+track to exercise the dedupe path. A second issue surfaced doing this: `guest_suggest`'s
+existing-suggestion check matches on `(event_id, spotify_track_id)` with no `status` filter, so
+reusing the same track ids as an earlier seed immediately matched the already-`skipped` rows —
+`was_existing: true` on the very first fresh guest, not just the dedupe guest, and the resulting
+votes landed on `skipped` rows invisible to the queue. Fixed by flipping those two specific rows
+back to `status = 'pending'` via the same DJ update grant. Verified end state directly: 2 pending
+suggestions, one with 5 votes (2 distinct requesters via dedupe, plus votes accumulated from
+earlier seeding on the same track id), one with 2.
+
+**Performed for real, in a browser, by Niv:**
+
+1. **The guest flow, end to end.** Joined as "Roni" via `/join/<token>`, searched, requested
+   "Kiss Me" by Ariana Grande. It appeared in the DJ's queue. *Performed as written.*
+2. **Play writes correctly and completely.** Confirmed directly against the database after
+   pressing Play: `position 3 | title "Kiss Me" | artist "Ariana Grande" | suggested_by "Roni" |
+   spotify_track_id 0lok0VDJn0zRvHLBCITSSw`, and the source suggestion moved to `status =
+   'played'`. **Title and artist came from the resolved Spotify data, not the guest's own typed
+   text** — the trust rule (design §4.3/§3.3, `security.md` §8.3) verified end to end on a real
+   request, which no automated test proves as directly as watching the actual written row.
+   *Performed as written, verified against the database rather than only the screen.*
+3. **A must-play turns green without a page refresh.** Confirmed in the browser, roughly 10
+   seconds after pressing Play (the next poll cycle) — the row moved from the "Must play" column
+   to "Played" with no manual reload. This is the `played`-in-the-poll-payload fix (an earlier
+   task this evening) verified in a real browser, which is the one place a page refresh would
+   have silently masked its absence. *Performed as written.*
+4. **Five songs landed in `played_songs`, in order, every one with a resolved track id**,
+   including both ceremony cues. *Performed as written, verified against the database.*
+
+**NOT verified, recorded plainly rather than implied complete:**
+
+- **The QR was never scanned with a phone camera.** Niv reached the join page by URL directly.
+  So "the QR encodes a working URL" is unverified in the one way that actually matters — that
+  this is the one output which reaches paper on a printed table card. The reason: the dev
+  server's `allowedDevOrigins` restricts asset/HMR loading to `127.0.0.1`, so a phone on the LAN
+  cannot load the app at all (loads, looks normal, nothing hydrates) — this restriction is a
+  dev-server behaviour and does not exist in a production build on Vercel, so the untested path
+  is "phone against a local dev server", not "phone against the product". *Skipped, with the
+  reason recorded.* One scan against the real Vercel deployment, once it exists, closes this
+  completely and costs about thirty seconds.
+- **The couple's recap was never opened as a partner.** Both partner slots on Sara & Daniel are
+  unclaimed, and claiming one for this walk was judged not worth the state it would leave behind.
+  **The `played_songs` SELECT widening this depends on IS verified** — `src/lib/live/
+  guest.integration.test.ts` §5.4 exercises it against the live project as a real, signed-in
+  partner account, with both the positive and negative directions proven against non-empty
+  fixtures. But that is integration-suite verification, not browser verification, and this
+  document does not conflate the two: no browser has ever rendered this specific screen as a
+  partner. *Deferred by Niv.*
+- **The 3-song cap and the dedupe path were not exercised in a browser.** Both are proven by
+  `guest.integration.test.ts` against real Postgres, and the dedupe path specifically was
+  exercised again in this walk's own pre-walk seeding step (above) through the real RPCs — but
+  neither was watched happening on screen, guest-side, during the interactive part of the walk.
+  *Not performed in a browser; proven by other, real means, named above rather than implied
+  equivalent.*
+
+**Two findings from the walk, not decoration:**
+
+1. **A played guest request vanishes from the DJ's screen entirely, with no way to see it
+   again.** "Kiss Me" was not a must-play, so once played it left the pending queue and appears
+   in no other section — the "Played" column in `CoupleRules` tracks must-plays only, and the
+   artboard has no recently-played section at all. Not a defect against anything designed or
+   promised, and out of scope for this slice. But it means a DJ mid-set has no way to see what
+   they have already played tonight, while `rank.ts`'s artist-repeat term is silently tracking
+   exactly that internally for its own purposes. Recorded as the top "what I would add next" item
+   for this reason: it is a gap found by actually using the screen, which is stronger evidence
+   than one reasoned about in advance.
+2. **The wrong-dev-server trap fired even though it is already documented.** See the dev-server
+   note at the top of this section. Recorded again here, specifically, because a documented trap
+   firing anyway is itself worth a line — the fix is procedural (always state the full host and
+   port), not something a future code change can close.
+
+### Results (2026-09-05)
+
+Walk run by Niv Hovav. Four steps performed as written and verified (three in a browser, all four
+independently confirmed against the live database rather than the screen alone); three items
+explicitly deferred or skipped with the reason and what substitutes for them stated above, not
+silently marked done. This is the shape every step in this document should have: performed,
+substituted, or skipped, and for anything but "performed as written," what the alternative
+evidence actually proves and does not prove.

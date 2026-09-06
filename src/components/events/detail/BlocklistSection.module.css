@@ -35,7 +35,7 @@
   justify-content: space-between;
   gap: 12px;
   padding: 12px 14px;
-  border-radius: 12px;
+  border-radius: var(--radius);
   background: var(--bg);
   border: 1px solid var(--border);
 }
@@ -45,6 +45,24 @@
   align-items: center;
   gap: 10px;
   min-width: 0;
+}
+
+/* Same 34px as the picker dropdown and the must-play rows. The shape carries
+   the meaning: square = a song, round = an artist. */
+.rowArtwork {
+  width: 34px;
+  height: 34px;
+  flex-shrink: 0;
+  background: var(--divider);
+  object-fit: cover;
+}
+
+.rowArtworkSong {
+  border-radius: var(--radius);
+}
+
+.rowArtworkArtist {
+  border-radius: 50%;
 }
 
 .rowTitle {
@@ -66,7 +84,7 @@
 .remove {
   background: none;
   border: none;
-  color: oklch(0.6 0.02 50);
+  color: var(--text-placeholder);
   font-size: 18px;
   line-height: 1;
   cursor: pointer;
@@ -84,16 +102,17 @@
   flex-wrap: wrap;
 }
 
-/* The artboard's red type chip. These two values are inlined rather than
-   tokenised for the same reason UpcomingEvents.module.css inlines its teal
-   pill: two uses, one screen each. */
+/* The artboard's do-not-play type chip. It was red until the canvas re-theme;
+   the new canvas has no red anywhere, so it is the same neutral chip as every
+   other pill and reads as a negative only from its label. That is a known,
+   accepted loss, not an oversight. */
 .pill {
   font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.03em;
   text-transform: uppercase;
-  color: oklch(0.45 0.13 30);
-  background: oklch(0.95 0.045 30);
+  color: var(--text-label);
+  background: var(--chip);
   padding: 3px 9px;
   border-radius: var(--radius-pill);
   flex-shrink: 0;
@@ -104,41 +123,40 @@
   font-size: 14px;
 }
 
+/* `appearance: none` so the native control stops rendering as a rounded macOS
+   widget beside these flat fields; the chevron is drawn back in as a
+   background image, and the right padding leaves room for it. */
 .select {
-  padding: 11px 13px;
-  border-radius: 10px;
+  flex: 0 0 auto;
+  appearance: none;
+  padding: 11px 32px 11px 13px;
+  border-radius: var(--radius);
   border: 1.5px solid var(--border-input);
-  font-family: var(--font-inter), sans-serif;
+  font-family: var(--font-body), sans-serif;
   font-size: 13.5px;
-  background: var(--surface);
+  font-weight: 600;
+  background-color: var(--surface);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%23222' stroke-width='1.5'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
   color: var(--ink-dark);
+  cursor: pointer;
 }
 
-.input {
-  flex: 1 1 160px;
-  padding: 11px 13px;
-  border-radius: 10px;
-  border: 1.5px solid var(--border-input);
-  font-family: var(--font-inter), sans-serif;
-  font-size: 13.5px;
-  background: var(--surface);
-  color: var(--ink-dark);
-  min-width: 0;
-}
-
-.input:focus,
+/* No `.input` here: every value field in this add row is a picker, which
+   carries its own field styling. */
 .select:focus {
   outline: none;
-  border-color: var(--accent);
+  border-color: var(--ink-dark);
 }
 
 .add {
   background: var(--accent);
-  color: white;
+  color: var(--on-accent);
   border: none;
   padding: 0 20px;
-  border-radius: 10px;
-  font-family: var(--font-inter), sans-serif;
+  border-radius: var(--radius);
+  font-family: var(--font-body), sans-serif;
   font-weight: 700;
   font-size: 13.5px;
   cursor: pointer;
@@ -147,5 +165,6 @@
 .error {
   margin: 8px 0 0;
   font-size: 13px;
-  color: var(--accent-deep);
+  color: var(--error);
+  font-weight: 600;
 }

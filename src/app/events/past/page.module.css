@@ -1,6 +1,6 @@
 /* The h1, read from design/artboards/Spinit Past Events.dc.html. */
 .title {
-  font-family: var(--font-sora), sans-serif;
+  font-family: var(--font-display), sans-serif;
   font-size: 32px;
   font-weight: 800;
   letter-spacing: -0.02em;

@@ -97,7 +97,7 @@ export function EventDetailScreen({ event, viewer }: EventDetailScreenProps) {
           />
         )}
 
-        <CeremonySongs rows={mustPlay.ceremony} />
+        <CeremonySongs rows={mustPlay.ceremony} artworkById={event.artworkById} />
 
         <section className={styles.segment}>
           <h3 className={styles.segmentHeading}>Reception</h3>
@@ -106,6 +106,7 @@ export function EventDetailScreen({ event, viewer }: EventDetailScreenProps) {
             segment="reception"
             blurb="Dinner, toasts, first dance — songs to guarantee during the reception."
             rows={mustPlay.reception}
+            artworkById={event.artworkById}
             addAction={addMustPlay}
             removeAction={removeMustPlay}
           />
@@ -114,6 +115,7 @@ export function EventDetailScreen({ event, viewer }: EventDetailScreenProps) {
             segment="reception"
             blurb="Keep these off the reception — cocktail hour, dinner, toasts."
             rows={blocklist.reception}
+            artworkById={event.artworkById}
             addAction={addBlocklistEntry}
             removeAction={removeBlocklistEntry}
           />
@@ -126,6 +128,7 @@ export function EventDetailScreen({ event, viewer }: EventDetailScreenProps) {
             segment="party"
             blurb="Peak dance floor — songs to guarantee once the party gets going."
             rows={mustPlay.party}
+            artworkById={event.artworkById}
             addAction={addMustPlay}
             removeAction={removeMustPlay}
           />
@@ -134,6 +137,7 @@ export function EventDetailScreen({ event, viewer }: EventDetailScreenProps) {
             segment="party"
             blurb="Keep these off the dance floor — exes, breakup songs, that one cover band."
             rows={blocklist.party}
+            artworkById={event.artworkById}
             addAction={addBlocklistEntry}
             removeAction={removeBlocklistEntry}
           />
@@ -161,10 +165,33 @@ export function EventDetailScreen({ event, viewer }: EventDetailScreenProps) {
           isDj={viewer.role === 'dj'}
         />
 
-        <EventDetailsForm eventId={event.id} saveAction={saveEventDetails} />
+        {/*
+          Start and End answer one question -- what happens to this event --
+          so they are one titled section, like every other block in this card,
+          and they sit ABOVE the Back/Save footer: that footer ends the page,
+          and anything after it reads as an afterthought. Only drawn when one
+          of them will render something (each returns null on its own flag).
 
-        <StartEventSection eventId={event.id} canStart={canStart} startEventAction={startEvent} />
-        <EndEventSection eventId={event.id} canEnd={canEnd} endAction={endEvent} />
+          canStart implies canEnd -- both require a DJ on an in-date event,
+          and canStart narrows that to 'upcoming' -- so the only two states
+          are "both" (upcoming) and "End only" (live). The blurb says so.
+        */}
+        {(canStart || canEnd) && (
+          <section className={styles.lifecycle}>
+            <h3 className={styles.lifecycleHeading}>Event day</h3>
+            <p className={styles.lifecycleBlurb}>
+              {canStart
+                ? 'Start the event when guests arrive — that opens requests and takes you to the live screen. Ending it closes requests and delivers the recap.'
+                : 'Ending the event closes requests and delivers the recap.'}
+            </p>
+            <div className={styles.lifecycleActions}>
+              <StartEventSection eventId={event.id} canStart={canStart} startEventAction={startEvent} />
+              <EndEventSection eventId={event.id} canEnd={canEnd} endAction={endEvent} />
+            </div>
+          </section>
+        )}
+
+        <EventDetailsForm eventId={event.id} saveAction={saveEventDetails} />
       </div>
     </div>
   );

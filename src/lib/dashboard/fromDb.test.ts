@@ -16,7 +16,7 @@ function row(overrides: Partial<DashboardEventRow> = {}): DashboardEventRow {
     venue: 'The Wilshire Ebell',
     event_date: '2026-08-27',
     status: 'upcoming',
-    phase: 'cocktails',
+    phase: 'dinner',
     start_time: null,
     event_partners: [],
     ...overrides,

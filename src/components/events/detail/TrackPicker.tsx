@@ -33,16 +33,32 @@ interface TrackPickerProps {
    *  touches this slot writes that '' as null over a real id the row already
    *  had — the ceremony update branch's own bug, one layer up (found by
    *  fresh-context review). */
-  initialPick?: { id: string; name: string; artistName?: string; artistId?: string } | null;
+  initialPick?: InitialPick | null;
+}
+
+/** `artworkUrl` comes from EventDetail.artworkById -- a saved row stores only
+ *  the Spotify id, never the picture, so the chip has no image until the
+ *  server resolves one. Optional: without it the chip simply has no thumbnail,
+ *  exactly as a pre-picker row does. */
+interface InitialPick {
+  id: string;
+  name: string;
+  artistName?: string;
+  artistId?: string;
+  artworkUrl?: string | null;
 }
 
 function buildInitialPick(
-  initialPick: { id: string; name: string; artistName?: string; artistId?: string } | null | undefined,
+  initialPick: InitialPick | null | undefined,
   searchType: SpotifySearchType,
 ): SearchResult | null {
   if (!initialPick) return null;
   if (searchType === 'artist') {
-    const artist: SpotifyArtist = { id: initialPick.id, name: initialPick.name, artworkUrl: null };
+    const artist: SpotifyArtist = {
+      id: initialPick.id,
+      name: initialPick.name,
+      artworkUrl: initialPick.artworkUrl ?? null,
+    };
     return artist;
   }
   const track: SpotifyTrack = {
@@ -51,7 +67,7 @@ function buildInitialPick(
     artistNames: initialPick.artistName ? [initialPick.artistName] : [],
     artistIds: initialPick.artistId ? [initialPick.artistId] : [],
     albumName: '',
-    artworkUrl: null,
+    artworkUrl: initialPick.artworkUrl ?? null,
     durationMs: 0,
     explicit: false,
   };
@@ -222,6 +238,21 @@ export function TrackPicker({
 
       {picked ? (
         <div className={styles.chip}>
+          {/* Same square-song / round-artist convention as the dropdown rows
+              below. The placeholder div keeps the chip's height and text
+              baseline identical whether or not an image resolved. */}
+          {picked.artworkUrl ? (
+            <img
+              src={picked.artworkUrl}
+              alt=""
+              className={`${styles.chipArtwork} ${pickedArtist ? styles.artworkArtist : styles.artworkSong}`}
+            />
+          ) : (
+            <div
+              aria-hidden
+              className={`${styles.chipArtwork} ${pickedArtist ? styles.artworkArtist : styles.artworkSong}`}
+            />
+          )}
           <span>{chipLabel}</span>
           <button type="button" className={styles.chipClear} onClick={handleClear} aria-label="Clear selection">
             ×

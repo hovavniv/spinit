@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 
 import { requireUser, getProfile } from '@/lib/auth/dal';
+import { signOut } from '@/lib/auth/actions';
 import { listPastEvents } from '@/lib/events/dal';
 import { AppShell } from '@/components/shell/AppShell';
 import { DashboardSidebar } from '@/components/dashboard/DashboardSidebar';
@@ -36,7 +37,7 @@ export default async function PastEventsPage() {
   };
 
   return (
-    <AppShell sidebar={<DashboardSidebar dj={dj} current="past" />}>
+    <AppShell sidebar={<DashboardSidebar dj={dj} current="past" signOutAction={signOut} />}>
       <h1 className={styles.title}>Past events</h1>
       <PastEventsList events={events} />
     </AppShell>

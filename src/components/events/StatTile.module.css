@@ -4,7 +4,7 @@
 .tile {
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: 16px;
+  border-radius: var(--radius);
   padding: 16px;
 }
 
@@ -13,7 +13,7 @@
 }
 
 .value {
-  font-family: var(--font-sora), sans-serif;
+  font-family: var(--font-display), sans-serif;
   font-size: 22px;
   font-weight: 800;
 }
@@ -22,7 +22,7 @@
    the artboard's tile awaiting data rather than as a broken one. Not
    `composes:` — this repo does not use it anywhere else. */
 .valuePending {
-  font-family: var(--font-sora), sans-serif;
+  font-family: var(--font-display), sans-serif;
   font-size: 22px;
   font-weight: 800;
   color: var(--text-placeholder);

@@ -19,13 +19,14 @@ function row(overrides: Partial<BlocklistRow> = {}): BlocklistRow {
   };
 }
 
-function renderSection(rows: BlocklistRow[]) {
+function renderSection(rows: BlocklistRow[], artworkById: Record<string, string> = {}) {
   return render(
     <BlocklistSection
       eventId={EVENT_ID}
       segment="party"
       blurb="Keep these off the dance floor."
       rows={rows}
+      artworkById={artworkById}
       addAction={vi.fn()}
       removeAction={vi.fn()}
     />,

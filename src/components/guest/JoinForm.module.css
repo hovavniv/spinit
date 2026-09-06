@@ -14,7 +14,7 @@
   min-height: 44px;
   padding: 10px 14px;
   border: 1px solid var(--border-input);
-  border-radius: 12px;
+  border-radius: var(--radius);
   font-size: 16px;
   background: var(--surface);
   color: var(--ink-dark);
@@ -22,7 +22,7 @@
 
 .input:focus {
   outline: none;
-  border-color: var(--accent);
+  border-color: var(--ink-dark);
 }
 
 .hint {
@@ -32,7 +32,8 @@
 
 .error {
   font-size: 13px;
-  color: var(--accent-deep);
+  color: var(--error);
+  font-weight: 600;
 }
 
 .button {
@@ -40,7 +41,7 @@
   border: none;
   border-radius: var(--radius-pill);
   background: var(--accent);
-  color: white;
+  color: var(--on-accent);
   font-size: 16px;
   font-weight: 600;
   cursor: pointer;

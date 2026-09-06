@@ -65,8 +65,8 @@ export interface LiveScreenProps {
 
 /**
  * The DJ's main working view once an event is live (design §7.1). Assembles,
- * top to bottom: LiveHeader, CeremonyCues, RequestQueue, BlockedGroup,
- * CoupleRules, GuestActivity.
+ * top to bottom: LiveHeader, CeremonyCues, CoupleRules, RequestQueue,
+ * BlockedGroup, GuestActivity.
  *
  * Driven entirely by props/initial data -- it does not own a fetch loop
  * itself, so a later task can wrap it in an 8-second polling hook without
@@ -149,18 +149,18 @@ export function LiveScreen({
         played={polled.played}
         onPlayNow={(title, artist, trackId) => playPick(eventId, title, artist, trackId)}
       />
+      <CoupleRules
+        mustPlay={mustPlay}
+        blocklist={blocklist}
+        played={polled.played}
+        phase={currentPhase}
+      />
       <RequestQueue
         queue={polled.queue}
         onPlay={(suggestionId) => playSuggestion(eventId, suggestionId)}
         onSkip={(suggestionId) => skipSuggestion(eventId, suggestionId)}
       />
       <BlockedGroup blocked={polled.blocked} />
-      <CoupleRules
-        mustPlay={mustPlay}
-        blocklist={blocklist}
-        played={polled.played}
-        mustPlayProgress={polled.mustPlayProgress}
-      />
       <GuestActivity activity={polled.activity} />
     </div>
   );

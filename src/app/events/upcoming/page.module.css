@@ -9,7 +9,7 @@
 }
 
 .title {
-  font-family: var(--font-sora), sans-serif;
+  font-family: var(--font-display), sans-serif;
   font-size: 32px;
   font-weight: 800;
   letter-spacing: -0.02em;
@@ -18,7 +18,7 @@
 
 .newEvent {
   background: var(--accent);
-  color: white;
+  color: var(--on-accent);
   padding: 14px 26px;
   border-radius: var(--radius-pill);
   font-weight: 600;
@@ -28,5 +28,5 @@
 }
 
 .newEvent:hover {
-  color: white;
+  color: var(--on-accent);
 }

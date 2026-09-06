@@ -2,6 +2,7 @@ import 'server-only';
 
 import { spotifyFetch } from './client';
 import { appToken } from './appToken';
+import { pickArtwork, type RawImage } from './images';
 import type { SpotifyTrack, SpotifyArtist } from './types';
 
 /**
@@ -15,11 +16,6 @@ import type { SpotifyTrack, SpotifyArtist } from './types';
  */
 const LIMIT = 10;
 const MARKET = 'IL';
-
-interface RawImage {
-  url: string;
-  width: number;
-}
 
 interface RawArtistRef {
   id: string;
@@ -41,14 +37,6 @@ interface RawArtist {
   images?: RawImage[];
 }
 
-/** Smallest image at least 64px wide, else the last image, else null. */
-function artwork(images: RawImage[] | undefined): string | null {
-  if (!images || images.length === 0) return null;
-  const eligible = images.filter((i) => i.width >= 64);
-  if (eligible.length === 0) return images[images.length - 1].url;
-  return eligible.reduce((smallest, i) => (i.width < smallest.width ? i : smallest)).url;
-}
-
 function toTrack(raw: RawTrack): SpotifyTrack {
   return {
     id: raw.id,
@@ -56,7 +44,7 @@ function toTrack(raw: RawTrack): SpotifyTrack {
     artistNames: raw.artists.map((a) => a.name),
     artistIds: raw.artists.map((a) => a.id),
     albumName: raw.album.name,
-    artworkUrl: artwork(raw.album.images),
+    artworkUrl: pickArtwork(raw.album.images),
     durationMs: raw.duration_ms,
     explicit: raw.explicit,
   };
@@ -66,7 +54,7 @@ function toArtist(raw: RawArtist): SpotifyArtist {
   return {
     id: raw.id,
     name: raw.name,
-    artworkUrl: artwork(raw.images),
+    artworkUrl: pickArtwork(raw.images),
   };
 }
 

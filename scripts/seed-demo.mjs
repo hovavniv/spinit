@@ -67,6 +67,11 @@ const {
 const EMAIL = process.env.SEED_DJ_EMAIL ?? process.env.TEST_USER_A_EMAIL;
 const PASSWORD = process.env.SEED_DJ_PASSWORD ?? process.env.TEST_USER_A_PASSWORD;
 
+// The account that owns the integration-test fixture events (FIXTURE_EVENTS
+// below). Deliberately NOT the demo DJ: see that constant's comment.
+const FIXTURE_EMAIL = process.env.TEST_USER_B_EMAIL;
+const FIXTURE_PASSWORD = process.env.TEST_USER_B_PASSWORD;
+
 for (const [name, value] of [
   ['NEXT_PUBLIC_SUPABASE_URL', SUPABASE_URL],
   ['NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY', ANON_KEY],
@@ -324,7 +329,26 @@ async function main() {
   const djId = signIn.data.user.id;
   console.log(`seed-demo: signed in as ${EMAIL}`);
 
-  for (const event of EVENTS) {
+  await seedEvents(supabase, djId, EVENTS);
+  await seedGuestData(djId);
+  await seedDemoQueue(djId);
+
+  console.log(`seed-demo: done. ${EVENTS.length} demo events.`);
+
+  await seedTestFixtures();
+}
+
+/**
+ * Upserts one group of events for one signed-in DJ.
+ *
+ * Extracted from `main` so the same body can seed both the DEMO events (user
+ * A, the account a grader signs in as) and the INTEGRATION FIXTURE events
+ * (user B, invisible to the demo) without duplicating three hundred lines of
+ * upsert logic. `derivedId` already keys every row on the DJ's own id, so two
+ * DJs seeding through this function never collide.
+ */
+async function seedEvents(supabase, djId, events) {
+  for (const event of events) {
     const eventId = derivedId(djId, event.slug);
 
     const liveColumns =
@@ -484,10 +508,6 @@ async function main() {
       `seed-demo: ${event.couple_names} (${event.status}) — ${event.songs.length} songs — ${eventId}`,
     );
   }
-
-  await seedGuestData(djId);
-
-  console.log(`seed-demo: done. ${EVENTS.length} events.`);
 }
 
 /**
@@ -600,6 +620,258 @@ async function seedGuestData(djId) {
   }
 
   console.log('seed-demo: seeded 3 guests, 2 distinct suggestions (one with 2 requesters via dedupe), 1 extra vote');
+}
+
+/**
+ * The two events `src/lib/live/guest.integration.test.ts` owns.
+ *
+ * WHY THEY EXIST. That suite writes a guest session and up to three
+ * `song_suggestions` rows per test, on every run, with placeholder text
+ * ('Song' / 'Artist') and a freshly generated 22-character track id. Nothing
+ * ever removes them: `authenticated` holds only SELECT and UPDATE on
+ * `song_suggestions`, so the DJ genuinely cannot delete what the suite wrote.
+ * The rows therefore accumulate for ever, one batch per `npm run gate`.
+ *
+ * Until 2026-09-06 they accumulated on the DEMO events -- Sara & Daniel and
+ * Priya & Alex. The suite's own comment argued that was harmless because the
+ * litter "sits inertly against an 'upcoming' event no guest-facing or DJ
+ * screen currently reads suggestions from". That premise stopped being true
+ * the moment Priya & Alex was started live: the DJ live screen read all 47
+ * rows, each id 404'd against Spotify, and the poll route wrote the
+ * `Unavailable track` / `—` sentinel for every one (by design -- see
+ * `src/lib/live/liveTypes.ts`). The demo screen filled with 432 placeholder
+ * requests. The bug was never in the sentinel; it was a test with no teardown
+ * whose safety depended on an assumption about the rest of the app that
+ * nothing re-checked when the app changed.
+ *
+ * WHY USER B. These events belong to TEST_USER_B, not to the seed's own DJ.
+ * A grader signs in as user A, so nothing here can reach any screen they see
+ * -- the litter is still un-deletable, but it is now un-demoable, which is
+ * the property that actually matters. Keeping them under user A would have
+ * put two obviously-fake events on the demo dashboard instead.
+ *
+ * WHY TWO, AND WHY BOTH ALREADY LIVE. The suite's `wrong_event` case needs a
+ * suggestion belonging to a DIFFERENT event than the session voting on it.
+ * It used to manufacture that by flipping the demo event Priya & Alex to
+ * 'live' with a throwaway join token and restoring it in a `finally` -- a
+ * mutation of a shared, demo-visible row that had to be got exactly right
+ * every run. Seeding a second fixture event that is ALREADY live removes the
+ * flip entirely.
+ */
+/**
+ * A dozen real, pending requests for the live demo event's DJ queue.
+ *
+ * WHY THIS EXISTS. `seedGuestData` above seeds three suggestions, and a manual
+ * walk has since played all of them -- so the live screen's request queue
+ * renders empty, which demonstrates nothing. What used to fill that queue was
+ * 432 rows of integration-test litter, every one of which showed as
+ * "Unavailable track — —" because the ids were random 22-character strings
+ * that 404 on Spotify. This replaces that accidental filler with a deliberate
+ * fixture.
+ *
+ * EVERY ID BELOW WAS RESOLVED BY A REAL `GET /v1/search` CALL against this
+ * app's own client credentials on 2026-09-06, not written from memory.
+ * `spotify_track_id`'s shape constraint accepts an invented 22-character
+ * string exactly as happily as a real one, and the failure mode is invisible
+ * until the live screen polls Spotify and writes the unresolvable sentinel --
+ * which is precisely the bug this fixture exists to stop recurring.
+ *
+ * The set is CHOSEN, not arbitrary. It exercises three branches of the
+ * ranking engine that a flat list of unrelated songs would leave dark:
+ *
+ *   - 'How You Remind Me' is by Nickelback, whose artist id
+ *     (6deZN1bslXzeGvOLaLMOIF) is exactly the one on Sara & Daniel's seeded
+ *     blocklist. It is deliberately given a high backer count, so the DJ
+ *     screen has to show a heavily-requested song that is nevertheless
+ *     blocked, with the reason -- the single clearest demonstration that this
+ *     is a decision engine and not a queue.
+ *   - 'Levitating' and "Don't Start Now" share one artist id
+ *     (6M2wZ9GZgrQXHCFfjv46we, Dua Lipa), so the artist-repeat term has
+ *     something real to fire on once one of them is played.
+ *   - The backer counts are deliberately uneven (2 to 7), so the requesters
+ *     term actually orders the list instead of tying everything at 1.
+ */
+const DEMO_GUEST_NAMES = ['Dana', 'Yonatan', 'Maya', 'Omer', 'Shira', 'Tal', 'Noa', 'Gil'];
+
+/**
+ * `by` indexes DEMO_GUEST_NAMES. At most three per guest: guest_suggest
+ * enforces a cap of 3 per SESSION and raises `suggestion_limit` on the
+ * fourth, so a fixture that ignored the cap would fail against the real RPC.
+ * `backers` are the OTHER guests who vote for it afterwards; the suggester is
+ * already counted as one requester by guest_suggest itself.
+ */
+const DEMO_QUEUE = [
+  { by: 0, trackId: '32OlwWuMpZ6b0aN2RZOeMS', title: 'Uptown Funk (feat. Bruno Mars)', artist: 'Mark Ronson', backers: [1, 2, 3, 4, 5, 6] },
+  { by: 0, trackId: '0GjEhVFGZW8afUYGChu3Rr', title: 'Dancing Queen', artist: 'ABBA', backers: [4, 6] },
+  { by: 0, trackId: '0VjIjW4GlUZAMYd2vXMi3b', title: 'Blinding Lights', artist: 'The Weeknd', backers: [2, 3, 5, 6] },
+  { by: 1, trackId: '1NHWG8zxSEypSRF3UufrnO', title: "Don't Stop Me Now", artist: 'Queen', backers: [0, 3, 5] },
+  { by: 1, trackId: '003vvx7Niy0yvhvHt4a68B', title: 'Mr. Brightside', artist: 'The Killers', backers: [0, 4] },
+  { by: 1, trackId: '5rb9QrpfcKFHM1EUbSIurX', title: 'Yeah! (feat. Lil Jon & Ludacris)', artist: 'USHER', backers: [5] },
+  { by: 2, trackId: '2tUBqZG2AbRi7Q0BIrVrEj', title: 'I Wanna Dance with Somebody (Who Loves Me)', artist: 'Whitney Houston', backers: [0, 1, 4, 7] },
+  { by: 2, trackId: '5nujrmhLynf4yMoMtj8AQF', title: 'Levitating (feat. DaBaby)', artist: 'Dua Lipa', backers: [3, 7] },
+  { by: 2, trackId: '3PfIrDoz19wz7qK7tYeu62', title: "Don't Start Now", artist: 'Dua Lipa', backers: [7] },
+  { by: 3, trackId: '62AuGbAkt8Ox2IrFFb8GKV', title: 'Sweet Caroline', artist: 'Neil Diamond', backers: [1, 2, 5, 6, 7] },
+  { by: 3, trackId: '2PpruBYCo4H7WOBJ7Q2EwM', title: 'Hey Ya!', artist: 'Outkast', backers: [0] },
+  { by: 4, trackId: '0gmbgwZ8iqyMPmXefof8Yf', title: 'How You Remind Me', artist: 'Nickelback', backers: [2, 7] },
+];
+
+/**
+ * Seeds DEMO_QUEUE onto the live demo event, through the real anon RPCs.
+ *
+ * Idempotent on the FIRST demo track rather than on "does this event have any
+ * guest sessions at all" (the guard `seedGuestData` uses): that event already
+ * has sessions from the earlier seed and from manual walks, so an
+ * any-sessions guard would skip this block for ever and it would never run
+ * once. guest_suggest's own dedupe would turn a re-run's suggestions into
+ * votes rather than duplicates, but guest_join has no natural upsert key and
+ * would mint eight fresh guests on every run -- hence a guard at all.
+ */
+async function seedDemoQueue(djId) {
+  const eventId = derivedId(djId, 'sara-daniel');
+  const joinToken = deriveToken(djId, 'sara-daniel');
+
+  const supabase = createClient(SUPABASE_URL, ANON_KEY, { auth: { persistSession: false } });
+  const signIn = await supabase.auth.signInWithPassword({ email: EMAIL, password: PASSWORD });
+  if (signIn.error) {
+    console.error(`seed-demo: could not sign in to check the demo queue: ${signIn.error.message}`);
+    process.exit(1);
+  }
+  const { data: existing, error: existingError } = await supabase
+    .from('song_suggestions')
+    .select('id')
+    .eq('event_id', eventId)
+    .eq('spotify_track_id', DEMO_QUEUE[0].trackId)
+    .limit(1);
+  if (existingError) {
+    console.error(`seed-demo: failed to check for an existing demo queue: ${existingError.message}`);
+    process.exit(1);
+  }
+  if (existing && existing.length > 0) {
+    console.log('seed-demo: sara-daniel already has the demo queue, skipping (idempotent)');
+    return;
+  }
+
+  const guest = createClient(SUPABASE_URL, ANON_KEY, { auth: { persistSession: false } });
+
+  const sessionIds = [];
+  for (const name of DEMO_GUEST_NAMES) {
+    const { data: sessionId, error } = await guest.rpc('guest_join', {
+      p_token: joinToken,
+      p_display_name: name,
+    });
+    if (error) {
+      console.error(`seed-demo: guest_join failed for ${name}: ${error.message}`);
+      process.exit(1);
+    }
+    sessionIds.push(sessionId);
+  }
+
+  let votes = 0;
+  for (const { by, trackId, title, artist, backers } of DEMO_QUEUE) {
+    const { data, error } = await guest.rpc('guest_suggest', {
+      p_session_id: sessionIds[by],
+      p_track_id: trackId,
+      p_title: title,
+      p_artist: artist,
+    });
+    if (error) {
+      console.error(`seed-demo: guest_suggest failed for ${title}: ${error.message}`);
+      process.exit(1);
+    }
+    // Asserted, not assumed: a `was_existing` here would mean the guard above
+    // let a partially-seeded run through, and the backer counts below would
+    // then be silently wrong rather than absent.
+    if (data[0].was_existing) {
+      console.error(`seed-demo: ${title} was already suggested -- the demo queue is partially seeded, refusing to continue`);
+      process.exit(1);
+    }
+    const suggestionId = data[0].suggestion_id;
+
+    for (const backer of backers) {
+      const { error: voteError } = await guest.rpc('guest_vote', {
+        p_session_id: sessionIds[backer],
+        p_suggestion_id: suggestionId,
+      });
+      if (voteError) {
+        console.error(`seed-demo: guest_vote failed for ${title} by ${DEMO_GUEST_NAMES[backer]}: ${voteError.message}`);
+        process.exit(1);
+      }
+      votes += 1;
+    }
+  }
+
+  console.log(
+    `seed-demo: seeded ${DEMO_QUEUE.length} pending requests from ${DEMO_GUEST_NAMES.length} guests, plus ${votes} backing votes`,
+  );
+}
+
+const FIXTURE_EVENTS = [
+  {
+    slug: 'integration-primary',
+    couple_names: 'Integration A & Integration B',
+    venue: 'Integration Fixture (not a demo event)',
+    event_date: inDays(0),
+    status: 'live',
+    phase: 'open-floor',
+    // A fixed offset like the demo live event's, so `minutesLeftInPhase` has
+    // something real to compute against if anything ever reads it.
+    phaseStartedAt: new Date(Date.now() - 25 * 60_000).toISOString(),
+    songs: [],
+    mustPlay: [],
+    blocklist: [],
+    notes: null,
+  },
+  {
+    slug: 'integration-foreign',
+    couple_names: 'Foreign A & Foreign B',
+    venue: 'Integration Fixture (not a demo event)',
+    event_date: inDays(0),
+    status: 'live',
+    phase: 'open-floor',
+    phaseStartedAt: new Date(Date.now() - 25 * 60_000).toISOString(),
+    songs: [],
+    mustPlay: [],
+    blocklist: [],
+    notes: null,
+  },
+];
+
+/**
+ * Seeds FIXTURE_EVENTS under TEST_USER_B.
+ *
+ * Skipped with a loud line, not a hard failure, when TEST_USER_B_* is unset:
+ * a grader running `npm run seed:demo` to look at the app needs neither the
+ * fixtures nor a second account, and must not be stopped by their absence.
+ * Anyone running the integration suite already has TEST_USER_B_* set --
+ * `src/lib/events/rls.integration.test.ts` has required it since long before
+ * this function existed.
+ */
+async function seedTestFixtures() {
+  if (!FIXTURE_EMAIL || !FIXTURE_PASSWORD) {
+    console.log(
+      'seed-demo: TEST_USER_B_EMAIL/TEST_USER_B_PASSWORD not set — skipping the integration fixture events. ' +
+        'src/lib/live/guest.integration.test.ts will fail at beforeAll without them.',
+    );
+    return;
+  }
+
+  // persistSession: false, per the two-clients gotcha in CLAUDE.md. Node has
+  // no localStorage so this script would not actually hit it, but the rule is
+  // cheaper to keep than to reason about each time.
+  const supabase = createClient(SUPABASE_URL, ANON_KEY, { auth: { persistSession: false } });
+  const signIn = await supabase.auth.signInWithPassword({
+    email: FIXTURE_EMAIL,
+    password: FIXTURE_PASSWORD,
+  });
+  if (signIn.error || !signIn.data.user) {
+    console.error(`seed-demo: could not sign in as ${FIXTURE_EMAIL}: ${signIn.error?.message}`);
+    process.exit(1);
+  }
+
+  await seedEvents(supabase, signIn.data.user.id, FIXTURE_EVENTS);
+  console.log(
+    `seed-demo: ${FIXTURE_EVENTS.length} integration fixture events under ${FIXTURE_EMAIL} (never shown in the demo).`,
+  );
 }
 
 main().catch((error) => {

@@ -14,7 +14,7 @@
   font-weight: 700;
   color: var(--ink-dark);
   margin: 0 0 1rem 0;
-  font-family: var(--font-sora), sans-serif;
+  font-family: var(--font-display), sans-serif;
 }
 
 .description {
@@ -23,24 +23,24 @@
   margin: 0 0 2rem 0;
   max-width: 400px;
   line-height: 1.5;
-  font-family: var(--font-inter), sans-serif;
+  font-family: var(--font-body), sans-serif;
 }
 
 .button {
   padding: 0.75rem 1.5rem;
   background: var(--accent);
-  color: white;
+  color: var(--on-accent);
   border: none;
   border-radius: var(--radius-pill);
   font-weight: 600;
-  font-family: var(--font-sora), sans-serif;
+  font-family: var(--font-display), sans-serif;
   cursor: pointer;
   transition: background 0.2s;
   font-size: 1rem;
 }
 
 .button:hover {
-  background: var(--accent-deep);
+  background: var(--accent-hover);
 }
 
 .button:active {

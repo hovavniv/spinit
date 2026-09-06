@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 
 import { requireUser, getProfile } from '@/lib/auth/dal';
+import { signOut } from '@/lib/auth/actions';
 import { getEventDetail } from '@/lib/events/detailDal';
 import { resolveViewer } from '@/lib/events/viewer';
 import { isUuid } from '@/lib/validation';
@@ -74,7 +75,7 @@ export default async function EventPage({ params }: PageProps<'/events/[id]'>) {
   };
 
   return (
-    <AppShell sidebar={<DashboardSidebar dj={dj} current="none" hideNav={viewer.role === 'partner'} />}>
+    <AppShell sidebar={<DashboardSidebar dj={dj} current="none" hideNav={viewer.role === 'partner'} signOutAction={signOut} />}>
       <EventDetailScreen event={event} viewer={viewer} />
     </AppShell>
   );

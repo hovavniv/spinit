@@ -42,9 +42,13 @@ interface DashboardSidebarProps {
  * the sidebar block (first child of the top-level flex row).
  *
  * DOM is deliberately two children of the root — `[wrapper containing logo +
- * nav]` and `[avatar chip]` — so Task 9's mobile collapse can flex-row the
- * wrapper independently of the sidebar itself
+ * nav]` and `[avatar chip + sign out]` — so Task 9's mobile collapse can
+ * flex-row the wrapper independently of the sidebar itself
  * (design/specs/2026-08-29-dj-dashboard-design.md §8).
+ *
+ * Sign-out sits INSIDE that second child, under the name. The rail is
+ * `justify-content: space-between`, so leaving it as a third root child would
+ * strand it midway up the rail rather than beside the account it signs out of.
  */
 export function DashboardSidebar({
   dj,
@@ -79,37 +83,39 @@ export function DashboardSidebar({
         )}
       </div>
 
-      {signOutAction !== undefined && (
-        // The artboard has no sign-out control anywhere — not in the rail,
-        // not in the avatar chip. The page this slice rewrites held the
-        // application's only one, so shipping the artboard as drawn would
-        // leave a signed-in DJ with no way out. An addition to the design,
-        // not an interpretation of it (design §7).
-        //
-        // The action is the existing one from lib/auth/actions.ts, which
-        // already chooses `scope: 'local'` and already has tests. A second
-        // implementation would be a second place for that scope decision to
-        // drift, and whether other devices stay signed in is
-        // security-relevant.
-        //
-        // Optional and conditionally rendered: the design-preview route has
-        // no session to end and passes no action at all, rather than a no-op
-        // — every component in this tree is a Server Component, and a
-        // `<form action={…}>` prop that is not a real server reference throws
-        // at render in the Flight serializer.
-        <form action={signOutAction} className={styles.signOutForm}>
-          <button type="submit" className={styles.signOut}>
-            Sign out
-          </button>
-        </form>
-      )}
-
-      <div className={styles.chip}>
-        <div className={styles.avatar}>{initials(dj.name)}</div>
-        <div className={styles.chipText}>
-          <div className={styles.chipName}>{dj.name}</div>
-          <div className={styles.chipCompany}>{dj.company}</div>
+      <div className={styles.userBlock}>
+        <div className={styles.chip}>
+          <div className={styles.avatar}>{initials(dj.name)}</div>
+          <div className={styles.chipText}>
+            <div className={styles.chipName}>{dj.name}</div>
+            <div className={styles.chipCompany}>{dj.company}</div>
+          </div>
         </div>
+        {signOutAction !== undefined && (
+          // The artboard has no sign-out control anywhere — not in the rail,
+          // not in the avatar chip. The page this slice rewrites held the
+          // application's only one, so shipping the artboard as drawn would
+          // leave a signed-in DJ with no way out. An addition to the design,
+          // not an interpretation of it (design §7).
+          //
+          // The action is the existing one from lib/auth/actions.ts, which
+          // already chooses `scope: 'local'` and already has tests. A second
+          // implementation would be a second place for that scope decision to
+          // drift, and whether other devices stay signed in is
+          // security-relevant.
+          //
+          // Optional and conditionally rendered: the design-preview route has
+          // no session to end and passes no action at all, rather than a no-op
+          // — every component in this tree is a Server Component, and a
+          // `<form action={…}>` prop that is not a real server reference throws
+          // at render in the Flight serializer.
+          <form action={signOutAction} className={styles.signOutForm}>
+            <button type="submit" className={styles.signOut}>
+              Sign out
+            </button>
+          </form>
+        )}
+
       </div>
     </div>
   );

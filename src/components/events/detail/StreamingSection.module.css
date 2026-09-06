@@ -3,13 +3,13 @@
    "analysis will appear here" empty state. */
 
 .section {
-  border-top: 1px solid oklch(0.91 0.012 60);
+  border-top: 1px solid var(--divider);
   padding-top: 28px;
   margin-bottom: 28px;
 }
 
 .heading {
-  font-family: var(--font-sora), sans-serif;
+  font-family: var(--font-display), sans-serif;
   font-size: 20px;
   font-weight: 700;
   margin: 0 0 6px;
@@ -29,7 +29,7 @@
   justify-content: space-between;
   gap: 16px;
   padding: 16px 18px;
-  border-radius: 16px;
+  border-radius: var(--radius);
   border: 1.5px solid var(--border);
   background: var(--bg);
   margin-bottom: 12px;
@@ -62,15 +62,17 @@
   color: var(--text-subtle);
 }
 
-/* Same two pill variants the dashboard's upcoming cards use, so one status
-   reads identically on both screens. */
+/* Deliberately NOT the same pill the dashboard's upcoming cards use for this
+   fact: the dashboard draws "connected" as a solid lime fill, and this one is
+   a neutral chip. The two artboards draw the same fact differently -- design
+   spec §7.2. */
 .pillConnected {
   font-size: 12px;
   font-weight: 600;
   padding: 5px 12px;
   border-radius: var(--radius-pill);
-  background: oklch(0.95 0.03 190);
-  color: oklch(0.4 0.13 190);
+  background: var(--chip);
+  color: var(--text-label);
   white-space: nowrap;
 }
 
@@ -79,7 +81,7 @@
   font-weight: 600;
   padding: 5px 12px;
   border-radius: var(--radius-pill);
-  background: oklch(0.94 0.012 60);
-  color: oklch(0.45 0.02 50);
+  background: transparent;
+  color: var(--text-subtle);
   white-space: nowrap;
 }

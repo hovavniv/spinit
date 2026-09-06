@@ -2,6 +2,7 @@ import { notFound } from 'next/navigation';
 import type { Metadata } from 'next';
 
 import { requireUser, getProfile } from '@/lib/auth/dal';
+import { signOut } from '@/lib/auth/actions';
 import { createClient } from '@/lib/supabase/server';
 import { getEventRecap } from '@/lib/events/dal';
 import { mostActiveGuest } from '@/lib/events/recap';
@@ -99,7 +100,7 @@ export default async function EventRecapPage(props: PageProps<'/events/[id]/reca
       // sidebar has no recap nav item to highlight. A partner has no Past
       // events of their own, so hideNav for the same reason the event detail
       // page hides it for them.
-      sidebar={<DashboardSidebar dj={dj} current="past" hideNav={isPartner} />}
+      sidebar={<DashboardSidebar dj={dj} current="past" hideNav={isPartner} signOutAction={signOut} />}
       width="narrow"
     >
       <RecapHeader event={event} />

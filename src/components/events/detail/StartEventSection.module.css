@@ -1,34 +1,28 @@
+/* No divider or top margin of its own: EventDetailScreen's `.lifecycle` wraps
+   this and EndEventSection in ONE bordered row, so Start and End read as the
+   pair they are instead of two orphan rows with a hairline between them. */
 .section {
-  margin-top: 32px;
-  padding-top: 24px;
-  border-top: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  gap: 12px;
 }
 
 .error {
   font-size: 13.5px;
-  color: var(--accent-deep);
-  margin: 0 0 12px;
-}
-
-.phaseRow {
-  margin-bottom: 16px;
-}
-
-.label {
-  display: block;
-  font-size: 13px;
+  color: var(--error);
   font-weight: 600;
-  color: var(--text-subtle);
-  margin-bottom: 8px;
+  margin: 0;
 }
+
+
 
 .start {
   background: var(--accent);
   border: none;
-  color: white;
+  color: var(--on-accent);
   padding: 10px 20px;
   border-radius: var(--radius-pill);
-  font-family: var(--font-inter), sans-serif;
+  font-family: var(--font-body), sans-serif;
   font-weight: 600;
   font-size: 13.5px;
   cursor: pointer;

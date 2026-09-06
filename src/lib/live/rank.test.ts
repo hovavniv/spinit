@@ -272,6 +272,37 @@ describe('rankQueue', () => {
     expect(mustRow?.reasons).toContainEqual({ kind: 'must-play-unplayed' });
   });
 
+  it("only applies must-play rows for the CURRENT phase's segment", () => {
+    const mustPlaySong = makeSuggestion({
+      id: 'must',
+      spotifyTrackId: 'track-mustplay',
+      requesters: 1,
+      createdAt: '2026-09-05T10:00:00.000Z',
+    });
+    const rival = makeSuggestion({
+      id: 'rival',
+      spotifyTrackId: 'track-rival',
+      requesters: 20,
+      createdAt: '2026-09-05T10:00:00.000Z',
+    });
+    const input = makeInput({
+      suggestions: [mustPlaySong, rival],
+      phase: 'open-floor', // maps to 'party'
+      mustPlay: [
+        makeMustPlay({
+          spotify_track_id: 'track-mustplay',
+          segment: 'reception', // does NOT match 'party'
+        }),
+      ],
+    });
+
+    const result = rankQueue(input);
+
+    expect(result.queue.map((r) => r.suggestion.id)).toEqual(['rival', 'must']);
+    const mustRow = result.queue.find((r) => r.suggestion.id === 'must');
+    expect(mustRow?.reasons).not.toContainEqual({ kind: 'must-play-unplayed' });
+  });
+
   it('penalises an artist played two songs ago', () => {
     const penalized = makeSuggestion({
       id: 'penalized',

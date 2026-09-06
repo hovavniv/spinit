@@ -22,20 +22,24 @@ describe('GuestActivity', () => {
     expect(screen.getByText('No activity yet')).toBeInTheDocument();
   });
 
-  it('renders a "requested" item as "<guest> requested <title>"', () => {
+  it('renders a "requested" item as "<guest> requested <title>", with the title bold', () => {
     render(<GuestActivity activity={[item({ verb: 'requested', guestName: 'Noa', title: 'September' })]} />);
 
-    expect(screen.getByText('Noa requested September')).toBeInTheDocument();
+    const row = screen.getByRole('listitem');
+    expect(row.textContent).toContain('Noa requested September');
+    expect(screen.getByText('September').tagName).toBe('STRONG');
   });
 
-  it('renders a "backed" item as "<guest> backed <title>"', () => {
+  it('renders a "backed" item as "<guest> backed <title>", with the title bold', () => {
     render(
       <GuestActivity
         activity={[item({ id: 'backed-s1-g1', verb: 'backed', guestName: 'Eitan', title: 'Uptown Funk' })]}
       />,
     );
 
-    expect(screen.getByText('Eitan backed Uptown Funk')).toBeInTheDocument();
+    const row = screen.getByRole('listitem');
+    expect(row.textContent).toContain('Eitan backed Uptown Funk');
+    expect(screen.getByText('Uptown Funk').tagName).toBe('STRONG');
   });
 
   it('renders multiple items in the order given (the DAL is responsible for sort order, not this component)', () => {
@@ -49,7 +53,14 @@ describe('GuestActivity', () => {
     );
 
     const items = screen.getAllByRole('listitem').map((el) => el.textContent);
-    expect(items).toEqual(['Noa requested September', 'Eitan requested Uptown Funk']);
+    expect(items[0]).toContain('Noa requested September');
+    expect(items[1]).toContain('Eitan requested Uptown Funk');
+  });
+
+  it('shows the "Last hour on the floor." subhead', () => {
+    render(<GuestActivity activity={[]} />);
+
+    expect(screen.getByText('Last hour on the floor.')).toBeInTheDocument();
   });
 
   it('keeps aria-live="polite" on the list', () => {

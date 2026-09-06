@@ -64,6 +64,14 @@ vi.mock('@/lib/supabase/server', () => ({
 vi.mock('@/lib/auth/dal', () => ({
   requireUser: vi.fn(async () => ({ id: 'dj-1' })),
 }));
+// The DAL now asks Spotify for a thumbnail per stored id. Mocked so no test
+// makes a network call -- and so the ids it is HANDED can be asserted, which
+// is the half a component test cannot see: a component fed a fixture map
+// stays green even when nothing in production ever fills that map.
+const resolveArtwork = vi.fn(async (_input: { trackIds: unknown[]; artistIds: unknown[] }) => ({}) as Record<string, string>);
+vi.mock('@/lib/spotify/artwork', () => ({
+  resolveArtwork: (input: { trackIds: unknown[]; artistIds: unknown[] }) => resolveArtwork(input),
+}));
 // react's `cache` memoises per request; in a test that would make the second
 // call with the same id return the first call's result.
 vi.mock('react', async () => {
@@ -114,6 +122,7 @@ beforeEach(() => {
   // Default: no queue rows yet. Individual tests override with
   // queueIn.mockResolvedValue(...).
   queueIn.mockResolvedValue({ data: [], error: null });
+  resolveArtwork.mockResolvedValue({});
 });
 
 describe('getEventDetail', () => {
@@ -459,5 +468,59 @@ describe('getEventDetail', () => {
 
       await expect(getEventDetail(EVENT)).rejects.toThrow(/enrichment_queue/);
     });
+  });
+});
+
+describe('getEventDetail artwork', () => {
+  const TRACK_A = 'aaaaaaaaaaaaaaaaaaaaaa';
+  const TRACK_B = 'bbbbbbbbbbbbbbbbbbbbbb';
+  const ARTIST_A = 'cccccccccccccccccccccc';
+
+  function rowsWithIds() {
+    return row({
+      event_must_play: [
+        { id: 'm1', segment: 'party', title: 'A', artist: 'X', moment: null, spotify_track_id: TRACK_A, spotify_artist_id: null, created_at: '2026-09-01T00:00:00Z' },
+      ],
+      event_blocklist: [
+        { id: 'b1', segment: 'party', entry_type: 'song', value: 'B', spotify_id: TRACK_B, created_at: '2026-09-01T00:00:00Z' },
+        { id: 'b2', segment: 'party', entry_type: 'artist', value: 'C', spotify_id: ARTIST_A, created_at: '2026-09-01T00:00:00Z' },
+        { id: 'b3', segment: 'party', entry_type: 'genre', value: 'pop', spotify_id: null, created_at: '2026-09-01T00:00:00Z' },
+      ],
+    });
+  }
+
+  it('asks for a TRACK id per must-play row and per blocklisted SONG, and an ARTIST id per blocklisted artist', async () => {
+    // The namespaces are not interchangeable: blocklist.spotify_id is a track
+    // id on a 'song' row and an artist id on an 'artist' row, out of ONE
+    // column. Sending an artist id to /tracks/{id} 404s silently and the
+    // picture just never appears, which no rendering test can distinguish
+    // from "Spotify had no artwork".
+    maybeSingle.mockResolvedValue({ data: rowsWithIds(), error: null });
+
+    await getEventDetail(EVENT);
+
+    expect(resolveArtwork).toHaveBeenCalledTimes(1);
+    const input = resolveArtwork.mock.calls[0][0];
+    expect(input.trackIds).toEqual([TRACK_A, TRACK_B]);
+    expect(input.artistIds).toEqual([ARTIST_A]);
+  });
+
+  it('never asks for a genre row (it has no id and no artwork)', async () => {
+    maybeSingle.mockResolvedValue({ data: rowsWithIds(), error: null });
+
+    await getEventDetail(EVENT);
+
+    const input = resolveArtwork.mock.calls[0][0];
+    expect(input.trackIds).not.toContain(null);
+    expect(input.artistIds).not.toContain(null);
+  });
+
+  it('threads the resolved map onto the returned event', async () => {
+    maybeSingle.mockResolvedValue({ data: rowsWithIds(), error: null });
+    resolveArtwork.mockResolvedValue({ [`track:${TRACK_A}`]: 'https://i.example/a.jpg' });
+
+    const detail = await getEventDetail(EVENT);
+
+    expect(detail?.artworkById).toEqual({ [`track:${TRACK_A}`]: 'https://i.example/a.jpg' });
   });
 });

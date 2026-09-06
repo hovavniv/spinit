@@ -14,15 +14,15 @@
   top: 50%;
   transform: translateY(-50%);
   pointer-events: none;
-  color: oklch(0.55 0.02 50);
+  color: var(--text-subtle);
 }
 
 .search {
   width: 100%;
   padding: 10px 14px 10px 38px;
-  border-radius: 10px;
+  border-radius: var(--radius);
   border: 1.5px solid var(--border-input);
-  font-family: var(--font-inter), sans-serif;
+  font-family: var(--font-body), sans-serif;
   font-size: 13.5px;
   background: var(--surface);
   color: var(--ink-dark);
@@ -45,7 +45,7 @@
 }
 
 .monthLabel {
-  font-family: var(--font-sora), sans-serif;
+  font-family: var(--font-display), sans-serif;
   font-size: 12.5px;
   font-weight: 700;
   letter-spacing: 0.06em;
@@ -60,10 +60,10 @@
   align-items: center;
   gap: 20px;
   padding: 16px 12px;
-  border-radius: 14px;
+  border-radius: var(--radius);
   color: inherit;
   text-decoration: none;
-  border-bottom: 1px solid oklch(0.91 0.012 60);
+  border-bottom: 1px solid var(--divider);
   flex-wrap: wrap;
 }
 
@@ -72,11 +72,11 @@
    src/components/dashboard/PastEvents.module.css, which changes border-color
    — different component, different artboard block. */
 .row:hover {
-  background: oklch(0.96 0.014 75);
+  background: var(--row-hover);
 }
 
 /* globals.css's `a:hover` has specificity (0,1,1) and would outrank
-   `.row { color: inherit }` at (0,1,0), turning the whole row's text pink on
+   `.row { color: inherit }` at (0,1,0), turning the whole row's text grey on
    hover — which the artboard does not do (it neutralises the same thing with
    an inline style). This rule is (0,2,0) and wins regardless of source order.
    The same trap is annotated in PastEvents.module.css and
@@ -89,7 +89,7 @@
 .dateTile {
   width: 52px;
   height: 52px;
-  border-radius: 12px;
+  border-radius: var(--radius);
   background: var(--surface);
   border: 1px solid var(--border);
   display: flex;
@@ -100,7 +100,7 @@
 }
 
 .day {
-  font-family: var(--font-sora), sans-serif;
+  font-family: var(--font-display), sans-serif;
   font-size: 18px;
   font-weight: 800;
   line-height: 1.1;
@@ -122,7 +122,7 @@
 }
 
 .couple {
-  font-family: var(--font-sora), sans-serif;
+  font-family: var(--font-display), sans-serif;
   font-weight: 700;
   font-size: 16px;
   margin-bottom: 2px;
@@ -156,7 +156,7 @@
   border: 1.5px solid var(--border-input);
   padding: 9px 15px;
   border-radius: var(--radius-pill);
-  font-family: var(--font-inter), sans-serif;
+  font-family: var(--font-body), sans-serif;
   font-weight: 600;
   font-size: 13px;
   cursor: pointer;
@@ -168,22 +168,27 @@
    written out in full, the same way that file writes .value and .valuePending. */
 .pillActive {
   background: var(--accent);
-  color: white;
+  color: var(--on-accent);
   border: 1.5px solid var(--accent);
   padding: 9px 15px;
   border-radius: var(--radius-pill);
-  font-family: var(--font-inter), sans-serif;
+  font-family: var(--font-body), sans-serif;
   font-weight: 600;
   font-size: 13px;
   cursor: pointer;
   white-space: nowrap;
 }
 
-/* Three badge variants, read off the artboard: teal / amber / grey. Same box,
-   different ink and ground — written out rather than composed, per above. */
+/* Three badge variants. The canvas draws all three on the SAME neutral chip and
+   separates them by label text alone, so connected/partly differ from awaiting
+   only in ink. They are still three classes rather than one because the DJ
+   dashboard's version of the same fact DOES distinguish them (lime versus
+   outline), and because collapsing them here would have to be undone the moment
+   anyone wants the distinction back. Written out rather than composed, per
+   above. */
 .badgeConnected {
-  background: oklch(0.95 0.03 190);
-  color: oklch(0.4 0.13 190);
+  background: var(--chip);
+  color: var(--text-label);
   font-size: 12px;
   font-weight: 600;
   padding: 5px 12px;
@@ -193,8 +198,8 @@
 }
 
 .badgePartly {
-  background: oklch(0.95 0.045 80);
-  color: oklch(0.5 0.15 80);
+  background: var(--chip);
+  color: var(--text-label);
   font-size: 12px;
   font-weight: 600;
   padding: 5px 12px;
@@ -204,7 +209,7 @@
 }
 
 .badgeAwaiting {
-  background: oklch(0.94 0.012 60);
+  background: var(--chip);
   color: var(--text-muted);
   font-size: 12px;
   font-weight: 600;

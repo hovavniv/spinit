@@ -4,7 +4,7 @@
   padding: 32px;
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: 16px;
+  border-radius: var(--radius);
 }
 
 .coupleNames {
@@ -19,17 +19,7 @@
   margin: 0 0 24px;
 }
 
-.label {
-  display: block;
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--text-subtle);
-  margin-bottom: 8px;
-}
 
-.phaseRow {
-  margin-bottom: 24px;
-}
 
 .startButton {
   width: 100%;
@@ -37,7 +27,7 @@
   border: none;
   border-radius: var(--radius-pill);
   background: var(--accent);
-  color: white;
+  color: var(--on-accent);
   font-size: 16px;
   font-weight: 600;
   cursor: pointer;
@@ -58,5 +48,6 @@
 .error {
   margin: 0 0 16px;
   font-size: 14px;
-  color: var(--accent-deep);
+  color: var(--error);
+  font-weight: 600;
 }

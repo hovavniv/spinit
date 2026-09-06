@@ -13,15 +13,15 @@
   top: 50%;
   transform: translateY(-50%);
   pointer-events: none;
-  color: oklch(0.55 0.02 50);
+  color: var(--text-subtle);
 }
 
 .search {
   width: 100%;
   padding: 10px 14px 10px 38px;
-  border-radius: 10px;
+  border-radius: var(--radius);
   border: 1.5px solid var(--border-input);
-  font-family: var(--font-inter), sans-serif;
+  font-family: var(--font-body), sans-serif;
   font-size: 13.5px;
   background: var(--surface);
   color: var(--ink-dark);
@@ -44,7 +44,7 @@
 }
 
 .monthLabel {
-  font-family: var(--font-sora), sans-serif;
+  font-family: var(--font-display), sans-serif;
   font-size: 12.5px;
   font-weight: 700;
   letter-spacing: 0.06em;
@@ -59,10 +59,10 @@
   align-items: center;
   gap: 20px;
   padding: 16px 12px;
-  border-radius: 14px;
+  border-radius: var(--radius);
   color: inherit;
   text-decoration: none;
-  border-bottom: 1px solid oklch(0.91 0.012 60);
+  border-bottom: 1px solid var(--divider);
   flex-wrap: wrap;
 }
 
@@ -71,11 +71,11 @@
    src/components/dashboard/PastEvents.module.css, which changes border-color
    — different component, different artboard block. */
 .row:hover {
-  background: oklch(0.96 0.014 75);
+  background: var(--row-hover);
 }
 
 /* globals.css's `a:hover` has specificity (0,1,1) and would outrank
-   `.row { color: inherit }` at (0,1,0), turning the whole row's text pink on
+   `.row { color: inherit }` at (0,1,0), turning the whole row's text grey on
    hover — which the artboard does not do (it neutralises the same thing with
    an inline style). This rule is (0,2,0) and wins regardless of source order.
    The same trap is annotated in PastEvents.module.css and
@@ -88,7 +88,7 @@
 .dateTile {
   width: 52px;
   height: 52px;
-  border-radius: 12px;
+  border-radius: var(--radius);
   background: var(--surface);
   border: 1px solid var(--border);
   display: flex;
@@ -99,7 +99,7 @@
 }
 
 .day {
-  font-family: var(--font-sora), sans-serif;
+  font-family: var(--font-display), sans-serif;
   font-size: 18px;
   font-weight: 800;
   line-height: 1.1;
@@ -121,7 +121,7 @@
 }
 
 .couple {
-  font-family: var(--font-sora), sans-serif;
+  font-family: var(--font-display), sans-serif;
   font-weight: 700;
   font-size: 16px;
   margin-bottom: 2px;

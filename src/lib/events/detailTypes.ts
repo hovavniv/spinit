@@ -17,6 +17,18 @@ export type AddableSegment = Exclude<EventSegment, 'ceremony'>;
 
 export type BlocklistEntryType = 'artist' | 'song' | 'genre';
 
+/**
+ * The key a row's thumbnail lives under in `EventDetail.artworkById`.
+ *
+ * Prefixed by kind, never the bare Spotify id: ids are only unique WITHIN a
+ * type, so a bare-id map is ambiguous the day a track and an artist share one.
+ * Declared here rather than beside `resolveArtwork` so a Client Component can
+ * build the key without importing that `import 'server-only'` module.
+ */
+export function artworkKey(kind: 'track' | 'artist', id: string | null | undefined): string {
+  return id ? `${kind}:${id}` : '';
+}
+
 export interface MustPlayRow {
   id: string;
   segment: EventSegment;
@@ -115,6 +127,17 @@ export interface EventDetail {
    * first thing that reads this.
    */
   genresByArtistId: Record<string, Record<string, number>>;
+  /**
+   * Thumbnail URLs for the rows on this page, keyed by `artworkKey(...)`.
+   *
+   * Resolved from Spotify at read time rather than stored: an image URL is not
+   * promised to stay valid, so a column holding one rots silently. A missing
+   * entry is normal and means "no picture" -- a pre-picker row with no id, a
+   * genre entry, a track Spotify 404s on, or a call that failed. Never an
+   * error: `resolveArtwork` swallows every failure, because a thumbnail must
+   * not be able to take the page down.
+   */
+  artworkById: Record<string, string>;
   /**
    * `enrichment_queue` counts for BOTH partners, summed (fix-spec Blocker 1).
    * The DJ cannot poll `/api/spotify/enrich-next` (partner-only by design),

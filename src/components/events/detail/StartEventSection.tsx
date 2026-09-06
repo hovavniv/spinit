@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 
 import type { EventPhase } from '@/lib/dashboard/types';
 import type { LiveActionResult } from '@/lib/live/liveActions';
-import { PhasePicker } from '@/components/live/PhasePicker';
+import { START_PHASE } from '@/lib/live/phaseSegment';
 import styles from './StartEventSection.module.css';
 
 interface StartEventSectionProps {
@@ -30,7 +30,6 @@ interface StartEventSectionProps {
  */
 export function StartEventSection({ eventId, canStart, startEventAction }: StartEventSectionProps) {
   const router = useRouter();
-  const [phase, setPhase] = useState<EventPhase>('cocktails');
   const [starting, setStarting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -39,7 +38,7 @@ export function StartEventSection({ eventId, canStart, startEventAction }: Start
   async function handleStart() {
     setStarting(true);
     setError(null);
-    const result = await startEventAction(eventId, phase);
+    const result = await startEventAction(eventId, START_PHASE);
     if (result.ok) {
       router.push(`/events/${eventId}/live`);
       return;
@@ -51,10 +50,6 @@ export function StartEventSection({ eventId, canStart, startEventAction }: Start
   return (
     <div className={styles.section}>
       {error && <p className={styles.error}>{error}</p>}
-      <div className={styles.phaseRow}>
-        <span className={styles.label}>Starting phase</span>
-        <PhasePicker value={phase} onChange={setPhase} disabled={starting} />
-      </div>
       <button type="button" className={styles.start} disabled={starting} onClick={handleStart}>
         {starting ? 'Starting…' : 'Start event'}
       </button>

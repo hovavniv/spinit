@@ -4,7 +4,8 @@ import { cache } from 'react';
 
 import { createClient } from '@/lib/supabase/server';
 import { requireUser } from '@/lib/auth/dal';
-import type { EventDetail, PartnerRow } from './detailTypes';
+import type { EventDetail, PartnerRow, MustPlayRow, BlocklistRow } from './detailTypes';
+import { resolveArtwork } from '@/lib/spotify/artwork';
 import type { TasteProfile } from '@/lib/spotify/tasteTypes';
 
 /**
@@ -125,6 +126,23 @@ export const getEventDetail = cache(async (eventId: string): Promise<EventDetail
     if ((row as { settled_at: string | null }).settled_at !== null) settled += 1;
   }
 
+  const mustPlay: MustPlayRow[] = data.event_must_play ?? [];
+  const blocklist: BlocklistRow[] = data.event_blocklist ?? [];
+
+  // One extra Spotify round trip per id, bounded and day-cached inside
+  // resolveArtwork -- see that module for why a batch call is not an option
+  // (both batch endpoints 403 for this app's credentials) and why every
+  // failure returns a gap in the map instead of throwing. A blocklist GENRE
+  // row has no id and is skipped; a song row's id is a track, an artist
+  // row's is an artist, which is why the two lists are built separately.
+  const artworkById = await resolveArtwork({
+    trackIds: [
+      ...mustPlay.map((row) => row.spotify_track_id),
+      ...blocklist.filter((row) => row.entry_type === 'song').map((row) => row.spotify_id),
+    ],
+    artistIds: blocklist.filter((row) => row.entry_type === 'artist').map((row) => row.spotify_id),
+  });
+
   return {
     id: data.id,
     dj_id: data.dj_id,
@@ -146,9 +164,10 @@ export const getEventDetail = cache(async (eventId: string): Promise<EventDetail
     privateNotes: firstRow(data.event_private_notes)?.body ?? '',
     sharedNotes: firstRow(data.event_shared_notes)?.body ?? '',
     partners: (data.event_partners ?? []).map(mapPartnerRow),
-    mustPlay: data.event_must_play ?? [],
-    blocklist: data.event_blocklist ?? [],
+    mustPlay,
+    blocklist,
     genresByArtistId,
+    artworkById,
     enrichmentProgress: { settled, total },
   };
 });

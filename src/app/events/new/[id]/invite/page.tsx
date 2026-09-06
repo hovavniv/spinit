@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 
 import { requireUser, getProfile } from '@/lib/auth/dal';
+import { signOut } from '@/lib/auth/actions';
 import { getEventForWizard } from '@/lib/events/newEventDal';
 import { sendInvites } from '@/lib/events/newEventActions';
 import { AppShell } from '@/components/shell/AppShell';
@@ -28,7 +29,7 @@ export default async function InvitePage({ params }: PageProps<'/events/new/[id]
   };
 
   return (
-    <AppShell sidebar={<DashboardSidebar dj={dj} current="none" />}>
+    <AppShell sidebar={<DashboardSidebar dj={dj} current="none" signOutAction={signOut} />}>
       <NewEventShell current={2} title={event.couple_names}>
         <InviteStep
           eventId={event.id}

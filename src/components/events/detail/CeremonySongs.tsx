@@ -1,5 +1,5 @@
 import { CEREMONY_SLOTS } from '@/lib/events/ceremonySlots';
-import type { MustPlayRow } from '@/lib/events/detailTypes';
+import { artworkKey, type MustPlayRow } from '@/lib/events/detailTypes';
 import { DETAILS_FORM_ID } from './formId';
 import { TrackPicker } from './TrackPicker';
 import styles from './CeremonySongs.module.css';
@@ -7,6 +7,9 @@ import styles from './CeremonySongs.module.css';
 interface CeremonySongsProps {
   /** The ceremony rows only — the caller has already split by segment. */
   rows: MustPlayRow[];
+  /** EventDetail.artworkById. A missing entry means "no picture", never an
+   *  error — see that field's comment. */
+  artworkById: Record<string, string>;
 }
 
 /**
@@ -23,7 +26,7 @@ interface CeremonySongsProps {
  * <form>: this component renders between the list sections and their forms,
  * and nested forms are dropped by the HTML parser (design §2.2).
  */
-export function CeremonySongs({ rows }: CeremonySongsProps) {
+export function CeremonySongs({ rows, artworkById }: CeremonySongsProps) {
   return (
     <section className={styles.section}>
       <h3 className={styles.heading}>Ceremony songs</h3>
@@ -69,6 +72,8 @@ export function CeremonySongs({ rows }: CeremonySongsProps) {
                           // that '' as null over a real artist id the row
                           // already had (found by fresh-context review).
                           artistId: existing.spotify_artist_id ?? undefined,
+                          artworkUrl:
+                            artworkById[artworkKey('track', existing.spotify_track_id)] ?? null,
                         }
                       : null
                   }

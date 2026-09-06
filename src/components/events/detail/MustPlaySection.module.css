@@ -32,16 +32,27 @@
 .row {
   display: flex;
   align-items: center;
-  justify-content: space-between;
   gap: 12px;
   padding: 12px 14px;
-  border-radius: 12px;
+  border-radius: var(--radius);
   background: var(--bg);
   border: 1px solid var(--border);
 }
 
 .rowText {
   min-width: 0;
+  margin-right: auto;
+}
+
+/* Square, like the picker dropdown's song artwork. Rendered even when there is
+   no image (as an empty tinted box) so every row's text starts at the same x. */
+.rowArtwork {
+  width: 34px;
+  height: 34px;
+  flex-shrink: 0;
+  background: var(--divider);
+  border-radius: var(--radius);
+  object-fit: cover;
 }
 
 .rowTitle {
@@ -63,7 +74,7 @@
 .remove {
   background: none;
   border: none;
-  color: oklch(0.6 0.02 50);
+  color: var(--text-placeholder);
   font-size: 18px;
   line-height: 1;
   cursor: pointer;
@@ -83,9 +94,9 @@
 
 .inputMoment {
   padding: 11px 13px;
-  border-radius: 10px;
+  border-radius: var(--radius);
   border: 1.5px solid var(--border-input);
-  font-family: var(--font-inter), sans-serif;
+  font-family: var(--font-body), sans-serif;
   font-size: 13.5px;
   background: var(--surface);
   color: var(--ink-dark);
@@ -95,16 +106,16 @@
 
 .inputMoment:focus {
   outline: none;
-  border-color: var(--accent);
+  border-color: var(--ink-dark);
 }
 
 .add {
   background: var(--accent);
-  color: white;
+  color: var(--on-accent);
   border: none;
   padding: 0 20px;
-  border-radius: 10px;
-  font-family: var(--font-inter), sans-serif;
+  border-radius: var(--radius);
+  font-family: var(--font-body), sans-serif;
   font-weight: 700;
   font-size: 13.5px;
   cursor: pointer;
@@ -113,5 +124,6 @@
 .error {
   margin: 8px 0 0;
   font-size: 13px;
-  color: var(--accent-deep);
+  color: var(--error);
+  font-weight: 600;
 }

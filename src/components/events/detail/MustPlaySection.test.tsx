@@ -20,13 +20,14 @@ function row(overrides: Partial<MustPlayRow> = {}): MustPlayRow {
   };
 }
 
-function renderSection(rows: MustPlayRow[]) {
+function renderSection(rows: MustPlayRow[], artworkById: Record<string, string> = {}) {
   return render(
     <MustPlaySection
       eventId={EVENT_ID}
       segment="party"
       blurb="Peak dance floor."
       rows={rows}
+      artworkById={artworkById}
       addAction={vi.fn()}
       removeAction={vi.fn()}
     />,

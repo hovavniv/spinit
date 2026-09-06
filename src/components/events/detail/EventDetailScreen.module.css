@@ -13,7 +13,7 @@
 }
 
 .title {
-  font-family: var(--font-sora), sans-serif;
+  font-family: var(--font-display), sans-serif;
   font-size: 30px;
   font-weight: 800;
   letter-spacing: -0.02em;
@@ -23,19 +23,51 @@
 .card {
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: 24px;
+  border-radius: var(--radius);
   padding: 36px;
 }
 
 .segment {
-  border-top: 1px solid oklch(0.91 0.012 60);
+  border-top: 1px solid var(--divider);
   padding-top: 28px;
   margin-bottom: 28px;
 }
 
 .segmentHeading {
-  font-family: var(--font-sora), sans-serif;
+  font-family: var(--font-display), sans-serif;
   font-size: 17.5px;
   font-weight: 800;
   margin: 0 0 18px;
+}
+
+/* The event-day block. It gets the same divider, spacing, heading and blurb
+   as every other section in this card -- with a heavier rule, no title and
+   its own spacing scale it read as an alien slab bolted under the footer.
+   Start (primary) sits beside End (quiet); `flex-wrap` lets EndEventSection's
+   confirming state take the full width. */
+.lifecycle {
+  border-top: 1px solid var(--divider);
+  padding-top: 28px;
+  margin-bottom: 28px;
+}
+
+.lifecycleHeading {
+  font-family: var(--font-display), sans-serif;
+  font-size: 16.5px;
+  font-weight: 700;
+  margin: 0 0 4px;
+}
+
+.lifecycleBlurb {
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--text-subtle);
+  margin: 0 0 12px;
+}
+
+.lifecycleActions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
 }
