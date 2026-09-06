@@ -8,7 +8,7 @@ import type { ZodError } from 'zod';
 import { createClient } from '@/lib/supabase/server';
 import { requireUser } from '@/lib/auth/dal';
 import { mapAuthError, type ActionResult } from '@/lib/auth/errors';
-import { postLoginPath, safeRedirect } from '@/lib/auth/redirects';
+import { postLoginPath, safeRedirect, invitePathFromMetadata } from '@/lib/auth/redirects';
 import { siteUrl } from '@/lib/auth/site-url';
 import { INVITE_COOKIE, INVITE_COOKIE_OPTIONS } from '@/lib/auth/inviteCookie';
 import {
@@ -103,6 +103,16 @@ export async function signUpWithPassword(
     }
   }
 
+  // Computed BEFORE signUp because it now has to travel two ways, not one --
+  // but only the cookie WRITE moves below the call (see the comment there).
+  // Re-validated server-side, never trusted from the hidden field. An invalid
+  // pair simply carries nobody anywhere -- it is not an error worth failing a
+  // signup over.
+  const invitePath = isPartner
+    ? safeRedirect(String(formData.get('invitePath') ?? ''))
+    : '/dashboard';
+  const hasInvite = invitePath !== '/dashboard';
+
   const supabase = await createClient();
   const { error } = await supabase.auth.signUp({
     email,
@@ -114,6 +124,34 @@ export async function signUpWithPassword(
         // which both check constraints accept (they are `is null or …`).
         business_name: businessName,
         phone: joinedPhone ?? '',
+        // THE DURABLE HALF OF THE INVITE HANDOFF (2026-09-06).
+        // The spinit_invite cookie carries this same value, but it expires
+        // after 30 minutes -- and opening a confirmation email later than that
+        // is entirely ordinary. /auth/callback's other fallback cannot rescue
+        // such a partner either: it infers "is a partner" from an
+        // event_partners row with their user_id, and that row is only written
+        // by claim_partner_slot, which runs AFTER confirmation on a button
+        // press. So at confirmation time a new partner never looks like one,
+        // and every partner with an expired cookie reached the DJ dashboard.
+        //
+        // This also survives a confirmation on a DIFFERENT device, but not in
+        // the way it first appears: that flow fails earlier, inside
+        // exchangeCodeForSession, because @supabase/ssr hardcodes PKCE and the
+        // code verifier is a cookie too. What this rescues there is their NEXT
+        // password login (signInWithPassword below), the account having been
+        // confirmed by GoTrue's /verify before the failing exchange.
+        //
+        // raw_user_meta_data is a JSON blob that keeps whatever it is given --
+        // handle_new_user reads exactly three of these keys and ignores the
+        // rest. This one is read only by the routing fallback.
+        //
+        // USER-WRITABLE, and that is fine: auth.updateUser can set it to
+        // anything, so both readers pass it through safeRedirect, which pins
+        // it to /invite/{uuid}/{1|2}. Forging it buys a redirect to a page
+        // that is already public to read, and the claim behind it still
+        // matches the caller's own confirmed email inside claim_partner_slot.
+        // Same reasoning as the hidden `mode` and `invitePath` form fields.
+        invite_path: hasInvite ? invitePath : '',
       },
       // NO query string. Byte-identical to the allowlisted URL -- see
       // lib/auth/inviteCookie.ts for why this must never gain a `?next=`.
@@ -131,17 +169,12 @@ export async function signUpWithPassword(
   // completing any signup in the same browser within that window would then
   // land on a stranger's invite page -- a misroute, not a privilege
   // escalation (the invite page is public to view and the claim itself is
-  // still email-gated), but a real one.
-  //
-  // Re-validated server-side, never trusted from the hidden field. An invalid
-  // pair simply carries nobody anywhere -- it is not an error worth failing a
-  // signup over.
-  if (isPartner) {
-    const invitePath = safeRedirect(String(formData.get('invitePath') ?? ''));
-    if (invitePath !== '/dashboard') {
-      const cookieStore = await cookies();
-      cookieStore.set(INVITE_COOKIE, invitePath, INVITE_COOKIE_OPTIONS);
-    }
+  // still email-gated), but a real one. The VALUE is now computed above, so
+  // it can also ride on user metadata; only this write stays below signUp,
+  // which is what that fix-spec was about.
+  if (hasInvite) {
+    const cookieStore = await cookies();
+    cookieStore.set(INVITE_COOKIE, invitePath, INVITE_COOKIE_OPTIONS);
   }
 
   // "check your email" — the caller/UI renders the copy for this state.
@@ -189,13 +222,27 @@ export async function signInWithPassword(
   const invitePath = safeRedirect(String(formData.get('invitePath') ?? ''));
   if (invitePath !== '/dashboard') redirect(invitePath);
 
+  const ownsEvents = (ownedEvents.data?.length ?? 0) > 0;
+  const isPartner = (partnerLinks.data?.length ?? 0) > 0;
+
+  // The same last resort /auth/callback uses, for the same reason and in the
+  // same order (2026-09-06). Two partners need it. One confirmed with an
+  // expired spinit_invite cookie and reached /dashboard. The other confirmed
+  // on a different device, where the PKCE exchange failed outright and sent
+  // them to /login -- account confirmed, but never routed anywhere useful, and
+  // THIS is the only line that ever rescues them. Without it both would reach
+  // /dashboard on every subsequent login, because nothing in the database
+  // marks them as a partner until they claim, and they cannot claim from a
+  // page they never reach. Skipped for anyone who is already a DJ or an already-claimed
+  // partner, so a claimed partner still goes to /my-event rather than back to
+  // a claim page that would now refuse them.
+  if (!ownsEvents && !isPartner) {
+    const remembered = invitePathFromMetadata(data.user.user_metadata);
+    if (remembered) redirect(remembered);
+  }
+
   // redirect() throws internally — expected Next behavior, not caught here.
-  redirect(
-    postLoginPath({
-      ownsEvents: (ownedEvents.data?.length ?? 0) > 0,
-      isPartner: (partnerLinks.data?.length ?? 0) > 0,
-    }),
-  );
+  redirect(postLoginPath({ ownsEvents, isPartner }));
 }
 
 /**

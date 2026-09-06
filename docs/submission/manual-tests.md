@@ -1107,3 +1107,77 @@ explicitly deferred or skipped with the reason and what substitutes for them sta
 silently marked done. This is the shape every step in this document should have: performed,
 substituted, or skipped, and for anything but "performed as written," what the alternative
 evidence actually proves and does not prove.
+
+---
+
+## Expired invite cookie, same browser (2026-09-06)
+
+**Why this is a manual test and not an automated one.** It needs a real Supabase
+confirmation email, and the built-in mailer is capped at 2/hour project-wide
+(§9.8 of the security doc). The two `signUp` integration tests are already
+skipped behind `RUN_MAILER_TESTS` for exactly this reason, so an automated
+version of this walk could not run on a gate either. The unit tests pin the
+routing decision at every branch; only the email delivery and the actual
+30-minute cookie expiry are unpinnable here.
+
+**The defect this covers.** The `spinit_invite` cookie expires after 30
+minutes (`maxAge: 1800`). The PKCE code-verifier cookie `@supabase/ssr` sets
+at the same moment does not expire until the browser session ends. A partner
+who registers, then opens their confirmation email more than 30 minutes
+later — an ordinary delay, not an edge case — reaches `/auth/callback` in the
+SAME browser with an exchange that succeeds and no invite cookie. Before the
+2026-09-06 fix, this landed on `/dashboard` and asked for a DJ business name
+they will never have.
+
+### Procedure
+
+1. As a DJ, create an event and reach `/events/new/<id>/sent`. Copy the slot-1
+   invite link.
+2. Open the invite link signed out, click **Create an account**, and register.
+   Confirm the "check your email" state renders.
+3. Make the invite cookie unusable before opening the confirmation link, by
+   ONE of the following (record which one you did):
+   - Wait out the full 30 minutes before clicking the confirmation link, or
+   - Delete the `spinit_invite` cookie in devtools (Application → Cookies) —
+     the fast and honest equivalent of the wait, since the code path
+     `/auth/callback` runs is identical either way (no cookie present).
+4. Click the confirmation link in the SAME browser you registered in.
+5. **Expected:** lands on `/invite/<eventId>/1`, signed in, showing **Claim
+   your invitation**. It must NOT land on `/dashboard`.
+6. Click **Claim your invitation**. Expected: `/events/<eventId>`.
+7. Sign out and sign back in. Expected: `/events/<eventId>` via `/my-event`,
+   not a second trip to the claim page.
+
+### Also worth walking once
+
+Register a partner and confirm within the 30-minute window, same browser.
+Expected: identical destination, reached by the cookie rather than the
+metadata. The cookie is still preferred when both are present, so this path
+is unchanged by the fix.
+
+### Cross-device confirmation — separate case, NOT fixed by this change
+
+Confirming on a different device is a PKCE limitation, not a defect
+introduced or fixed here — the existing note at lines ~795-798 above (step 12
+of the earlier walk) already records that the PKCE code verifier lives in a
+cookie bound to the registering device, and that a confirmation attempted
+from a different browser/profile is expected to fail for that unrelated
+reason. This entry adds only the expected copy:
+
+1. Register through the invite link on device A. Confirm the "check your
+   email" state renders.
+2. Open the confirmation email and click the link on device B — a different
+   browser or phone, not a new tab or profile on the same machine.
+3. **Expected:** `/login`, showing *"Open the confirmation link in the same
+   browser you used to sign up."* — NOT the invite page, and not `/dashboard`.
+4. The account is nonetheless confirmed at this point. Sign in with the same
+   credentials on device A (or any browser). **Expected, but UNVERIFIED as of
+   this writing:** lands on `/invite/<eventId>/1` via the same metadata
+   fallback `signInWithPassword` uses, rather than `/dashboard`.
+
+### Results
+
+_Not yet performed. Recorded here as the procedure; the unit coverage that
+does run is in `src/app/auth/callback/route.test.ts` ("remembered invite on
+user metadata" and the same-browser-reason-code tests), `src/lib/auth/actions.test.ts`
+and `src/lib/auth/redirects.test.ts`._

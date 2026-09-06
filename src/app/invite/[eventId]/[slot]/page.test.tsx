@@ -6,6 +6,18 @@ import { InviteSignedOut } from './InviteSignedOut';
 import type { WizardActionState } from '@/lib/events/newEventTypes';
 import type { ActionResult } from '@/lib/auth/errors';
 
+vi.mock('@/lib/supabase/server', () => ({
+  createClient: vi.fn(async () => ({
+    auth: { getUser: vi.fn(async () => ({ data: { user: { id: 'user-1' } } })) },
+  })),
+}));
+
+vi.mock('@/lib/events/newEventActions', () => ({
+  claimInvite: vi.fn(
+    async (_prev: WizardActionState, _data: FormData): Promise<ActionResult> => ({ ok: true }),
+  ),
+}));
+
 /**
  * InvitePage itself is an async Server Component that awaits
  * `supabase.auth.getUser()` before choosing which of these two to render --
@@ -43,5 +55,24 @@ describe('/invite/[eventId]/[slot] branches', () => {
     expect(screen.getByRole('link', { name: 'Log in' })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Create an account' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Claim your invitation' })).not.toBeInTheDocument();
+  });
+
+  it('gives a signed-in visitor an always-visible escape to their dashboard', async () => {
+    // F2: a partner whose email never matched, or whose event was deleted
+    // or unlinked, is permanently redirected back to this page on every
+    // sign-in and has no app nav to escape with. This must render
+    // regardless of claim outcome -- rendered here on the ordinary
+    // signed-in branch, not only after a failed claim.
+    const InvitePage = (await import('./page')).default;
+    render(
+      await InvitePage({
+        params: Promise.resolve({ eventId: '11111111-1111-4111-8111-111111111111', slot: '1' }),
+        searchParams: Promise.resolve({}),
+      }),
+    );
+
+    expect(
+      screen.getByRole('link', { name: 'Go to your dashboard.' }),
+    ).toHaveAttribute('href', '/dashboard');
   });
 });
